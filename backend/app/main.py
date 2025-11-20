@@ -5,7 +5,7 @@ from app.api.tree_api import router as tree_router
 from app.api.dsl_api import router as dsl_router
 from app.api.hint_api import router as hint_router
 
-
+print(">>> DriftSystem Routers Loaded: TREE + DSL + HINT")
 # --- 创建 FastAPI 实例 ---
 app = FastAPI(title="DriftSystem 0-1")
 
