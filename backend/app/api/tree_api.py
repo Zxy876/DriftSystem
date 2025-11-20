@@ -5,21 +5,21 @@ from app.core.tree.engine import TreeEngine
 router = APIRouter()
 engine = TreeEngine()
 
-class NodeInput(BaseModel):
+class AddNodeInput(BaseModel):
     content: str
+
+@router.post("/add")
+def add_node(data: AddNodeInput):
+    return engine.add(data.content)
 
 @router.get("/state")
 def get_state():
     return engine.export_state()
-
-@router.post("/add")
-def add_node(data: NodeInput):
-    return engine.add(data.content)
 
 @router.post("/backtrack")
 def backtrack():
     return engine.backtrack()
 
 @router.post("/breakpoint")
-def breakpoint():
+def set_breakpoint():
     return engine.breakpoint()
