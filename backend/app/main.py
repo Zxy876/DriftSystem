@@ -1,28 +1,39 @@
-from fastapi import FastAPI
+# app/main.py
 
-# --- 引入 API 路由 ---
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.api.tree_api import router as tree_router
 from app.api.dsl_api import router as dsl_router
 from app.api.hint_api import router as hint_router
-from app.api.world_api import router as world_router   # ⭐ 新增世界路由
+from app.api.world_api import router as world_router
 
-# --- 启动信息 ---
-print(">>> DriftSystem Routers Loaded: TREE + DSL + HINT + WORLD")
+# 引入 StoryEngine
+from app.core.story.manager import story_engine
 
-# --- 创建 FastAPI 实例 ---
-app = FastAPI(title="DriftSystem 0-1")
+print(">>> DriftSystem Routers Loaded: TREE + DSL + HINT + WORLD + STORY")
+print(">>> StoryEngine initialized. Starting node:", story_engine.current_node_id)
 
-# --- 注册所有路由 ---
+app = FastAPI(title="DriftSystem 0-1 With Story Engine")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(tree_router, prefix="/tree", tags=["Tree"])
 app.include_router(dsl_router, prefix="/dsl", tags=["DSL"])
 app.include_router(hint_router, prefix="/hint", tags=["Hint"])
-app.include_router(world_router, prefix="/world", tags=["World"])    # ⭐ 新增
+app.include_router(world_router, prefix="/world", tags=["World"])
 
-# --- 主页测试 ---
 @app.get("/")
 def home():
     return {
         "status": "running",
-        "message": "DriftSystem backend is alive.",
-        "routes": ["/tree", "/dsl", "/hint", "/world"]
+        "message": "Drift backend alive",
+        "story_state": story_engine.current_node_id,
+        "routes": ["/tree", "/dsl", "/hint", "/world", "/story"]
     }
