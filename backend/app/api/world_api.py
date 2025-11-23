@@ -1,84 +1,59 @@
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from typing import Optional, Dict, Any
 
 from app.core.world.engine import WorldEngine
-from app.core.story.manager import story_engine
-from app.core.ai.deepseek_agent import deepseek_decide
+from app.core.story.story_engine import story_engine
 
+router = APIRouter(prefix="/world", tags=["World"])
+world_engine = WorldEngine()
 
-router = APIRouter()
+class MoveAction(BaseModel):
+    x: float
+    y: float
+    z: float
+    speed: float = 0.0
+    moving: bool = False
 
-world = WorldEngine()
-
-
-# -------------------------
-# 输入数据模型
-# -------------------------
 class WorldAction(BaseModel):
-    action: dict
+    move: Optional[MoveAction] = None
+    say: Optional[str] = None  # 聊天输入
 
+class ApplyInput(BaseModel):
+    action: WorldAction
+    player_id: Optional[str] = "default"
 
-# -------------------------
-# 获取世界状态
-# -------------------------
+class WorldApplyResponse(BaseModel):
+    status: str
+    world_state: Dict[str, Any]
+    ai_option: Optional[int] = None
+    story_node: Optional[Dict[str, Any]] = None
+    world_patch: Optional[Dict[str, Any]] = None  # ✅ 新增
+
 @router.get("/state")
-def get_state():
-    return JSONResponse(content=world.export())
+def get_world_state():
+    return world_engine.get_state()
 
+@router.post("/apply", response_model=WorldApplyResponse)
+def apply_action(inp: ApplyInput):
+    action_dict = inp.action.dict(exclude_none=True)
 
-# -------------------------
-# 处理 MC 玩家行为
-# -------------------------
-@router.post("/apply")
-def apply_action(req: WorldAction):
+    new_state = world_engine.apply(action_dict)
 
-    # 1. 先更新世界（可选）
-    world_result = world.apply(req.action)
+    ai_option = None
+    story_node = None
+    world_patch = None
 
-    # DeepSeek 输入上下文 —— 简化且统一
-    context = {
-        "player_action": req.action.get("move", {}),
-        "variables": world_result["variables"],  # 这是关键
-        "current_story_node": story_engine.current_node_id
-    }
+    if story_engine.should_advance(inp.player_id, new_state, action_dict):
+        ai_option, story_node, world_patch = story_engine.advance(inp.player_id, new_state, action_dict)
+        # ✅ AI patch 真正影响世界
+        if world_patch:
+            new_state = world_engine.apply_patch(world_patch)
 
-    # 2. 让 DeepSeek 决策
-    ai_result = deepseek_decide(context)
-
-    # ai_result 结构：
-    # {
-    #   "option": 0 或 1 或 null,
-    #   "node": { "title": "...", "text": "..." }
-    # }
-
-    option = ai_result.get("option", None)
-    node = ai_result.get("node", None)
-
-    final_story = None
-
-    # -------------------------
-    # Case A：玩家行为触发 DeepSeek 给出 option（剧情推进）
-    # -------------------------
-    if option is not None:
-        final_story = story_engine.go_next(option)
-
-    # -------------------------
-    # Case B：DeepSeek 生成独立剧情 node（无需触发 option）
-    # 例如：AI 给了 {"node": {...}} 你那条“湖边的微风”
-    # -------------------------
-    elif node is not None:
-        final_story = node
-
-    # -------------------------
-    # Case C：完全没剧情
-    # -------------------------
-    else:
-        final_story = None
-
-    return JSONResponse(content={
-        "status": "ok",
-        "world_state": world_result,
-        "ai_option": option,
-        "story_node": final_story
-    })
+    return WorldApplyResponse(
+        status="ok",
+        world_state=new_state,
+        ai_option=ai_option,
+        story_node=story_node,
+        world_patch=world_patch
+    )
