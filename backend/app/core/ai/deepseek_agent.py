@@ -1,72 +1,60 @@
-import os
-import json
-import re
-import requests
+import os, json, requests
 from dotenv import load_dotenv
+from typing import List, Dict, Any
 
 load_dotenv()
 
-API_KEY = os.getenv("OPENAI_API_KEY")
-BASE_URL = os.getenv("OPENAI_BASE_URL")
-MODEL = os.getenv("OPENAI_MODEL")
+API_KEY  = os.getenv("OPENAI_API_KEY")
+BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
+MODEL    = os.getenv("OPENAI_MODEL", "deepseek-chat")
 
 HEADERS = {
     "Authorization": f"Bearer {API_KEY}",
     "Content-Type": "application/json"
 }
 
-JSON_EXTRACTOR = re.compile(r"\{[\s\S]*\}", re.MULTILINE)
+def deepseek_decide(context: Dict[str, Any], messages_history: List[Dict[str, str]]) -> Dict[str, Any]:
+    system = (
+        "你是昆明湖场景的剧情生成器 + 世界导演。"
+        "你必须只返回合法 JSON，不得输出任何解释或多余文本。"
+        "剧情要承接历史内容，保持连贯推进。"
+        "你可以通过 world_patch 改变世界。"
+        "world_patch.variables 用于后端世界变量，world_patch.mc 用于MC表现。"
+    )
 
-def extract_json(text: str):
-    """
-    从 AI 回复中提取最外层 JSON
-    """
-    match = JSON_EXTRACTOR.search(text)
-    if match:
-        try:
-            return json.loads(match.group())
-        except:
-            return None
-    return None
+    user_prompt = f"""
+根据玩家状态、行动和历史剧情，生成下一段连贯剧情，并给出世界修改指令。
 
-
-def deepseek_decide(context: dict) -> dict:
-    """
-    使用 DeepSeek 生成下一剧情：
-    - 必须输出 JSON
-    """
-
-    prompt = f"""
-你是一个剧情生成 AI，故事背景是“昆明湖”。
-
-请根据玩家行为和当前剧情状态生成下一步剧情。
-
-⚠⚠⚠ 输出要求（非常重要）：
-你必须只返回 **一个严格的 JSON 对象**，格式如下：
-
+严格返回 JSON：
 {{
-  "option": 0 | 1 | null,
+  "option": 0 或 1 或 null,
   "node": {{
-      "title": "字符串标题",
-      "text": "剧情文本"
+      "title": "字符串",
+      "text": "字符串"
+  }},
+  "world_patch": {{
+      "variables": {{ ...可选... }},
+      "mc": {{
+          "tell": "给玩家的一句话(可选)",
+          "teleport": {{"dx":0,"dy":0,"dz":0}} (可选),
+          "effect": {{"type":"SLOW|BLINDNESS|GLOW","seconds":5,"amplifier":1}} (可选)
+      }}
   }}
 }}
 
-不得输出 markdown、不得输出解释、不得输出代码块。
-不得添加任何多余内容。只输出 JSON。
-----
-
-玩家输入：
+当前输入：
 {json.dumps(context, ensure_ascii=False)}
 """
 
+    messages = [{"role": "system", "content": system}]
+    messages += messages_history[-12:]
+    messages.append({"role": "user", "content": user_prompt})
+
     payload = {
         "model": MODEL,
-        "messages": [
-            {"role": "system", "content": "你是剧情生成器，必须严格返回 JSON。"},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.6
+        "messages": messages,
+        "temperature": 0.7,
+        "response_format": {"type": "json_object"}
     }
 
     try:
@@ -74,30 +62,19 @@ def deepseek_decide(context: dict) -> dict:
             f"{BASE_URL}/chat/completions",
             headers=HEADERS,
             json=payload,
-            timeout=20
+            timeout=40
         )
-
-        raw = resp.json()["choices"][0]["message"]["content"]
-
-        data = extract_json(raw)
-        if data:
-            return data
-
-        print("[AI ERROR] JSON not detected in reply: ", raw)
-        return {
-            "option": None,
-            "node": {
-                "title": "昆明湖 · 静默",
-                "text": "AI 没有返回剧情，但湖面正泛起涟漪。"
-            }
-        }
+        data = resp.json()
+        raw = data["choices"][0]["message"]["content"].strip()
+        return json.loads(raw)
 
     except Exception as e:
         print("[AI ERROR]", e)
         return {
             "option": None,
             "node": {
-                "title": "昆明湖 · 异常",
-                "text": "AI 调用失败。"
-            }
+                "title": "昆明湖 · 静默",
+                "text": "AI 沉默了一瞬，但湖面的风仍提醒你：故事没有断。"
+            },
+            "world_patch": {"variables": {}, "mc": {"tell": "（AI超时）"}}
         }
