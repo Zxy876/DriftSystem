@@ -1,0 +1,6 @@
+name: DriftMC
+version: 1.0.0
+main: com.driftmc.DriftMCPlugin
+api-version: 1.20
+authors: [zxy]
+description: AI-driven world engine
