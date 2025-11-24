@@ -1,0 +1,6 @@
+com/driftmc/listeners/PlayerChatListener.class
+com/driftmc/BackendClient.class
+com/driftmc/BackendClient$BackendResponse.class
+com/driftmc/DriftMCPlugin.class
+com/driftmc/actions/WorldPatchExecutor.class
+com/driftmc/listeners/PlayerChatListener$1.class
