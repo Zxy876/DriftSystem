@@ -1,0 +1,24 @@
+{
+  "id": "level_30",
+  "title": "心悦文集 第30章",
+  "text": [
+    "款姐   不   妈妈。",
+    "完",
+    "⽆标题",
+    "29"
+  ],
+  "tags": [
+    "心悦文集",
+    "叙事"
+  ],
+  "mood": {
+    "base": "calm",
+    "intensity": 0.5
+  },
+  "choices": [],
+  "meta": {
+    "source": "xinyue_wenji",
+    "chapter": 30,
+    "word_count": 18
+  }
+}
