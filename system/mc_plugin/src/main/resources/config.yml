@@ -1,11 +1,10 @@
 backend:
-  baseUrl: "http://127.0.0.1:8000"
-  timeoutMs: 3000
+  # 你的 FastAPI 后端地址（本地 dev 用 8000）
+  baseUrl: "http://localhost:8000"
 
-rhythm:
-  moveCooldownMs: 2500   # 玩家移动触发剧情的节流, 插件侧
-  chatCooldownMs: 1200   # 输入框触发剧情的节流
-  minSpeed: 0.02         # 速度阈值
+chat:
+  # 玩家普通聊天前缀触发 AI（例如：!你好）
+  aiPrefix: "!"
 
-ui:
-  useActionBar: true     # true=ActionBar显示剧情；false=聊天框显示
+  # 玩家说“/saytoai”也会调用 AI
+  enableSayToAICommand: true

@@ -1,102 +1,96 @@
-import time, re
+# backend/app/core/story/story_engine.py
+
+import time
 from typing import Dict, Any, Tuple, List, Optional
 
 from app.core.ai.deepseek_agent import deepseek_decide
-
-# 事件树可选：如果你已有 tree_engine，就自动接入；没有也能跑
-try:
-    from app.core.tree.engine import tree_engine  # 你自己的 tree 引擎
-except Exception:
-    tree_engine = None
+from app.core.story.story_loader import load_level, build_level_prompt, Level
 
 
 class StoryEngine:
-    """
-    L4 造物主引擎：
-    - move / say 推进
-    - 无限生成（没有预设终点，也可由 AI 给 ending）
-    - 事件树 options 介入（玩家可 /choose N）
-    - patch 成为真实世界变化
-    """
-
     def __init__(self):
         self.players: Dict[str, Dict[str, Any]] = {}
 
-        self.move_cooldown = 2.0
-        self.say_cooldown  = 0.5
+        self.move_cooldown = 3.0
+        self.say_cooldown = 0.8
 
         self.start_node_id = "START"
         self.current_node_id = "START"
 
-        print(">>> StoryEngine L4 initialized OK.")
+        print(">>> StoryEngine initialized OK.")
 
-    # ---------------- internal ----------------
+    # -------------------- Player State --------------------
     def _ensure_player(self, player_id: str):
+        """初始化玩家状态"""
         if player_id not in self.players:
             self.players[player_id] = {
-                "messages": [],
-                "nodes": [],
+                "messages": [],          # 对话消息记录
+                "nodes": [],             # 触发的剧情节点
                 "last_time": 0.0,
                 "last_say_time": 0.0,
-                "ending": None,          # 记录结局
-                "tree_node": "START",    # 当前事件树节点
+                "level": None,           # 当前 Level 对象
+                "level_loaded": False,
+                "tree_state": None,
+                "ended": False
             }
 
-    def _append_user_say(self, player_id: str, say: str):
+    # -------------------- Load Level --------------------
+    def load_level_for_player(self, player_id: str, level_id: str) -> Dict[str, Any]:
+        """加载指定关卡"""
         self._ensure_player(player_id)
-        say = say.strip()
-        if not say:
+        level = load_level(level_id)
+
+        p = self.players[player_id]
+        p["level"] = level
+        p["level_loaded"] = False
+        p["tree_state"] = level.tree
+        p["ended"] = False
+
+        # 清空历史消息
+        p["messages"].clear()
+        p["nodes"].clear()
+
+        return level.bootstrap_patch
+
+    def _inject_level_prompt_if_needed(self, player_id: str):
+        """首次加载关卡时注入提示 prompt"""
+        p = self.players[player_id]
+        level: Optional[Level] = p.get("level")
+
+        if not level or p["level_loaded"]:
             return
-        self.players[player_id]["messages"].append({
-            "role": "user",
-            "content": say
-        })
+
+        level_prompt = build_level_prompt(level)
+        p["messages"].insert(0, {"role": "system", "content": level_prompt})
+        p["level_loaded"] = True
+
+    # -------------------- Message Helpers --------------------
+    def _append_user_say(self, player_id: str, say: str):
+        say = say.strip()
+        if say:
+            self.players[player_id]["messages"].append({"role": "user", "content": say})
 
     def _append_ai_node(self, player_id: str, node: Dict[str, Any]):
-        self._ensure_player(player_id)
         title = node.get("title", "")
-        text  = node.get("text", "")
+        text = node.get("text", "")
         self.players[player_id]["nodes"].append(node)
+
         self.players[player_id]["messages"].append({
             "role": "assistant",
             "content": f"{title}\n{text}".strip()
         })
+
         self.current_node_id = title or "UNKNOWN"
 
-    def _parse_choice(self, say: str) -> Optional[int]:
-        """
-        玩家可以在 chat 里用：
-        /choose 1
-        选择事件树分支
-        """
-        m = re.search(r"/choose\s+(\d+)", say.strip().lower())
-        if m:
-            return int(m.group(1))
-        return None
-
-    def _get_tree_options(self, player_id: str) -> List[str]:
-        if not tree_engine:
-            return []
-        node_id = self.players[player_id]["tree_node"]
-        try:
-            return tree_engine.get_options(node_id)  # 你 tree_engine 的接口
-        except Exception:
-            return []
-
-    # ---------------- rhythm ----------------
-    def should_advance(
-        self,
-        player_id: str,
-        world_state: Dict[str, Any],
-        action: Dict[str, Any]
-    ) -> bool:
+    # -------------------- Gating --------------------
+    def should_advance(self, player_id: str, world_state: Dict[str, Any], action: Dict[str, Any]) -> bool:
+        """控制说话和移动的节奏"""
         self._ensure_player(player_id)
         now = time.time()
 
         say = action.get("say")
         if isinstance(say, str) and say.strip():
-            last_say = self.players[player_id]["last_say_time"]
-            return (now - last_say) >= self.say_cooldown
+            return (now - self.players[player_id]["last_say_time"]) >= self.say_cooldown
 
         last = self.players[player_id]["last_time"]
         if now - last < self.move_cooldown:
@@ -105,7 +99,30 @@ class StoryEngine:
         move = action.get("move", {})
         return move.get("moving") is True and move.get("speed", 0) > 0.02
 
-    # ---------------- advance ----------------
+    # -------------------- FREE MODE HOOK --------------------
+    def _ensure_free_mode_level(self, player_id: str):
+        """
+        如果玩家没有加载过任何关卡，
+        自动进入「心悦自由宇宙模式」 heart_free。
+        """
+        p = self.players[player_id]
+
+        if p["level"] is None:
+            print(f"[StoryEngine] Player {player_id} entered FREE MODE.")
+
+            class FreeLevel:
+                level_id = "heart_free"
+                tree = None
+                bootstrap_patch = {
+                    "mc": {
+                        "tell": "🌌 进入心悦自由宇宙模式。在这里，你能用自然语言创造整个世界。"
+                    }
+                }
+
+            p["level"] = FreeLevel()
+            p["level_loaded"] = True  # 自由模式不需要 prompt 注入
+
+    # -------------------- Main Advance --------------------
     def advance(
         self,
         player_id: str,
@@ -114,71 +131,78 @@ class StoryEngine:
     ) -> Tuple[Optional[int], Optional[Dict[str, Any]], Dict[str, Any]]:
 
         self._ensure_player(player_id)
+        p = self.players[player_id]
 
-        say = action.get("say", "")
+        # ========== ★ 若没有关卡则进入自由模式 ★ ==========
+        self._ensure_free_mode_level(player_id)
+
+        # ========== 注入关卡 prompt（如果是剧情关卡） ==========
+        self._inject_level_prompt_if_needed(player_id)
+
+        # ---------- ENDING ----------
+        if p["ended"]:
+            return None, None, {"mc": {"tell": "本关已结束，使用 /level <id> 开始下一关。"}}
+
+        # ---------- SAY ----------
+        say = action.get("say")
         if isinstance(say, str) and say.strip():
             self._append_user_say(player_id, say)
 
-        # === 玩家显式选择事件树分支 ===
-        forced_option = None
-        if isinstance(say, str):
-            forced_option = self._parse_choice(say)
-
-        options = self._get_tree_options(player_id)
-
-        messages: List[Dict[str, str]] = self.players[player_id]["messages"]
-        nodes: List[Dict[str, Any]] = self.players[player_id]["nodes"]
+        messages = p["messages"]
+        nodes = p["nodes"]
 
         ai_input = {
             "player_action": action,
             "world_state": world_state,
             "recent_nodes": nodes[-5:],
-            "tree": {
-                "current": self.players[player_id]["tree_node"],
-                "options": options
-            },
-            "forced_option": forced_option
+            "tree_state": p["tree_state"],
+            "level_id": p["level"].level_id,
         }
 
         ai_result = deepseek_decide(ai_input, messages)
 
-        option = forced_option if forced_option is not None else ai_result.get("option", None)
-        node   = ai_result.get("node", None)
-        patch  = ai_result.get("world_patch", {}) or {}
+        option = ai_result.get("option")
+        node = ai_result.get("node")
+        patch = ai_result.get("world_patch", {}) or {}
+        mc_patch = patch.get("mc", {}) or {}
 
-        # === 更新事件树节点 ===
-        if tree_engine and option is not None and isinstance(option, int):
-            try:
-                new_tree_node = tree_engine.apply_choice(
-                    self.players[player_id]["tree_node"], option
-                )
-                self.players[player_id]["tree_node"] = new_tree_node
-            except Exception:
-                pass
+        # ---------- 树状态 ----------
+        if option is not None:
+            p["tree_state"] = {
+                "last_option": option,
+                "ts": time.time(),
+            }
 
-        # === 强制“上天”规则（不靠 AI 随机）===
-        if isinstance(say, str) and re.search(r"上天|飞起来|升空|我要飞", say):
-            patch.setdefault("mc", {})
-            patch["mc"].setdefault("tell", "你脚下的重力被解除，身体轻轻上升。")
-            patch["mc"]["effect"] = {"type": "LEVITATION", "seconds": 6, "amplifier": 1}
-
-        # === AI 结局记录（决定生死/传送）===
-        ending = patch.get("mc", {}).get("ending")
-        if ending:
-            self.players[player_id]["ending"] = ending
-
+        # ---------- AI Node ----------
         if node:
             self._append_ai_node(player_id, node)
 
+        # ---------- Ending Hook ----------
+        if mc_patch.get("ending"):
+            p["ended"] = True
+            ending = mc_patch["ending"]
+            etype = ending.get("type", "neutral")
+
+            if etype == "good":
+                mc_patch.setdefault("tell", "【GOOD END】宇宙为你打开了一扇新的门。")
+                mc_patch.setdefault("teleport", {"mode": "relative", "x": 0, "y": 10, "z": 0})
+
+            elif etype == "bad":
+                mc_patch.setdefault("tell", "【BAD END】光被世界收走。")
+                mc_patch.setdefault("effect", {"type": "WITHER", "seconds": 5, "amplifier": 2})
+
+            patch["mc"] = mc_patch
+
+        # ---------- Update Time ----------
         now = time.time()
         if isinstance(say, str) and say.strip():
-            self.players[player_id]["last_say_time"] = now
+            p["last_say_time"] = now
         else:
-            self.players[player_id]["last_time"] = now
+            p["last_time"] = now
 
         return option, node, patch
 
-    # ---------------- public api ----------------
+    # -------------------- Public APIs --------------------
     def get_public_state(self, player_id: Optional[str] = None):
         if player_id:
             self._ensure_player(player_id)
@@ -186,10 +210,8 @@ class StoryEngine:
             return {
                 "player_id": player_id,
                 "history_len": len(p["nodes"]),
-                "last_node": p["nodes"][-1] if p["nodes"] else None,
-                "ending": p["ending"],
-                "tree_node": p["tree_node"],
-                "tree_options": self._get_tree_options(player_id)
+                "level": p["level"].level_id if p["level"] else None,
+                "last_node": p["nodes"][-1] if p["nodes"] else None
             }
 
         return {
@@ -198,9 +220,8 @@ class StoryEngine:
             "players": {
                 pid: {
                     "history_len": len(data["nodes"]),
-                    "last_node": data["nodes"][-1] if data["nodes"] else None,
-                    "ending": data["ending"],
-                    "tree_node": data["tree_node"]
+                    "level": data["level"].level_id if data["level"] else None,
+                    "last_node": data["nodes"][-1] if data["nodes"] else None
                 }
                 for pid, data in self.players.items()
             }
@@ -212,12 +233,14 @@ class StoryEngine:
 
     def clear_history(self, player_id: str):
         self._ensure_player(player_id)
-        self.players[player_id]["nodes"].clear()
-        self.players[player_id]["messages"].clear()
-        self.players[player_id]["last_time"] = 0.0
-        self.players[player_id]["last_say_time"] = 0.0
-        self.players[player_id]["ending"] = None
-        self.players[player_id]["tree_node"] = "START"
+        p = self.players[player_id]
+
+        p["nodes"].clear()
+        p["messages"].clear()
+        p["last_time"] = 0.0
+        p["last_say_time"] = 0.0
+        p["ended"] = False
+        p["level_loaded"] = False
 
 
 story_engine = StoryEngine()
