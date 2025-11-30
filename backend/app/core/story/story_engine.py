@@ -1,246 +1,274 @@
-# backend/app/core/story/story_engine.py
+from __future__ import annotations
 
 import time
-from typing import Dict, Any, Tuple, List, Optional
+from pathlib import Path
+from typing import Dict, Any, Optional
 
 from app.core.ai.deepseek_agent import deepseek_decide
 from app.core.story.story_loader import load_level, build_level_prompt, Level
+from app.core.story.story_graph import StoryGraph
+from app.core.world.minimap import MiniMap
+from app.core.world.scene_generator import SceneGenerator
+from app.core.world.trigger import trigger_engine   # ★ 世界触发系统
 
 
 class StoryEngine:
     def __init__(self):
         self.players: Dict[str, Dict[str, Any]] = {}
 
+        # Cooldown
         self.move_cooldown = 3.0
         self.say_cooldown = 0.8
 
         self.start_node_id = "START"
         self.current_node_id = "START"
 
-        print(">>> StoryEngine initialized OK.")
+        # -------- Path to levels folder --------
+        base_dir = Path(__file__).resolve().parents[3]
+        level_dir = base_dir / "data" / "heart_levels"
 
-    # -------------------- Player State --------------------
+        # -------- StoryGraph --------
+        self.graph = StoryGraph(str(level_dir))
+
+        # -------- MiniMap（含螺旋坐标）--------
+        self.minimap = MiniMap(self.graph)
+
+        # -------- Scene Generator --------
+        self.scene_gen = SceneGenerator()
+
+        # -------- 根据螺旋坐标生成触发点 --------
+        self._inject_spiral_triggers()
+
+        print(
+            f">>> StoryEngine initialized OK. "
+            f"StoryGraph loaded {len(self.graph.all_levels())} levels."
+        )
+
+    # ================================================================
+    # 玩家状态
+    # ================================================================
     def _ensure_player(self, player_id: str):
-        """初始化玩家状态"""
         if player_id not in self.players:
             self.players[player_id] = {
-                "messages": [],          # 对话消息记录
-                "nodes": [],             # 触发的剧情节点
-                "last_time": 0.0,
-                "last_say_time": 0.0,
-                "level": None,           # 当前 Level 对象
+                "messages": [],
+                "nodes": [],
+                "level": None,
                 "level_loaded": False,
                 "tree_state": None,
-                "ended": False
+                "ended": False,
+                "last_time": 0.0,
+                "last_say_time": 0.0,
             }
 
-    # -------------------- Load Level --------------------
-    def load_level_for_player(self, player_id: str, level_id: str) -> Dict[str, Any]:
-        """加载指定关卡"""
-        self._ensure_player(player_id)
-        level = load_level(level_id)
+    # ================================================================
+    # 下一个关卡
+    # ================================================================
+    def get_next_level_id(self, current_level_id: Optional[str]):
+        if not current_level_id or not current_level_id.startswith("level_"):
+            all_levels = sorted(self.graph.all_levels())
+            return "level_01" if "level_01" in all_levels else all_levels[0]
+        return self.graph.bfs_next(current_level_id)
 
+    def load_next_level_for_player(self, player_id: str):
+        self._ensure_player(player_id)
         p = self.players[player_id]
+        current_level = getattr(p["level"], "level_id", None)
+        next_id = self.get_next_level_id(current_level)
+
+        if not next_id:
+            p["ended"] = True
+            return {"mc": {"tell": "🎉 这是最后一关了。"}}
+
+        return self.load_level_for_player(player_id, next_id)
+
+    # ================================================================
+    # 加载关卡（自动带环境生成 SceneGenerator）
+    # ================================================================
+    def load_level_for_player(self, player_id: str, level_id: str) -> Dict[str, Any]:
+        self._ensure_player(player_id)
+
+        level = load_level(level_id)
+        p = self.players[player_id]
+
         p["level"] = level
         p["level_loaded"] = False
         p["tree_state"] = level.tree
         p["ended"] = False
-
-        # 清空历史消息
         p["messages"].clear()
         p["nodes"].clear()
 
-        return level.bootstrap_patch
+        # 小地图记录进度
+        self.minimap.enter_level(player_id, level_id)
 
+        # 场景 patch（自动生成的平台/NPC/建筑）
+        scene_patch = self.scene_gen.generate_for_level(level_id, level.__dict__)
+
+        # 关卡自带 bootstrap（tell/title/初始传送）
+        base_patch = dict(level.bootstrap_patch or {})
+        base_mc = dict(base_patch.get("mc") or {})
+        scene_mc = dict((scene_patch or {}).get("mc") or {})
+
+        # 合并
+        base_mc.update(scene_mc)
+        base_patch["mc"] = base_mc
+
+        return base_patch
+
+    # ================================================================
+    # 注入系统提示 prompt
+    # ================================================================
     def _inject_level_prompt_if_needed(self, player_id: str):
-        """首次加载关卡时注入提示 prompt"""
         p = self.players[player_id]
-        level: Optional[Level] = p.get("level")
-
+        level = p["level"]
         if not level or p["level_loaded"]:
             return
 
-        level_prompt = build_level_prompt(level)
-        p["messages"].insert(0, {"role": "system", "content": level_prompt})
+        p["messages"].insert(0, {
+            "role": "system",
+            "content": build_level_prompt(level)
+        })
         p["level_loaded"] = True
 
-    # -------------------- Message Helpers --------------------
-    def _append_user_say(self, player_id: str, say: str):
-        say = say.strip()
-        if say:
-            self.players[player_id]["messages"].append({"role": "user", "content": say})
+    # ================================================================
+    # 螺旋触发器注入（根据 minimap spiral 坐标）
+    # ================================================================
+    def _inject_spiral_triggers(self):
+        trigger_engine.triggers.clear()
 
-    def _append_ai_node(self, player_id: str, node: Dict[str, Any]):
-        title = node.get("title", "")
-        text = node.get("text", "")
-        self.players[player_id]["nodes"].append(node)
+        BASE_X = 200
+        BASE_Z = 200
+        SCALE = 12    # 每格间距
 
-        self.players[player_id]["messages"].append({
-            "role": "assistant",
-            "content": f"{title}\n{text}".strip()
-        })
+        from app.core.world.trigger import TriggerPoint
 
-        self.current_node_id = title or "UNKNOWN"
+        for lv in self.graph.all_levels():
+            pos = self.minimap.positions.get(lv)
+            if not pos:
+                continue
 
-    # -------------------- Gating --------------------
-    def should_advance(self, player_id: str, world_state: Dict[str, Any], action: Dict[str, Any]) -> bool:
-        """控制说话和移动的节奏"""
-        self._ensure_player(player_id)
-        now = time.time()
+            world_x = BASE_X + pos["x"] * SCALE
+            world_z = BASE_Z + pos["y"] * SCALE
 
-        say = action.get("say")
-        if isinstance(say, str) and say.strip():
-            return (now - self.players[player_id]["last_say_time"]) >= self.say_cooldown
+            trigger_engine.triggers.append(
+                TriggerPoint(
+                    id=f"trigger_{lv}",
+                    center=(world_x, 70, world_z),
+                    radius=4.0,
+                    action="load_level",
+                    level_id=lv
+                )
+            )
 
-        last = self.players[player_id]["last_time"]
-        if now - last < self.move_cooldown:
-            return False
+        print(f"[Trigger] Spiral triggers injected = {len(trigger_engine.triggers)}")
 
-        move = action.get("move", {})
-        return move.get("moving") is True and move.get("speed", 0) > 0.02
-
-    # -------------------- FREE MODE HOOK --------------------
-    def _ensure_free_mode_level(self, player_id: str):
-        """
-        如果玩家没有加载过任何关卡，
-        自动进入「心悦自由宇宙模式」 heart_free。
-        """
-        p = self.players[player_id]
-
-        if p["level"] is None:
-            print(f"[StoryEngine] Player {player_id} entered FREE MODE.")
-
-            class FreeLevel:
-                level_id = "heart_free"
-                tree = None
-                bootstrap_patch = {
-                    "mc": {
-                        "tell": "🌌 进入心悦自由宇宙模式。在这里，你能用自然语言创造整个世界。"
-                    }
-                }
-
-            p["level"] = FreeLevel()
-            p["level_loaded"] = True  # 自由模式不需要 prompt 注入
-
-    # -------------------- Main Advance --------------------
-    def advance(
-        self,
-        player_id: str,
-        world_state: Dict[str, Any],
-        action: Dict[str, Any]
-    ) -> Tuple[Optional[int], Optional[Dict[str, Any]], Dict[str, Any]]:
+    # ================================================================
+    # Main Advance
+    # ================================================================
+    def advance(self, player_id, world_state, action):
 
         self._ensure_player(player_id)
         p = self.players[player_id]
 
-        # ========== ★ 若没有关卡则进入自由模式 ★ ==========
+        # Free mode
         self._ensure_free_mode_level(player_id)
 
-        # ========== 注入关卡 prompt（如果是剧情关卡） ==========
+        # Inject level prompt
         self._inject_level_prompt_if_needed(player_id)
 
-        # ---------- ENDING ----------
+        # 已经结束
         if p["ended"]:
-            return None, None, {"mc": {"tell": "本关已结束，使用 /level <id> 开始下一关。"}}
+            return None, None, {"mc": {"tell": "本关已结束。用 /level <id> 切换下一关。"}}
 
-        # ---------- SAY ----------
+        # SAY
         say = action.get("say")
         if isinstance(say, str) and say.strip():
-            self._append_user_say(player_id, say)
+            p["messages"].append({"role": "user", "content": say})
 
-        messages = p["messages"]
-        nodes = p["nodes"]
+        # -------- update minimap player position --------
+        vars_ = world_state.get("variables") or {}
+        x, y, z = vars_.get("x", 0.0), vars_.get("y", 0.0), vars_.get("z", 0.0)
+        self.minimap.update_player_pos(player_id, (x, y, z))
 
+        # ================================================================
+        # Trigger：检查世界触发点
+        # ================================================================
+        trg = trigger_engine.check(player_id, x, y, z)
+        if trg:
+            print(f"[Trigger] Player {player_id} hit {trg.id}")
+
+            if trg.action == "load_level" and trg.level_id:
+                patch = self.load_level_for_player(player_id, trg.level_id)
+                node = {
+                    "title": "世界触发点",
+                    "text": f"你抵达了关键地点，关卡 {trg.level_id} 被唤醒。"
+                }
+                return None, node, patch
+
+        # ================================================================
+        # AI → DeepSeek 剧情节点
+        # ================================================================
         ai_input = {
+            "player_id": player_id,
             "player_action": action,
             "world_state": world_state,
-            "recent_nodes": nodes[-5:],
+            "recent_nodes": p["nodes"][-5:],
             "tree_state": p["tree_state"],
             "level_id": p["level"].level_id,
         }
 
-        ai_result = deepseek_decide(ai_input, messages)
+        ai_result = deepseek_decide(ai_input, p["messages"])
 
         option = ai_result.get("option")
         node = ai_result.get("node")
         patch = ai_result.get("world_patch", {}) or {}
         mc_patch = patch.get("mc", {}) or {}
 
-        # ---------- 树状态 ----------
+        # Tree state
         if option is not None:
-            p["tree_state"] = {
-                "last_option": option,
-                "ts": time.time(),
-            }
+            p["tree_state"] = {"last_option": option, "ts": time.time()}
 
-        # ---------- AI Node ----------
+        # Node
         if node:
-            self._append_ai_node(player_id, node)
+            p["nodes"].append(node)
+            p["messages"].append({
+                "role": "assistant",
+                "content": f"{node.get('title','')}\n{node.get('text','')}".strip()
+            })
 
-        # ---------- Ending Hook ----------
+            cur_level = p["level"].level_id
+            self.minimap.mark_unlocked(player_id, cur_level)
+
+        # Ending
         if mc_patch.get("ending"):
             p["ended"] = True
-            ending = mc_patch["ending"]
-            etype = ending.get("type", "neutral")
 
-            if etype == "good":
-                mc_patch.setdefault("tell", "【GOOD END】宇宙为你打开了一扇新的门。")
-                mc_patch.setdefault("teleport", {"mode": "relative", "x": 0, "y": 10, "z": 0})
-
-            elif etype == "bad":
-                mc_patch.setdefault("tell", "【BAD END】光被世界收走。")
-                mc_patch.setdefault("effect", {"type": "WITHER", "seconds": 5, "amplifier": 2})
-
-            patch["mc"] = mc_patch
-
-        # ---------- Update Time ----------
+        # time
         now = time.time()
-        if isinstance(say, str) and say.strip():
+        if say and say.strip():
             p["last_say_time"] = now
         else:
             p["last_time"] = now
 
         return option, node, patch
 
-    # -------------------- Public APIs --------------------
-    def get_public_state(self, player_id: Optional[str] = None):
-        if player_id:
-            self._ensure_player(player_id)
-            p = self.players[player_id]
-            return {
-                "player_id": player_id,
-                "history_len": len(p["nodes"]),
-                "level": p["level"].level_id if p["level"] else None,
-                "last_node": p["nodes"][-1] if p["nodes"] else None
-            }
-
-        return {
-            "start_node": self.start_node_id,
-            "current_node": self.current_node_id,
-            "players": {
-                pid: {
-                    "history_len": len(data["nodes"]),
-                    "level": data["level"].level_id if data["level"] else None,
-                    "last_node": data["nodes"][-1] if data["nodes"] else None
-                }
-                for pid, data in self.players.items()
-            }
-        }
-
-    def get_history(self, player_id: str):
-        self._ensure_player(player_id)
-        return self.players[player_id]["nodes"]
-
-    def clear_history(self, player_id: str):
-        self._ensure_player(player_id)
+    # ================================================================
+    # Free mode
+    # ================================================================
+    def _ensure_free_mode_level(self, player_id):
         p = self.players[player_id]
+        if p["level"] is None:
 
-        p["nodes"].clear()
-        p["messages"].clear()
-        p["last_time"] = 0.0
-        p["last_say_time"] = 0.0
-        p["ended"] = False
-        p["level_loaded"] = False
+            class FreeLevel:
+                level_id = "heart_free"
+                tree = None
+                bootstrap_patch = {
+                    "mc": {
+                        "tell": "🌌 进入心悦自由宇宙模式。随意探索世界。"
+                    }
+                }
+
+            p["level"] = FreeLevel()
+            p["level_loaded"] = True
 
 
 story_engine = StoryEngine()

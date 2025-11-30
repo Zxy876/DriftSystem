@@ -1,98 +1,146 @@
 # backend/app/routers/ai_router.py
+from __future__ import annotations
+
+import os
+import json
+from typing import Any, Dict, Optional
+
 import requests
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter()
+# ------------------------
+# Intent Engine (NEW)
+# ------------------------
+from app.core.ai.intent_engine import parse_intent
+from app.core.story.story_engine import story_engine
 
-DEEPSEEK_API_KEY = "sk-361935fad03540238c8c3e6c36e79ee6"
-DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
+router = APIRouter(prefix="/ai", tags=["ai"])
 
 
-# ----------- 输入格式 ----------- 
+# ============================================================
+# 1. DSL 解释器（旧功能，保持不动）
+# ============================================================
+API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY", "")
+BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
+MODEL = os.getenv("OPENAI_MODEL", "deepseek-chat")
+
+if not API_KEY:
+    print("[ai_router] WARNING: OPENAI_API_KEY / DEEPSEEK_API_KEY 未配置，AI 路由将只返回占位结果。")
+
+
 class AiInput(BaseModel):
     player_id: str
     message: str
-    world_state: dict | None = None
+    world_state: Dict[str, Any] | None = None
 
 
-# ----------- DeepSeek 调用 ----------- 
-def call_deepseek(message: str) -> dict:
+def call_deepseek(message: str) -> Dict[str, Any]:
     """
-    你想要的心悦宇宙 LLM 事件推理器：
-    输入一句自然语言 → 输出 DSL + 回复
+    原本的自然语言 → DSL 通道（保持）
     """
-
-    system_prompt = """
-你是“心悦宇宙 AI 事件推理器”。
-
-你的任务：
-1. 理解玩家自然语言意图（中文/混合语言）
-2. 输出两个字段：
-   reply：自然语言反馈、温柔、鼓励、氛围感十足
-   dsl：MC 世界脚本（只给机器看的）
-
-DSL 语法由你决定，允许：
-- 世界变化命令（set time night / day / rain / clear）
-- 玩家动作（tp player x y z）
-- 心悦文集剧情推进（story next / story load 关卡）
-- 氛围 UI（title "xxx" / actionbar "xxx"）
-- AI 评论（say "..."）
-- 世界事件（spawn npc / fog / world shift）
-- 自定义心悦宇宙事件（ceremony_start, lake_shift）
-
-你必须输出严格 JSON：
-{
-  "reply": "...",
-  "dsl": "..."
-}
-
-如果不能理解就输出：
-{
-  "reply": "我听到了，但我需要更具体一点。",
-  "dsl": ""
-}
-"""
-
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": "deepseek-chat",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": message}
-        ],
-        "temperature": 0.4
-    }
-
-    try:
-        r = requests.post(DEEPSEEK_URL, json=payload, headers=headers, timeout=15)
-        data = r.json()
-        text = data["choices"][0]["message"]["content"]
-
-        # DeepSeek 输出的 content 本身就是 JSON 字符串
-        import json
-        return json.loads(text)
-
-    except Exception as e:
+    if not API_KEY:
         return {
-            "reply": f"我暂时断开了连接：{e}",
+            "reply": "（后端未配置 AI 密钥，目前使用占位回复。）",
             "dsl": ""
         }
 
+    system_prompt = """
+    你是“心悦宇宙 · DSL 解释器”。
 
-# ----------- FastAPI 路由： MC 插件调用这里 -----------
+    玩家会用自然语言和你说话，你需要：
+    1. 温柔回复玩家（reply 字段）
+    2. 用 DSL 描述世界行动（dsl 字段）
+
+    DSL 示例:
+    - set time night
+    - weather rain
+    - tp player 0 80 0
+    - story next
+    - spawn villager at 2 0
+
+    必须输出 JSON:
+    {"reply": "...", "dsl": "..."}
+    """
+
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message},
+        ],
+        "temperature": 0.4,
+    }
+
+    try:
+        resp = requests.post(
+            f"{BASE_URL}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=20,
+        )
+        data = resp.json()
+        text = data["choices"][0]["message"]["content"]
+        return json.loads(text)
+    except Exception as e:
+        print("[ai_router] call_deepseek error:", e)
+        return {
+            "reply": f"我暂时连不上 AI 服务器：{e}",
+            "dsl": "",
+        }
+
+
 @router.post("/route/{player_id}")
 def ai_route(player_id: str, data: AiInput):
-
+    """
+    原始 DSL 模式 API（保持）
+    """
     result = call_deepseek(data.message)
 
     return {
         "status": "ok",
         "player_id": player_id,
         "reply": result.get("reply", ""),
-        "dsl": result.get("dsl", "")
+        "dsl": result.get("dsl", ""),
     }
+
+
+# ============================================================
+# 2. Phase 3 新功能：自然语言 → 意图 JSON
+# ============================================================
+
+class IntentRequest(BaseModel):
+    player_id: str = "default"
+    text: str
+    world_state: Optional[Dict[str, Any]] = None
+
+
+class IntentResponse(BaseModel):
+    status: str
+    intent: Dict[str, Any]
+
+
+@router.post("/intent", response_model=IntentResponse)
+def ai_intent(req: IntentRequest):
+    """
+    Phase 3: 心悦宇宙的「玩家一句话 → 意图 JSON」
+    
+    示例：
+    - “带我去下一关！”
+    - “打开小地图”
+    - “去 level_08”
+    - “我想继续自由探索”
+    """
+    intent = parse_intent(
+        player_id=req.player_id,
+        text=req.text,
+        world_state=req.world_state or {},
+        story_engine=story_engine,
+    )
+
+    return IntentResponse(status="ok", intent=intent)

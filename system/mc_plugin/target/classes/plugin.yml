@@ -27,6 +27,10 @@ commands:
   saytoai:
     description: "向 DeepSeek（经后端路由）说话"
     usage: "/saytoai <message>"
+  minimap:              # ★★★ 必须加的部分！
+    description: "显示心悦宇宙小地图"
+    usage: "/minimap"
+
 permissions:
   driftsystem.use:
     default: true

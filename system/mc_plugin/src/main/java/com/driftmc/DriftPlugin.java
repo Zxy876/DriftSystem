@@ -18,7 +18,11 @@ import com.driftmc.dsl.DslExecutor;
 import com.driftmc.dsl.DslRegistry;
 import com.driftmc.dsl.DslRunCommand;
 import com.driftmc.intent.IntentRouter;
+import com.driftmc.intent2.IntentDispatcher2;
+import com.driftmc.intent2.IntentRouter2;
 import com.driftmc.listeners.PlayerChatListener;
+import com.driftmc.listeners.PlayerMoveListener;
+import com.driftmc.minimap.MiniMapCommand;
 import com.driftmc.npc.NPCManager;
 import com.driftmc.session.PlayerSessionManager;
 import com.driftmc.world.WorldPatchExecutor;
@@ -30,111 +34,102 @@ public class DriftPlugin extends JavaPlugin {
     private WorldPatchExecutor worldPatcher;
     private NPCManager npcManager;
     private DslExecutor dslExecutor;
+
     private IntentRouter intentRouter;
+    private IntentRouter2 intentRouter2;
+    private IntentDispatcher2 intentDispatcher2;
+
+    private String backendUrl;
 
     @Override
     public void onEnable() {
-        saveDefaultConfig();
 
-        String backendUrl = getConfig().getString("backend-url", "http://localhost:8000");
+        saveDefaultConfig();
+        backendUrl = getConfig().getString("backend-url", "http://localhost:8000");
+
         getLogger().info("Backend URL = " + backendUrl);
 
         backend = new BackendClient(backendUrl);
         sessionManager = new PlayerSessionManager();
         worldPatcher = new WorldPatchExecutor(this);
-
-        // NPC 管理
         npcManager = new NPCManager(this, sessionManager);
 
-        // DSL
         DslRegistry registry = DslRegistry.createDefault(worldPatcher, npcManager, backend);
         dslExecutor = new DslExecutor(registry);
 
-        // Intent Router（AI 总线）
         intentRouter = new IntentRouter(
-                this,
-                backend,
-                dslExecutor,
-                npcManager,
-                worldPatcher,
-                sessionManager
+                this, backend, dslExecutor, npcManager, worldPatcher, sessionManager
         );
 
-        // 解决循环依赖
+        intentRouter2 = new IntentRouter2(this, backend);
+        intentDispatcher2 = new IntentDispatcher2(this);
+
         npcManager.setRouter(intentRouter);
 
-        // --- 注册命令（全部统一构造器） ---
-        if (getCommand("levels") != null) {
+        // -------------------- 注册命令 --------------------
+        if (getCommand("levels") != null)
             getCommand("levels").setExecutor(
-                    new LevelsCommand(backend, intentRouter, worldPatcher, sessionManager)
-            );
-        }
+                    new LevelsCommand(backend, intentRouter, worldPatcher, sessionManager));
 
-        if (getCommand("level") != null) {
+        if (getCommand("level") != null)
             getCommand("level").setExecutor(
-                    new LevelCommand(backend, intentRouter, worldPatcher, sessionManager)
-            );
-        }
+                    new LevelCommand(backend, intentRouter, worldPatcher, sessionManager));
 
-        if (getCommand("advance") != null) {
+        if (getCommand("advance") != null)
             getCommand("advance").setExecutor(
-                    new AdvanceCommand(backend, intentRouter, worldPatcher, sessionManager)
-            );
-        }
+                    new AdvanceCommand(backend, intentRouter, worldPatcher, sessionManager));
 
-        if (getCommand("tree") != null) {
+        if (getCommand("tree") != null)
             getCommand("tree").setExecutor(
-                    new TreeCommand(backend, intentRouter, worldPatcher, sessionManager)
-            );
-        }
+                    new TreeCommand(backend, intentRouter, worldPatcher, sessionManager));
 
-        if (getCommand("saytoai") != null) {
+        if (getCommand("saytoai") != null)
             getCommand("saytoai").setExecutor(
-                    new SayToAICommand(backend, intentRouter, worldPatcher, sessionManager)
-            );
-        }
+                    new SayToAICommand(backend, intentRouter, worldPatcher, sessionManager));
 
-        if (getCommand("heartmenu") != null) {
+        if (getCommand("heartmenu") != null)
             getCommand("heartmenu").setExecutor(
-                    new HeartMenuCommand(backend, intentRouter, worldPatcher, sessionManager)
-            );
-        }
+                    new HeartMenuCommand(backend, intentRouter, worldPatcher, sessionManager));
 
-        if (getCommand("drift") != null) {
+        if (getCommand("drift") != null)
             getCommand("drift").setExecutor(new DslRunCommand(dslExecutor));
-        }
 
-        if (getCommand("storynext") != null) {
+        if (getCommand("storynext") != null)
             getCommand("storynext").setExecutor(
-                    new CmdStoryNext(backend, intentRouter, worldPatcher, sessionManager)
-            );
-        }
+                    new CmdStoryNext(backend, intentRouter, worldPatcher, sessionManager));
 
-        if (getCommand("tp2") != null) {
+        if (getCommand("tp2") != null)
             getCommand("tp2").setExecutor(
-                    new CmdTeleport(backend, intentRouter, worldPatcher, sessionManager)
-            );
-        }
+                    new CmdTeleport(backend, intentRouter, worldPatcher, sessionManager));
 
-        if (getCommand("time2") != null) {
+        if (getCommand("time2") != null)
             getCommand("time2").setExecutor(
-                    new CmdTime(backend, intentRouter, worldPatcher, sessionManager)
-            );
-        }
+                    new CmdTime(backend, intentRouter, worldPatcher, sessionManager));
 
-        if (getCommand("sayc") != null) {
+        if (getCommand("sayc") != null)
             getCommand("sayc").setExecutor(
-                    new CmdSay(backend, intentRouter, worldPatcher, sessionManager)
-            );
-        }
+                    new CmdSay(backend, intentRouter, worldPatcher, sessionManager));
 
-        // --- 事件监听：自然语言聊天 ---
+        if (getCommand("minimap") != null)
+            getCommand("minimap").setExecutor(new MiniMapCommand(this, backendUrl));
+
+        // -------------------- 监听器 --------------------
+
+        // 聊天 -> 意图系统
         Bukkit.getPluginManager().registerEvents(
-                new PlayerChatListener(backend, intentRouter, sessionManager),
+                new PlayerChatListener(
+                        this, backend, intentRouter, sessionManager, intentRouter2, intentDispatcher2
+                ),
                 this
         );
 
-        getLogger().info("✔ DriftMC Loaded Successfully (心悦宇宙 · AI + DSL + NPC + WorldPatch)");
+        // 移动监听器（触发剧情）
+        Bukkit.getPluginManager().registerEvents(
+                new PlayerMoveListener(backend, worldPatcher),
+                this
+        );
+
+        getLogger().info("✔ DriftMC Loaded Successfully (Triggers + AI + DSL + MiniMap)");
     }
 
     @Override
