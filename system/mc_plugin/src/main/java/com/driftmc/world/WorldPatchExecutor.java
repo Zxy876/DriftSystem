@@ -36,7 +36,9 @@ public class WorldPatchExecutor {
     public WorldPatchExecutor(JavaPlugin plugin) {
         this.plugin = plugin;
     }
-
+public JavaPlugin getPlugin() {
+    return this.plugin;
+}
     /**
      * 只发一条心悦宇宙风格文本。
      */
