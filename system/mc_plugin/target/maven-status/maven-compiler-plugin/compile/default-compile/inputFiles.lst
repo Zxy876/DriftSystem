@@ -32,11 +32,9 @@
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/listeners/MiniJson.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/listeners/NearbyNPCListener.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/listeners/PlayerChatListener.java
-/Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/listeners/PlayerMoveListener.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/minimap/MiniMapDownloader.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/minimap/MiniMapGUI.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/minimap/PNGMapRenderer.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/npc/NPCManager.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/session/PlayerSessionManager.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/world/WorldPatchExecutor.java
-/Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/world/WorldWatcher.java

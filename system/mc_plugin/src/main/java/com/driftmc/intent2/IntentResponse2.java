@@ -17,22 +17,22 @@ public class IntentResponse2 {
     }
 
     public static IntentResponse2 fromJson(JsonObject root) {
+
         JsonObject intent = root.has("intent") && root.get("intent").isJsonObject()
                 ? root.getAsJsonObject("intent")
                 : root;
 
-        String typeStr = intent.has("type") ? intent.get("type").getAsString() : "";
+        String typeStr = intent.has("type") ? intent.get("type").getAsString() : null;
         IntentType2 type = IntentType2.fromString(typeStr);
 
         String levelId = intent.has("level_id") ? intent.get("level_id").getAsString() : null;
 
-        JsonObject minimap =
-                intent.has("minimap") && intent.get("minimap").isJsonObject()
-                        ? intent.getAsJsonObject("minimap")
-                        : null;
+        JsonObject minimap = intent.has("minimap") && intent.get("minimap").isJsonObject()
+                ? intent.getAsJsonObject("minimap")
+                : null;
 
-        String rawText = intent.has("raw_text") ? intent.get("raw_text").getAsString() : "";
+        String raw = intent.has("raw_text") ? intent.get("raw_text").getAsString() : null;
 
-        return new IntentResponse2(type, levelId, minimap, rawText);
+        return new IntentResponse2(type, levelId, minimap, raw);
     }
 }

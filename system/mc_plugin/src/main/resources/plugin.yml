@@ -6,31 +6,18 @@ author: Xinyue
 description: "DriftSystem · 心悦宇宙 · MC 前端插件"
 
 commands:
-  levels:
-    description: "列出所有心悦文集关卡"
-    usage: "/levels"
-  level:
-    description: "加载指定关卡到 StoryEngine"
-    usage: "/level <id>"
-  advance:
-    description: "向 StoryEngine 提交当前关卡答案/选择"
-    usage: "/advance <answer>"
-  tree:
-    description: "查看当前 Tree 状态（调试用）"
-    usage: "/tree"
-  dsl:
-    description: "发送 DSL 片段到后端（调试用）"
-    usage: "/dsl <code>"
-  heartmenu:
-    description: "打开心悦文集 30 关菜单（基础版：聊天列表）"
-    usage: "/heartmenu"
-  saytoai:
-    description: "向 DeepSeek（经后端路由）说话"
-    usage: "/saytoai <message>"
-  minimap:              # ★★★ 必须加的部分！
+  minimap:
     description: "显示心悦宇宙小地图"
     usage: "/minimap"
 
-permissions:
-  driftsystem.use:
-    default: true
+  drift:
+    description: "执行 DSL 指令"
+    usage: "/drift <dsl code>"
+
+  tp2:
+    description: "调试传送"
+    usage: "/tp2 <x> <y> <z>"
+
+  time2:
+    description: "设置时间（day/night）"
+    usage: "/time2 <day|night>"

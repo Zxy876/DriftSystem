@@ -1,4 +1,5 @@
 com/driftmc/dsl/DslRunCommand.class
+com/driftmc/intent2/IntentDispatcher2$4.class
 com/driftmc/intent2/IntentRouter2.class
 com/driftmc/world/WorldPatchExecutor.class
 com/driftmc/commands/TreeCommand.class
@@ -8,7 +9,7 @@ com/driftmc/commands/NpcMasterCommand.class
 com/driftmc/commands/LevelCommand.class
 com/driftmc/minimap/MiniMapGUI.class
 com/driftmc/npc/NPCManager.class
-com/driftmc/listeners/PlayerMoveListener$1.class
+com/driftmc/intent2/IntentRouter2$1.class
 com/driftmc/intent2/IntentDispatcher2.class
 com/driftmc/listeners/MiniJson$Token.class
 com/driftmc/intent2/IntentDispatcher2$1.class
@@ -30,15 +31,14 @@ com/driftmc/ai/AiClient$ChatRequest.class
 com/driftmc/dsl/DslCommand.class
 com/driftmc/minimap/PNGMapRenderer.class
 com/driftmc/commands/AdvanceCommand$1.class
-com/driftmc/backend/BackendClient$AiPayload.class
 com/driftmc/dsl/DslExecutor$DslAction.class
-com/driftmc/world/WorldWatcher.class
 com/driftmc/commands/custom/CmdStoryNext$1.class
 com/driftmc/DriftPlugin.class
 com/driftmc/commands/custom/CmdTeleport.class
 com/driftmc/listeners/NearbyNPCListener.class
-com/driftmc/listeners/PlayerMoveListener.class
+com/driftmc/intent2/IntentDispatcher2$2.class
 com/driftmc/commands/TalkCommand.class
+com/driftmc/intent2/IntentDispatcher2$3.class
 com/driftmc/commands/LevelCommand$1.class
 com/driftmc/listeners/MiniJson.class
 com/driftmc/intent/IntentResponse.class
