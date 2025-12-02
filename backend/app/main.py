@@ -17,12 +17,16 @@ from app.api.minimap_api import router as minimap_png_router
 from app.core.story.story_loader import list_levels, load_level
 from app.core.story.story_engine import story_engine
 
+
 # -----------------------------
 # App 初始化
 # -----------------------------
 app = FastAPI(title="DriftSystem · Heart Levels + Story Engine")
 
+
+# -----------------------------
 # CORS（允许前端/MC 调用）
+# -----------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,6 +34,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # -----------------------------
 # 注册全部路由
@@ -43,8 +48,14 @@ app.include_router(ai_router.router,   tags=["AI"])
 app.include_router(minimap_router,     tags=["MiniMap"])
 app.include_router(minimap_png_router, tags=["MiniMapPNG"])
 
+
+# -----------------------------
+# 启动日志（不再访问不存在的属性）
+# -----------------------------
 print(">>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG")
-print(">>> StoryEngine started at:", story_engine.start_node_id)
+print(">>> Total Levels:", len(story_engine.graph.all_levels()))
+print(">>> Spiral triggers:", len(story_engine.minimap.positions))
+print(">>> Heart Universe backend ready.")
 
 
 # -----------------------------
@@ -64,6 +75,9 @@ def api_get_level(level_id: str):
         return {"status": "error", "msg": f"Level {level_id} not found"}
 
 
+# -----------------------------
+# Home / 状态
+# -----------------------------
 @app.get("/")
 def home():
     return {

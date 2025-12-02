@@ -22,7 +22,8 @@ import org.bukkit.potion.PotionEffectType;
 /**
  * WorldPatchExecutor
  *
- * 心悦宇宙 · 王者版执行器
+ * 心悦宇宙 · 完整稳定版执行器（含 SafeTeleport v3）
+ *
  * 统一执行来自后端的 world_patch / mc_patch：
  *
  * 支持 key：
@@ -36,135 +37,117 @@ public class WorldPatchExecutor {
     public WorldPatchExecutor(JavaPlugin plugin) {
         this.plugin = plugin;
     }
-public JavaPlugin getPlugin() {
-    return this.plugin;
-}
-    /**
-     * 只发一条心悦宇宙风格文本。
-     */
-    public void execute(Player player, String text) {
-        if (player == null || text == null || text.isEmpty()) {
+
+    public JavaPlugin getPlugin() {
+        return this.plugin;
+    }
+
+    // =============================== 核心入口 ===============================
+    @SuppressWarnings("unchecked")
+    public void execute(Player player, Map<String, Object> patch) {
+        if (player == null || patch == null || patch.isEmpty()) {
             return;
         }
-        player.sendMessage(ChatColor.LIGHT_PURPLE + "【心悦宇宙】 " + ChatColor.WHITE + text);
-    }
 
-    /**
-     * 核心入口：执行 world_patch / mc_patch
-     *
-     * 兼容两种结构：
-     * 1) { "tell": "...", "build": {...}, ... }
-     * 2) { "variables": {...}, "mc": { "tell": "...", ... } }
-     */
-    @SuppressWarnings("unchecked")
-public void execute(Player player, Map<String, Object> patch) {
-    if (player == null || patch == null || patch.isEmpty()) {
-        return;
-    }
+        final Map<String, Object> patchFinal = patch;
 
-    // ========== ① 创建一个不会被修改的最终变量 ==========
-    final Map<String, Object> patchFinal = patch;
+        // —— 异步切回主线程（纸片人保护）——
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(plugin, () -> execute(player, patchFinal));
+            return;
+        }
 
-    // ========== ② 异步切回主线程 ==========
-    if (!Bukkit.isPrimaryThread()) {
-        Bukkit.getScheduler().runTask(plugin, () -> execute(player, patchFinal));
-        return;
-    }
+        plugin.getLogger().info("[WorldPatchExecutor] execute patch = " + patch);
 
-    plugin.getLogger().info("[WorldPatchExecutor] execute patch = " + patch);
+        Map<String, Object> newPatch = patch;
 
-    // ========== ③ 胶水变量（可修改，不属于 lambda）==========
-    Map<String, Object> newPatch = patch;
+        // mc:{...}
+        if (newPatch.containsKey("mc")) {
+            Object mcObj = newPatch.get("mc");
+            if (mcObj instanceof Map<?, ?> mcMap) {
+                newPatch = (Map<String, Object>) mcMap;
+            }
+        }
 
-    // 如果有 mc 子字段： { "variables": ..., "mc": {...} }
-    if (newPatch.containsKey("mc")) {
-        Object mcObj = newPatch.get("mc");
-        if (mcObj instanceof Map<?, ?> mcMap) {
-            newPatch = (Map<String, Object>) mcMap;
+        // tell
+        handleTell(player, newPatch.get("tell"));
+
+        // weather
+        if (newPatch.containsKey("weather")) {
+            handleWeather(player, string(newPatch.get("weather"), "clear"));
+        }
+
+        // time
+        if (newPatch.containsKey("time")) {
+            handleTime(player, string(newPatch.get("time"), "day"));
+        }
+
+        // teleport（★已替换为 SafeTeleport v3）
+        if (newPatch.containsKey("teleport")) {
+            Object tpObj = newPatch.get("teleport");
+            if (tpObj instanceof Map<?, ?> tpRaw) {
+                handleTeleport(player, (Map<String, Object>) tpRaw);
+            }
+        }
+
+        // build
+        if (newPatch.containsKey("build")) {
+            Object buildObj = newPatch.get("build");
+            if (buildObj instanceof Map<?, ?> bRaw) {
+                handleBuild(player, (Map<String, Object>) bRaw);
+            }
+        }
+
+        // spawn
+        if (newPatch.containsKey("spawn")) {
+            Object spawnObj = newPatch.get("spawn");
+            if (spawnObj instanceof Map<?, ?> sRaw) {
+                handleSpawn(player, (Map<String, Object>) sRaw);
+            }
+        }
+
+        // effect
+        if (newPatch.containsKey("effect")) {
+            Object effObj = newPatch.get("effect");
+            if (effObj instanceof Map<?, ?> effRaw) {
+                handleEffect(player, (Map<String, Object>) effRaw);
+            }
+        }
+
+        // particle
+        if (newPatch.containsKey("particle")) {
+            Object pObj = newPatch.get("particle");
+            if (pObj instanceof Map<?, ?> pRaw) {
+                handleParticle(player, (Map<String, Object>) pRaw);
+            }
+        }
+
+        // sound
+        if (newPatch.containsKey("sound")) {
+            Object sObj = newPatch.get("sound");
+            if (sObj instanceof Map<?, ?> sRaw) {
+                handleSound(player, (Map<String, Object>) sRaw);
+            }
+        }
+
+        // title
+        if (newPatch.containsKey("title")) {
+            Object tObj = newPatch.get("title");
+            if (tObj instanceof Map<?, ?> tRaw) {
+                handleTitle(player, (Map<String, Object>) tRaw);
+            }
+        }
+
+        // actionbar
+        if (newPatch.containsKey("actionbar")) {
+            Object abObj = newPatch.get("actionbar");
+            if (abObj instanceof String abStr) {
+                handleActionBar(player, abStr);
+            }
         }
     }
 
-    // ========== ④ 以下全部用 newPatch，不再用 patch ==========
-    // 1. tell
-    handleTell(player, newPatch.get("tell"));
-
-    // 2. weather
-    if (newPatch.containsKey("weather")) {
-        handleWeather(player, string(newPatch.get("weather"), "clear"));
-    }
-
-    // 3. time
-    if (newPatch.containsKey("time")) {
-        handleTime(player, string(newPatch.get("time"), "day"));
-    }
-
-    // 4. teleport
-    if (newPatch.containsKey("teleport")) {
-        Object tpObj = newPatch.get("teleport");
-        if (tpObj instanceof Map<?, ?> tpRaw) {
-            handleTeleport(player, (Map<String, Object>) tpRaw);
-        }
-    }
-
-    // 5. build
-    if (newPatch.containsKey("build")) {
-        Object buildObj = newPatch.get("build");
-        if (buildObj instanceof Map<?, ?> bRaw) {
-            handleBuild(player, (Map<String, Object>) bRaw);
-        }
-    }
-
-    // 6. spawn
-    if (newPatch.containsKey("spawn")) {
-        Object spawnObj = newPatch.get("spawn");
-        if (spawnObj instanceof Map<?, ?> sRaw) {
-            handleSpawn(player, (Map<String, Object>) sRaw);
-        }
-    }
-
-    // 7. effect
-    if (newPatch.containsKey("effect")) {
-        Object effObj = newPatch.get("effect");
-        if (effObj instanceof Map<?, ?> effRaw) {
-            handleEffect(player, (Map<String, Object>) effRaw);
-        }
-    }
-
-    // 8. particle
-    if (newPatch.containsKey("particle")) {
-        Object pObj = newPatch.get("particle");
-        if (pObj instanceof Map<?, ?> pRaw) {
-            handleParticle(player, (Map<String, Object>) pRaw);
-        }
-    }
-
-    // 9. sound
-    if (newPatch.containsKey("sound")) {
-        Object sObj = newPatch.get("sound");
-        if (sObj instanceof Map<?, ?> sRaw) {
-            handleSound(player, (Map<String, Object>) sRaw);
-        }
-    }
-
-    // 10. title
-    if (newPatch.containsKey("title")) {
-        Object tObj = newPatch.get("title");
-        if (tObj instanceof Map<?, ?> tRaw) {
-            handleTitle(player, (Map<String, Object>) tRaw);
-        }
-    }
-
-    // 11. actionbar
-    if (newPatch.containsKey("actionbar")) {
-        Object abObj = newPatch.get("actionbar");
-        if (abObj instanceof String abStr) {
-            handleActionBar(player, abStr);
-        }
-    }
-}
-
-    // ========================= tell =========================
-
+    // =============================== tell ===============================
     private void handleTell(Player player, Object tellObj) {
         if (tellObj == null) return;
 
@@ -178,8 +161,7 @@ public void execute(Player player, Map<String, Object> patch) {
         }
     }
 
-    // ========================= weather =========================
-
+    // =============================== weather ===============================
     private void handleWeather(Player player, String weather) {
         World world = player.getWorld();
         weather = weather.toLowerCase();
@@ -218,8 +200,7 @@ public void execute(Player player, Map<String, Object> patch) {
         }
     }
 
-    // ========================= time =========================
-
+    // =============================== time ===============================
     private void handleTime(Player player, String time) {
         World world = player.getWorld();
         time = time.toLowerCase();
@@ -238,8 +219,7 @@ public void execute(Player player, Map<String, Object> patch) {
         player.sendMessage(ChatColor.GOLD + "✧ 时间被轻轻拨动，场景也随之改变。");
     }
 
-    // ========================= teleport =========================
-
+    // =============================== teleport ★ SafeTeleport v3 ===============================
     @SuppressWarnings("unchecked")
     private void handleTeleport(Player player, Map<String, Object> tpMap) {
         World world = player.getWorld();
@@ -250,31 +230,68 @@ public void execute(Player player, Map<String, Object> patch) {
         double y = number(tpMap.get("y"), 0).doubleValue();
         double z = number(tpMap.get("z"), 0).doubleValue();
 
-        Location target;
+        // ── 1. 计算原始目标 ─────────────────────────────
+        Location rawTarget;
         if ("absolute".equalsIgnoreCase(mode)) {
-            target = new Location(world, x, y, z, base.getYaw(), base.getPitch());
+            rawTarget = new Location(world, x, y, z, base.getYaw(), base.getPitch());
         } else {
-            target = base.clone().add(x, y, z);
+            rawTarget = base.clone().add(x, y, z);
         }
 
-        player.teleport(target);
-        player.sendMessage(ChatColor.GREEN + "✧ 你被世界轻轻挪到了一个新的坐标。");
+        // ── 2. 强制加载区块（关键修复！）──────────────────
+        var chunk = world.getChunkAt(rawTarget);
+        if (!chunk.isLoaded()) {
+            chunk.load(true);
+            plugin.getLogger().info("[SafeTeleport] Chunk forced load at " +
+                    chunk.getX() + "," + chunk.getZ());
+        }
 
-        // 可选：safe_platform
-        if (tpMap.containsKey("safe_platform")) {
-            Object spObj = tpMap.get("safe_platform");
-            if (spObj instanceof Map<?, ?> spRaw) {
-                Map<String, Object> sp = (Map<String, Object>) spRaw;
-                String matName = string(sp.get("material"), "GLASS");
-                int radius = number(sp.get("radius"), 2).intValue();
-                Material mat = Material.matchMaterial(matName.toUpperCase());
-                if (mat == null) mat = Material.GLASS;
-                buildPlatform(world, target.clone().add(0, -1, 0), radius, mat);
+        // ── 3. 安全高度修正（避免掉下去/卡墙）──────────────
+        double safeY = rawTarget.getY();
+
+        if (safeY <= 1) {
+            safeY = world.getHighestBlockYAt(rawTarget) + 1.2;
+        }
+
+        Material blockAt = world.getBlockAt(rawTarget).getType();
+        if (blockAt.isSolid()) {
+            safeY = world.getHighestBlockYAt(rawTarget) + 1.2;
+            plugin.getLogger().warning("[SafeTeleport] inside solid block → Y fixed to " + safeY);
+        }
+
+        Location safeTarget = new Location(
+                world,
+                rawTarget.getX(),
+                safeY,
+                rawTarget.getZ(),
+                base.getYaw(),
+                base.getPitch()
+        );
+
+        // ── 4. 主线程延时传送（推荐方式）──────────────────
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            player.teleport(safeTarget);
+            plugin.getLogger().info("[SafeTeleport] Player teleported to " +
+                    safeTarget.getX() + "," + safeTarget.getY() + "," + safeTarget.getZ());
+
+            player.sendMessage(ChatColor.GREEN + "✧ 你被世界轻轻挪到了一个安全的位置。");
+
+            // safe_platform
+            if (tpMap.containsKey("safe_platform")) {
+                Object spObj = tpMap.get("safe_platform");
+                if (spObj instanceof Map<?, ?> spRaw) {
+                    Map<String, Object> sp = (Map<String, Object>) spRaw;
+                    String matName = string(sp.get("material"), "GLASS");
+                    int radius = number(sp.get("radius"), 2).intValue();
+                    Material mat = Material.matchMaterial(matName.toUpperCase());
+                    if (mat == null) mat = Material.GLASS;
+                    buildPlatform(world, safeTarget.clone().add(0, -1, 0), radius, mat);
+                }
             }
-        }
+        });
     }
 
-    // ========================= build =========================
+    // =============================== build ===============================
 
     @SuppressWarnings("unchecked")
     private void handleBuild(Player player, Map<String, Object> buildMap) {
@@ -284,9 +301,7 @@ public void execute(Player player, Map<String, Object> patch) {
         String shape = string(buildMap.get("shape"), "platform");
         String materialName = string(buildMap.get("material"), "OAK_PLANKS");
         Material material = Material.matchMaterial(materialName.toUpperCase());
-        if (material == null) {
-            material = Material.OAK_PLANKS;
-        }
+        if (material == null) material = Material.OAK_PLANKS;
 
         int size = number(buildMap.get("size"), 3).intValue();
         if (size < 1) size = 1;
@@ -365,14 +380,12 @@ public void execute(Player player, Map<String, Object> patch) {
         int w = size;
         int h = Math.max(3, size);
 
-        // 地板
         for (int x = 0; x < w; x++) {
             for (int z = 0; z < w; z++) {
                 world.getBlockAt(ox + x, oy, oz + z).setType(mat);
             }
         }
 
-        // 墙
         for (int y = 1; y <= h; y++) {
             for (int x = 0; x < w; x++) {
                 world.getBlockAt(ox + x, oy + y, oz).setType(mat);
@@ -384,7 +397,6 @@ public void execute(Player player, Map<String, Object> patch) {
             }
         }
 
-        // 顶
         for (int x = 0; x < w; x++) {
             for (int z = 0; z < w; z++) {
                 world.getBlockAt(ox + x, oy + h + 1, oz + z).setType(mat);
@@ -430,9 +442,7 @@ public void execute(Player player, Map<String, Object> patch) {
         }
     }
 
-    /**
-     * 小心悦专属：地上画一个 ♥
-     */
+    // ♥ 小心悦专属心形平台
     private void buildHeartPad(World world, Location origin, int size, Material mat) {
         int ox = origin.getBlockX();
         int oy = origin.getBlockY();
@@ -452,8 +462,7 @@ public void execute(Player player, Map<String, Object> patch) {
         }
     }
 
-    // ========================= spawn =========================
-
+    // =============================== spawn ===============================
     @SuppressWarnings("unchecked")
     private void handleSpawn(Player player, Map<String, Object> spawnMap) {
         World world = player.getWorld();
@@ -497,24 +506,20 @@ public void execute(Player player, Map<String, Object> patch) {
                 (name.isEmpty() ? type.name() : name));
     }
 
-    // ========================= effect =========================
-
+    // =============================== effect ===============================
     private void handleEffect(Player player, Map<String, Object> effMap) {
         String typeName = string(effMap.get("type"), "SPEED");
         int seconds = number(effMap.get("seconds"), 5).intValue();
         int amplifier = number(effMap.get("amplifier"), 1).intValue();
 
         PotionEffectType pet = PotionEffectType.getByName(typeName.toUpperCase());
-        if (pet == null) {
-            pet = PotionEffectType.SPEED;
-        }
+        if (pet == null) pet = PotionEffectType.SPEED;
 
         player.addPotionEffect(new PotionEffect(pet, seconds * 20, amplifier));
         player.sendMessage(ChatColor.DARK_PURPLE + "✧ 你的状态被「" + typeName + "」轻轻改变。");
     }
 
-    // ========================= particle =========================
-
+    // =============================== particle ===============================
     private void handleParticle(Player player, Map<String, Object> pMap) {
         World world = player.getWorld();
         Location base = player.getLocation().add(0, 1, 0);
@@ -538,8 +543,7 @@ public void execute(Player player, Map<String, Object> patch) {
         player.sendMessage(ChatColor.LIGHT_PURPLE + "✧ 粒子在你周围旋转，像飘移的思绪。");
     }
 
-    // ========================= sound =========================
-
+    // =============================== sound ===============================
     private void handleSound(Player player, Map<String, Object> sMap) {
         Location loc = player.getLocation();
 
@@ -555,8 +559,7 @@ public void execute(Player player, Map<String, Object> patch) {
         player.getWorld().playSound(loc, sound, volume, pitch);
     }
 
-    // ========================= title / actionbar =========================
-
+    // =============================== title / actionbar ===============================
     private void handleTitle(Player player, Map<String, Object> tMap) {
         String main = string(tMap.get("main"), "");
         String sub = string(tMap.get("sub"), "");
@@ -575,8 +578,7 @@ public void execute(Player player, Map<String, Object> patch) {
         player.sendActionBar(ChatColor.AQUA + text);
     }
 
-    // ========================= 工具 =========================
-
+    // =============================== 工具 ===============================
     private String string(Object o, String def) {
         return o == null ? def : o.toString();
     }
