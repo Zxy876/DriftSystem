@@ -58,5 +58,60 @@
     "source": "xinyue_wenji",
     "chapter": 14,
     "word_count": 1182
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "祭司",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "stand",
+            "location": {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            "description": "等待玩家到来"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§a[守护者]§r 欢迎来到第14关。",
+              "§7提示：尝试与我对话了解更多"
+            ],
+            "description": "提供关卡指引"
+          }
+        ],
+        "ai_hints": "第14关的守护者，会根据关卡主题提供帮助和指引。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "pigstep"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "purple",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【神殿】- 心悦文集 第14章"
+    },
+    "variables": {
+      "theme": "神殿",
+      "biome": "jungle",
+      "structure": "temple",
+      "unlocked": false
+    }
   }
 }

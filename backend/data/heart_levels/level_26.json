@@ -55,5 +55,60 @@
     "source": "xinyue_wenji",
     "chapter": 26,
     "word_count": 964
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "教授",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "stand",
+            "location": {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            "description": "等待玩家到来"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§a[守护者]§r 欢迎来到第26关。",
+              "§7提示：尝试与我对话了解更多"
+            ],
+            "description": "提供关卡指引"
+          }
+        ],
+        "ai_hints": "第26关的守护者，会根据关卡主题提供帮助和指引。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "otherside"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "blue",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【学院】- 心悦文集 第26章"
+    },
+    "variables": {
+      "theme": "学院",
+      "biome": "plains",
+      "structure": "academy",
+      "unlocked": false
+    }
   }
 }

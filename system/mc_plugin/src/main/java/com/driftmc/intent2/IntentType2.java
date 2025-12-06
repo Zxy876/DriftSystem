@@ -15,11 +15,14 @@ public enum IntentType2 {
     GOTO_LEVEL,
     GOTO_NEXT_LEVEL,
 
+    CREATE_STORY, // 新增：创建剧情
+
     SAY_ONLY,
     UNKNOWN;
 
     public static IntentType2 fromString(String s) {
-        if (s == null) return UNKNOWN;
+        if (s == null)
+            return UNKNOWN;
         return switch (s.toUpperCase()) {
             case "SHOW_MINIMAP" -> SHOW_MINIMAP;
 
@@ -33,6 +36,8 @@ public enum IntentType2 {
             case "STORY_CONTINUE" -> STORY_CONTINUE;
             case "GOTO_LEVEL" -> GOTO_LEVEL;
             case "GOTO_NEXT_LEVEL" -> GOTO_NEXT_LEVEL;
+
+            case "CREATE_STORY" -> CREATE_STORY;
 
             case "SAY_ONLY" -> SAY_ONLY;
             default -> UNKNOWN;

@@ -58,5 +58,89 @@
     "source": "xinyue_wenji",
     "chapter": 5,
     "word_count": 1051
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "护林员",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "patrol",
+            "path": [
+              {
+                "dx": -5,
+                "dz": -5
+              },
+              {
+                "dx": 5,
+                "dz": -5
+              },
+              {
+                "dx": 5,
+                "dz": 5
+              },
+              {
+                "dx": -5,
+                "dz": 5
+              }
+            ],
+            "speed": 0.9,
+            "description": "巡视森林保护环境"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§2[护林员]§r 森林是生命的源泉，我们要好好保护它。",
+              "§2[护林员]§r 每一棵树都有故事，你愿意倾听吗？",
+              "§7提示：说'我想了解森林'来探索自然"
+            ],
+            "description": "讲述森林故事"
+          },
+          {
+            "type": "quest",
+            "trigger_keywords": [
+              "森林",
+              "保护",
+              "自然"
+            ],
+            "quest_name": "森林守护者",
+            "rewards": [
+              "nature_blessing",
+              "seeds"
+            ],
+            "description": "保护森林生态"
+          }
+        ],
+        "ai_hints": "护林员热爱自然，责任心强。会教育玩家环保意识和对自然的尊重。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "blocks"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "green",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【森林】- 心悦文集 第5章"
+    },
+    "variables": {
+      "theme": "森林",
+      "biome": "forest",
+      "structure": "tree_house",
+      "unlocked": false
+    }
   }
 }

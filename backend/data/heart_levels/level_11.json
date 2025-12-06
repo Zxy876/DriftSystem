@@ -56,5 +56,62 @@
     "source": "xinyue_wenji",
     "chapter": 11,
     "word_count": 1034
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "武者",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "stand",
+            "location": {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            "look_at": "nearest_player",
+            "description": "在村中心等待村民"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§6[村长]§r 欢迎来到我们的村庄！",
+              "§6[村长]§r 这里的每个人都很友善。",
+              "§7提示：说'村里有什么'来了解村庄"
+            ],
+            "description": "介绍村庄情况"
+          }
+        ],
+        "ai_hints": "村长慈祥和蔼，关心村民。会介绍村庄历史和居民故事。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "chirp"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "lime",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【竹林】- 心悦文集 第11章"
+    },
+    "variables": {
+      "theme": "竹林",
+      "biome": "bamboo_jungle",
+      "structure": "dojo",
+      "unlocked": false
+    }
   }
 }

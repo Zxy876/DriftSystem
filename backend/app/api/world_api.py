@@ -1,4 +1,3 @@
-# backend/app/api/world_api.py
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
@@ -23,24 +22,28 @@ class MoveAction(BaseModel):
     speed: float = 0.0
     moving: bool = False
 
+
 class WorldAction(BaseModel):
     move: Optional[MoveAction] = None
     say: Optional[str] = None
+
 
 class ApplyInput(BaseModel):
     action: WorldAction
     player_id: Optional[str] = "default"
 
+
 class WorldApplyResponse(BaseModel):
     status: str
     world_state: Dict[str, Any]
-    ai_option: Optional[int] = None
+    ai_option: Optional[str] = None              # ⭐ 已修复：必须是 str
     story_node: Optional[Dict[str, Any]] = None
     world_patch: Optional[Dict[str, Any]] = None
     trigger: Optional[Dict[str, Any]] = None
 
+
 # ============================================================
-# APPLY API
+# APPLY API — v3（最终版）
 # ============================================================
 @router.post("/apply", response_model=WorldApplyResponse)
 def apply_action(inp: ApplyInput):
@@ -48,152 +51,190 @@ def apply_action(inp: ApplyInput):
     player_id = inp.player_id
     act = inp.action.dict(exclude_none=True)
 
-    # 1) 更新世界状态（坐标等）
+    # 1) 世界物理更新
     new_state = world_engine.apply(act)
     vars_ = new_state.get("variables") or {}
-    x, y, z = vars_.get("x", 0), vars_.get("y", 0), vars_.get("z", 0)
+    x = vars_.get("x", 0)
+    y = vars_.get("y", 0)
+    z = vars_.get("z", 0)
 
-    # 2) 意图识别（玩家说话）
+    # 2) 文本 → 意图解析
     say_text = act.get("say")
-    intent = parse_intent(player_id, say_text, new_state, story_engine) if say_text else None
+    intent_result = parse_intent(player_id, say_text, new_state, story_engine) if say_text else None
+    
+    # 提取第一个 intent（如果有多个，这里只处理第一个）
+    intent = None
+    if intent_result and "intents" in intent_result and len(intent_result["intents"]) > 0:
+        intent = intent_result["intents"][0]
 
-    # =======================================================
-    # 世界命令类意图（白名单，不触发剧情）
-    # =======================================================
+    # ============================================================
+    # ⭐ 白名单世界指令（不走剧情）
+    # ============================================================
     if intent:
         t = intent["type"]
 
-        # ----- 跳关 -----
-        if t == "NEXT_LEVEL":
-            level = intent["level_id"]
-            patch = story_engine.load_level_for_player(player_id, level)
-            new_state = world_engine.apply_patch(patch)
-            result = WorldApplyResponse(
-                status="ok",
-                world_state=new_state,
-                story_node={"title": "下一关", "text": f"进入 {level}"},
-                world_patch=patch
-            )
-            logger.warning("APPLY RETURN: %s", result.dict())
-            return result
+        # ---------- 创建故事关卡（AI生成完整世界） ----------
+        if t == "CREATE_STORY":
+            import hashlib
+            import time
+            from backend.app.api.story_api import InjectPayload, api_story_inject
+            
+            # 生成唯一level_id
+            raw_text = intent.get("raw_text", "story")
+            level_id = f"story_{hashlib.md5(f'{raw_text}{time.time()}'.encode()).hexdigest()[:8]}"
+            
+            # 调用story_api创建关卡（AI会生成完整世界）
+            try:
+                payload = InjectPayload(
+                    level_id=level_id,
+                    title=intent.get("title", "自由创作"),
+                    text=raw_text
+                )
+                inject_result = api_story_inject(payload)
+                
+                # 立即加载生成的关卡
+                patch = story_engine.load_level_for_player(player_id, level_id)
+                new_state = world_engine.apply_patch(patch)
+                
+                return WorldApplyResponse(
+                    status="ok",
+                    world_state=new_state,
+                    story_node={
+                        "title": "✨ 世界已创建", 
+                        "text": f"AI为你生成了新世界：{intent.get('title', '自由创作')}"
+                    },
+                    world_patch=patch,
+                    ai_response=inject_result.get("world_preview")
+                )
+            except Exception as e:
+                # 创建失败时返回错误信息
+                return WorldApplyResponse(
+                    status="error",
+                    world_state=new_state,
+                    story_node={
+                        "title": "创建失败", 
+                        "text": f"世界生成出错: {str(e)}"
+                    }
+                )
 
+        # ---------- 跳关 ----------
         if t == "GOTO_LEVEL":
             level = intent["level_id"]
             patch = story_engine.load_level_for_player(player_id, level)
             new_state = world_engine.apply_patch(patch)
-            result = WorldApplyResponse(
+
+            return WorldApplyResponse(
                 status="ok",
                 world_state=new_state,
-                story_node={"title": "前往关卡", "text": f"跳转到 {level}"},
+                story_node={"title": "跳转关卡", "text": f"进入 {level}"},
                 world_patch=patch
             )
-            logger.warning("APPLY RETURN: %s", result.dict())
-            return result
 
-        # ----- 小地图 -----
-        if t == "OPEN_MINIMAP":
-            mm = story_engine.minimap.to_dict(player_id)
-            result = WorldApplyResponse(
+        if t == "GOTO_NEXT_LEVEL":
+            next_level = story_engine.get_next_level_id(None)
+            patch = story_engine.load_level_for_player(player_id, next_level)
+            new_state = world_engine.apply_patch(patch)
+
+            return WorldApplyResponse(
                 status="ok",
                 world_state=new_state,
-                story_node={"title": "小地图", "text": "显示小地图"},
+                story_node={"title": "下一关", "text": f"进入 {next_level}"},
+                world_patch=patch
+            )
+
+        # ---------- 小地图 ----------
+        if t == "SHOW_MINIMAP":
+            mm = story_engine.minimap.to_dict(player_id)
+            return WorldApplyResponse(
+                status="ok",
+                world_state=new_state,
+                story_node={"title": "小地图", "text": "显示当前世界地图"},
                 world_patch={"minimap": mm},
             )
-            logger.warning("APPLY RETURN: %s", result.dict())
-            return result
 
-        # ----- 时间 -----
+        # ---------- 时间 ----------
         if t == "SET_DAY":
             patch = {"mc": {"time": "day"}}
             new_state = world_engine.apply_patch(patch)
-            result = WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
-            logger.warning("APPLY RETURN: %s", result.dict())
-            return result
+            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
 
         if t == "SET_NIGHT":
             patch = {"mc": {"time": "night"}}
             new_state = world_engine.apply_patch(patch)
-            result = WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
-            logger.warning("APPLY RETURN: %s", result.dict())
-            return result
+            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
 
-        # ----- 天气 -----
+        # ---------- 天气 ----------
         if t == "SET_WEATHER":
-            patch = {"mc": {"weather": intent["weather"]}}
+            w = intent.get("weather", "clear")
+            patch = {"mc": {"weather": w}}
             new_state = world_engine.apply_patch(patch)
-            result = WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
-            logger.warning("APPLY RETURN: %s", result.dict())
-            return result
+            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
 
-        # ----- 造物 -----
+        # ---------- 造实体 ----------
         if t == "SPAWN_ENTITY":
-            patch = {
-                "mc": {
-                    "spawn": {
-                        "type": "rabbit",
-                        "name": intent["entity"],
-                        "offset": {"dx": 1, "dy": 0, "dz": 1}
-                    }
+            patch = {"mc": {
+                "spawn": {
+                    "type": intent.get("entity", "villager"),
+                    "name": "NPC",
+                    "offset": {"dx": 1, "dy": 0, "dz": 1}
                 }
-            }
+            }}
             new_state = world_engine.apply_patch(patch)
-            result = WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
-            logger.warning("APPLY RETURN: %s", result.dict())
-            return result
+            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
 
-        # ----- 建筑 -----
+        # ---------- 建筑 ----------
         if t == "BUILD_STRUCTURE":
-            patch = {
-                "mc": {
-                    "build": {
-                        "shape": "platform",
-                        "material": "oak_planks",
-                        "size": 5,
-                        "safe_offset": {"dx": 2, "dy": 0, "dz": 2}
-                    }
-                }
-            }
+            patch = {"mc": {"build": intent.get("build")}}
             new_state = world_engine.apply_patch(patch)
-            result = WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
-            logger.warning("APPLY RETURN: %s", result.dict())
-            return result
+            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
 
-    # =======================================================
-    # ⭐ 核心：表达性对话 → 推剧情
-    # =======================================================
+    # ============================================================
+    # ⭐ 剧情推进（只要说话一定触发）
+    # ============================================================
     if say_text:
         option, node, patch = story_engine.advance(player_id, new_state, act)
 
-        result = WorldApplyResponse(
+        # 🛡️ 确保 ai_option 始终为字符串，兼容 DeepSeek 返回数组/对象
+        option_value = None
+        if isinstance(option, str) or option is None:
+            option_value = option
+        elif isinstance(option, (list, tuple)):
+            if option:
+                option_value = str(option[0])
+        elif isinstance(option, (dict, int, float, bool)):
+            option_value = str(option)
+        else:
+            option_value = None
+
+        return WorldApplyResponse(
             status="ok",
             world_state=new_state,
-            ai_option=option,
+            ai_option=option_value,
             story_node=node,
             world_patch=patch
         )
-        logger.warning("APPLY RETURN (STORY): %s", result.dict())
-        return result
 
-    # =======================================================
-    # 触发器（走路进入关卡）
-    # =======================================================
+    # ============================================================
+    # ⭐ 触发器（走路触发 level）
+    # ============================================================
     tp = trigger_engine.check(player_id, x, y, z)
+
     if tp and tp.action == "load_level":
         patch = story_engine.load_level_for_player(player_id, tp.level_id)
         new_state = world_engine.apply_patch(patch)
-        result = WorldApplyResponse(
+
+        return WorldApplyResponse(
             status="ok",
             world_state=new_state,
             story_node={"title": "世界触发点", "text": f"成功加载 {tp.level_id}"},
             world_patch=patch,
             trigger={"id": tp.id, "level_id": tp.level_id}
         )
-        logger.warning("APPLY RETURN (TRIGGER): %s", result.dict())
-        return result
 
-    # =======================================================
-    # 默认
-    # =======================================================
-    result = WorldApplyResponse(status="ok", world_state=new_state)
-    logger.warning("APPLY RETURN (DEFAULT): %s", result.dict())
-    return result
+    # ============================================================
+    # 默认（比如走路，没有剧情）
+    # ============================================================
+    return WorldApplyResponse(
+        status="ok",
+        world_state=new_state
+    )

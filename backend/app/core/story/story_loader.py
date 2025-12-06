@@ -84,9 +84,10 @@ def load_level(level_id: str) -> Level:
     else:
         text_list = list(raw_text)
 
-    # npcs / bootstrap_patch / tree 可能不存在
+    # npcs / world_patch / tree 可能不存在
     npcs = data.get("npcs", []) or []
-    bootstrap_patch = data.get("bootstrap_patch", {
+    # 优先使用 world_patch (增强配置)，fallback 到 bootstrap_patch
+    world_patch = data.get("world_patch") or data.get("bootstrap_patch", {
         "variables": {},
         "mc": {"tell": f"关卡 {data.get('title','')} 已加载。"}
     })
@@ -101,7 +102,7 @@ def load_level(level_id: str) -> Level:
         choices=data.get("choices", []),
         meta=data.get("meta", {}),
         npcs=npcs,
-        bootstrap_patch=bootstrap_patch,
+        bootstrap_patch=world_patch,  # 使用world_patch作为bootstrap_patch
         tree=tree
     )
 

@@ -12,22 +12,28 @@ from app.core.world.minimap import MiniMap
 from app.core.world.scene_generator import SceneGenerator
 from app.core.world.trigger import trigger_engine
 from app.core.world.trigger import TriggerPoint
+from app.core.npc import npc_engine
 
 
 class StoryEngine:
     def __init__(self):
+        # 每个玩家的剧情状态
         self.players: Dict[str, Dict[str, Any]] = {}
 
+        # 这些冷却参数保留字段，但 v2 不再用于“是否推进”判断
         self.move_cooldown = 3.0
         self.say_cooldown = 0.8
 
+        # 关卡目录
         base_dir = Path(__file__).resolve().parents[3]
         level_dir = base_dir / "data" / "heart_levels"
 
+        # 整体剧情图谱 + 小地图 + 场景生成
         self.graph = StoryGraph(str(level_dir))
         self.minimap = MiniMap(self.graph)
         self.scene_gen = SceneGenerator()
 
+        # 触发器（v2：暂时禁用螺旋触发，避免乱飞）
         self._inject_spiral_triggers()
 
         print(
@@ -35,7 +41,9 @@ class StoryEngine:
             f"from {level_dir}"
         )
 
-    # ------------------- 状态 -------------------
+    # ============================================================
+    # 状态查询
+    # ============================================================
     def get_public_state(self, player_id: Optional[str] = None):
         return {
             "total_levels": len(self.graph.all_levels()),
@@ -61,7 +69,9 @@ class StoryEngine:
                 "last_say_time": 0.0,
             }
 
-    # ------------------- 关卡逻辑 -------------------
+    # ============================================================
+    # 关卡跳转逻辑（下一关）
+    # ============================================================
     def get_next_level_id(self, current_level_id: Optional[str]):
         if not current_level_id or not current_level_id.startswith("level_"):
             all_levels = sorted(self.graph.all_levels())
@@ -78,14 +88,128 @@ class StoryEngine:
             return {"mc": {"tell": "🎉 已经是最后一关了。"}}
         return self.load_level_for_player(player_id, next_id)
 
+    # ============================================================
+    # ⭐ 剧情舞台渲染器 v2
+    # ============================================================
+    def _build_stage_patch(self, level: Level) -> Dict[str, Any]:
+        """
+        根据关卡信息，构建一个“剧情舞台”的 world_patch：
+        - 固定在安全坐标附近渲染平台 / 粒子 / 标题 / 天气 / 时间 / 背景音
+        - 不包含 teleport（teleport 由上层统一控制）
+        """
+        meta = level.meta or {}
+        mood = level.mood or {}
+        base_mood = mood.get("base", "calm")
+        chapter = meta.get("chapter")
+
+        # 默认主题
+        theme = "dawn"
+
+        # 粗略按章节区间分主题
+        if isinstance(chapter, int):
+            if chapter <= 5:
+                theme = "dawn"
+            elif chapter <= 10:
+                theme = "noon"
+            elif chapter <= 20:
+                theme = "dusk"
+            else:
+                theme = "night"
+
+        # 情绪覆盖：如果 mood 里写得比较“压抑”就强制 night/dusk
+        if isinstance(base_mood, str):
+            b = base_mood.lower()
+            if any(k in b for k in ["sad", "dark", "痛", "压抑", "night"]):
+                theme = "night"
+            elif any(k in b for k in ["hope", "light", "晨", "morning"]):
+                theme = "dawn"
+
+        # 根据 theme 决定舞台参数
+        if theme == "dawn":
+            time_of_day = "sunrise"
+            weather = "clear"
+            particle_type = "END_ROD"
+            sound_type = "MUSIC_DISC_OTHERSIDE"
+            platform_mat = "SMOOTH_QUARTZ"
+            accent_color = "§e"
+            subtitle_hint = "清晨的风把故事轻轻翻开。"
+        elif theme == "noon":
+            time_of_day = "day"
+            weather = "clear"
+            particle_type = "HAPPY_VILLAGER"
+            sound_type = "MUSIC_DISC_BLOCKS"
+            platform_mat = "OAK_PLANKS"
+            accent_color = "§a"
+            subtitle_hint = "阳光很亮，世界也变得清晰。"
+        elif theme == "dusk":
+            time_of_day = "sunset"
+            weather = "dream_sky"
+            particle_type = "CHERRY_LEAVES"
+            sound_type = "MUSIC_DISC_FAR"
+            platform_mat = "PINK_STAINED_GLASS"
+            accent_color = "§d"
+            subtitle_hint = "夕阳像一页慢慢合上的剧本。"
+        else:  # night
+            time_of_day = "night"
+            weather = "dark_sky"
+            particle_type = "SOUL"
+            sound_type = "MUSIC_DISC_STRAD"
+            platform_mat = "BLACK_STAINED_GLASS"
+            accent_color = "§9"
+            subtitle_hint = "夜色把没说完的话藏了起来。"
+
+        title_main = f"{accent_color}《{level.title}》§r"
+        title_sub = subtitle_hint
+
+        stage_mc: Dict[str, Any] = {
+            # 舞台平台：统一在安全点附近，由 SafeTeleport 决定精确坐标
+            "build": {
+                "shape": "platform",
+                "material": platform_mat,
+                "size": 6,
+                # 让平台中心正好在玩家脚下（teleport 会传到平台上方）
+                "safe_offset": {"dx": 0, "dy": -1, "dz": 0},
+            },
+            # 情绪氛围
+            "weather": weather,
+            "time": time_of_day,
+            "particle": {
+                "type": particle_type,
+                "count": 80,
+                "radius": 2.5,
+            },
+            "sound": {
+                "type": sound_type,
+                "volume": 0.8,
+                "pitch": 1.0,
+            },
+            "title": {
+                "main": title_main,
+                "sub": title_sub,
+                "fade_in": 10,
+                "stay": 60,
+                "fade_out": 20,
+            },
+        }
+
+        return {"mc": stage_mc}
+
+    # ============================================================
+    # 加载指定关卡（带剧情舞台 + 安全传送）
+    # ============================================================
     def load_level_for_player(self, player_id: str, level_id: str) -> Dict[str, Any]:
         """
-        加载指定关卡 + 生成场景 patch（平台/NPC/建筑等）
+        加载指定关卡：
+        - 绑定到玩家状态
+        - 注入 minimap / tree / messages
+        - 生成「剧情舞台 patch」+ 场景 patch + 原始 bootstrap_patch
+        - 强制附带一个全局 SafeTeleport 到安全坐标（永不掉海里）
         """
         self._ensure_player(player_id)
         level: Level = load_level(level_id)
         p = self.players[player_id]
 
+        # 绑定关卡状态
         p["level"] = level
         p["level_loaded"] = False
         p["tree_state"] = level.tree
@@ -97,94 +221,161 @@ class StoryEngine:
         self.minimap.enter_level(player_id, level_id)
         self.minimap.mark_unlocked(player_id, level_id)
 
-        scene_patch = self.scene_gen.generate_for_level(level_id, level.__dict__)
+        # ---------------------------------------------
+        # 🎭 剧情舞台渲染器
+        # ---------------------------------------------
+        stage_patch = self._build_stage_patch(level)  # 只负责 build/天气/时间/粒子/音效/标题
 
+        # ---------------------------------------------
+        # 场景生成（SceneGenerator）
+        # 依然允许布置 NPC / 装置等，但禁止改 teleport
+        # ---------------------------------------------
+        scene_patch = self.scene_gen.generate_for_level(level_id, level.__dict__) or {}
+        scene_mc = dict(scene_patch.get("mc") or {})
+        if "teleport" in scene_mc:
+            # 不允许 SceneGenerator 再改玩家传送位置，避免掉进奇怪地方
+            del scene_mc["teleport"]
+
+        # ---------------------------------------------
+        # 原始 bootstrap_patch（现在是 world_patch，来自 level.json）
+        # ---------------------------------------------
         base_patch = dict(level.bootstrap_patch or {})
         base_mc = dict(base_patch.get("mc") or {})
-        scene_mc = dict((scene_patch or {}).get("mc") or {})
-        base_mc.update(scene_mc)
-        base_patch["mc"] = base_mc
 
+        # 合并：场景 → 舞台 → world_patch
+        # world_patch优先级最高（最后合并，覆盖前面的配置）
+        def merge_mc(dst: Dict[str, Any], src: Dict[str, Any]):
+            for k, v in (src or {}).items():
+                if k in dst and isinstance(dst[k], dict) and isinstance(v, dict):
+                    # 深度合并字典
+                    dst[k] = {**dst[k], **v}
+                else:
+                    dst[k] = v
+
+        # 临时存储world_patch的配置
+        world_patch_mc = dict(base_mc)
+        temp_mc = {}
+        
+        # 先合并场景和舞台
+        merge_mc(temp_mc, scene_mc)
+        merge_mc(temp_mc, stage_patch.get("mc", {}))
+        
+        # 最后用world_patch覆盖（保留world_patch中的所有配置）
+        merge_mc(temp_mc, world_patch_mc)
+        base_mc = temp_mc
+
+        # ---------------------------------------------
+        # 🌈 全局安全传送（固定出生点 + 平台）
+        # ---------------------------------------------
+        SAFE_X, SAFE_Y, SAFE_Z = 0, 120, 0
+        safe_tp_mc = {
+            "teleport": {
+                "mode": "absolute",
+                "x": SAFE_X,
+                "y": SAFE_Y,
+                "z": SAFE_Z,
+                "safe_platform": {
+                    "material": "GLASS",
+                    "radius": 6,
+                },
+            },
+            "tell": f"进入剧情：《{level.title}》",
+        }
+        merge_mc(base_mc, safe_tp_mc)
+
+        base_patch["mc"] = base_mc
+        
+        # ---------------------------------------------
+        # 🤖 注册NPC行为到引擎
+        # ---------------------------------------------
+        spawn_data = base_mc.get("spawn")
+        if spawn_data and "behaviors" in spawn_data:
+            npc_engine.register_npc(level_id, spawn_data)
+        
         return base_patch
 
-    # ------------------- prompt 注入 -------------------
+    # ============================================================
+    # prompt 注入（第一次进入关卡时插入 system 提示词）
+    # ============================================================
     def _inject_level_prompt_if_needed(self, player_id: str):
         p = self.players[player_id]
         level = p["level"]
         if not level or p["level_loaded"]:
             return
+        
+        # 构建关卡基础提示词
+        base_prompt = build_level_prompt(level)
+        
+        # 添加NPC行为上下文
+        npc_context = npc_engine.get_behavior_context_for_ai(level.level_id)
+        if npc_context:
+            base_prompt += f"\n\n{npc_context}"
+        
         p["messages"].insert(
-            0, {"role": "system", "content": build_level_prompt(level)}
+            0, {"role": "system", "content": base_prompt}
         )
         p["level_loaded"] = True
 
-    # ------------------- 触发区 -------------------
+    # ============================================================
+    # 触发区（v2：暂时禁用螺旋触发器，避免随机传送）
+    # ============================================================
     def _inject_spiral_triggers(self):
         trigger_engine.triggers.clear()
-        BASE_X = 200
-        BASE_Z = 200
-        SCALE = 12
+        # 如果将来想重新启用，可以在这里重新 append TriggerPoint
+        print("[Trigger] spiral triggers disabled (StoryEngine v2.stage)")
 
-        for lv in self.graph.all_levels():
-            pos = self.minimap.positions.get(lv)
-            if not pos:
-                continue
-
-            world_x = BASE_X + pos["x"] * SCALE
-            world_z = BASE_Z + pos["y"] * SCALE
-
-            trigger_engine.triggers.append(
-                TriggerPoint(
-                    id=f"trigger_{lv}",
-                    center=(world_x, 70, world_z),
-                    radius=4.0,
-                    action="load_level",
-                    level_id=lv,
-                )
-            )
-        print(f"[Trigger] spiral triggers = {len(trigger_engine.triggers)}")
-
-    # ------------------- 冷却判断（/world/apply 用） -------------------
-    def should_advance(self, player_id: str, world_state: Dict[str, Any], action: Dict[str, Any]) -> bool:
+    # ============================================================
+    # 冷却判断（/world/apply 用）
+    # ============================================================
+    def should_advance(
+        self,
+        player_id: str,
+        world_state: Dict[str, Any],
+        action: Dict[str, Any],
+    ) -> bool:
+        """
+        v2：永远允许推进剧情。
+        冷却节奏交给 deepseek_agent.MIN_INTERVAL 控制。
+        world_api.py 如果调用了 should_advance，现在总是 True。
+        """
         self._ensure_player(player_id)
+        # 仍然更新时间戳，方便以后需要统计
         now = time.time()
         p = self.players[player_id]
-
         say = action.get("say")
         if isinstance(say, str) and say.strip():
-            if now - p["last_say_time"] >= self.say_cooldown:
-                p["last_say_time"] = now
-                return True
-            return False
-
-        last = p["last_time"]
-        if now - last < self.move_cooldown:
-            return False
-
-        p["last_time"] = now
+            p["last_say_time"] = now
+        else:
+            p["last_time"] = now
         return True
 
-    # ------------------- 主推进 -------------------
+    # ============================================================
+    # 主推进逻辑
+    # ============================================================
     def advance(
         self, player_id: str, world_state: Dict[str, Any], action: Dict[str, Any]
     ) -> Tuple[Any, Dict[str, Any], Dict[str, Any]]:
         self._ensure_player(player_id)
         p = self.players[player_id]
 
+        # 默认 free 模式
         self._ensure_free_mode_level(player_id)
         self._inject_level_prompt_if_needed(player_id)
 
         if p["ended"]:
             return None, None, {"mc": {"tell": "本关已结束。"}}
 
+        # 记录玩家发言
         say = action.get("say")
         if isinstance(say, str) and say.strip():
             p["messages"].append({"role": "user", "content": say})
 
+        # 更新 minimap 上的位置
         vars_ = world_state.get("variables") or {}
         x, y, z = vars_.get("x", 0.0), vars_.get("y", 0.0), vars_.get("z", 0.0)
         self.minimap.update_player_pos(player_id, (x, y, z))
 
+        # 触发器（目前为空，保留结构）
         trg = trigger_engine.check(player_id, x, y, z)
         if trg and trg.action == "load_level" and trg.level_id:
             patch = self.load_level_for_player(player_id, trg.level_id)
@@ -194,6 +385,7 @@ class StoryEngine:
             }
             return None, node, patch
 
+        # AI 决策
         ai_input = {
             "player_id": player_id,
             "player_action": action,
@@ -210,23 +402,27 @@ class StoryEngine:
         patch = ai_result.get("world_patch", {}) or {}
         mc_patch = patch.get("mc", {}) or {}
 
+        # 更新 tree_state
         if option is not None:
             p["tree_state"] = {"last_option": option, "ts": time.time()}
 
+        # 记录 AI 节点
         if node:
             p["nodes"].append(node)
             p["messages"].append(
                 {
                     "role": "assistant",
-                    "content": f"{node.get('title','')}\n{node.get('text','')}".strip(),
+                    "content": f"{node.get('title', '')}\n{node.get('text', '')}".strip(),
                 }
             )
             cur_level = p["level"].level_id
             self.minimap.mark_unlocked(player_id, cur_level)
 
+        # 结束标记
         if mc_patch.get("ending"):
             p["ended"] = True
 
+        # 时间戳（仅统计，不再作为 gating）
         now = time.time()
         if say and say.strip():
             p["last_say_time"] = now
@@ -235,7 +431,9 @@ class StoryEngine:
 
         return option, node, patch
 
-    # ------------------- 自由模式 -------------------
+    # ============================================================
+    # 自由模式关卡（无正式 level 时的 fallback）
+    # ============================================================
     def _ensure_free_mode_level(self, player_id: str):
         p = self.players[player_id]
         if p["level"] is None:

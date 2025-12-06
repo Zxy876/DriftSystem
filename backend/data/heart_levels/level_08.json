@@ -57,5 +57,72 @@
     "source": "xinyue_wenji",
     "chapter": 8,
     "word_count": 1069
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "园丁",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "mine",
+            "animation": "mining",
+            "sound": "stone_break",
+            "description": "挖掘矿石"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§7[矿工]§r ⛏ 地下有无尽的宝藏！",
+              "§7[矿工]§r ⛏ 但要小心，洞穴里也有危险...",
+              "§7提示：说'教我挖矿'来学习采矿技巧"
+            ],
+            "description": "传授采矿经验"
+          },
+          {
+            "type": "quest",
+            "trigger_keywords": [
+              "挖矿",
+              "宝藏",
+              "洞穴"
+            ],
+            "quest_name": "矿工学徒",
+            "rewards": [
+              "pickaxe",
+              "ore"
+            ],
+            "description": "学习采矿技能"
+          }
+        ],
+        "ai_hints": "矿工勤劳朴实，经验丰富。会分享采矿技巧和洞穴探险故事。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "mellohi"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "pink",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【花园】- 心悦文集 第8章"
+    },
+    "variables": {
+      "theme": "花园",
+      "biome": "flower_forest",
+      "structure": "garden",
+      "unlocked": false
+    }
   }
 }

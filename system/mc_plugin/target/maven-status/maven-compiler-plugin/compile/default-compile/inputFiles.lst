@@ -2,6 +2,7 @@
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/ai/AiClient.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/backend/BackendClient.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/AdvanceCommand.java
+/Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/DriftCommand.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/HeartMenuCommand.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/LevelCommand.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/LevelsCommand.java
@@ -9,6 +10,7 @@
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/NpcMasterCommand.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/NpcSummonCommand.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/SayToAICommand.java
+/Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/StoryCreativeCommand.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/TalkCommand.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/TreeCommand.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/commands/custom/CmdSay.java
@@ -32,9 +34,14 @@
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/listeners/MiniJson.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/listeners/NearbyNPCListener.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/listeners/PlayerChatListener.java
+/Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/listeners/PlayerJoinListener.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/minimap/MiniMapDownloader.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/minimap/MiniMapGUI.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/minimap/PNGMapRenderer.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/npc/NPCManager.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/session/PlayerSessionManager.java
+/Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/story/StoryCreativeManager.java
+/Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/story/StoryManager.java
+/Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/tutorial/TutorialManager.java
+/Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/world/AdvancedWorldBuilder.java
 /Users/zxydediannao/DriftSystem/system/mc_plugin/src/main/java/com/driftmc/world/WorldPatchExecutor.java

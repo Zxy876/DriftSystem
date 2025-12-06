@@ -8,12 +8,15 @@ public class IntentResponse2 {
     public final String levelId;
     public final JsonObject minimap;
     public final String rawText;
+    public final JsonObject worldPatch; // 新增：世界patch
 
-    public IntentResponse2(IntentType2 type, String levelId, JsonObject minimap, String rawText) {
+    public IntentResponse2(IntentType2 type, String levelId, JsonObject minimap, String rawText,
+            JsonObject worldPatch) {
         this.type = type;
         this.levelId = levelId;
         this.minimap = minimap;
         this.rawText = rawText;
+        this.worldPatch = worldPatch;
     }
 
     public static IntentResponse2 fromJson(JsonObject root) {
@@ -33,6 +36,10 @@ public class IntentResponse2 {
 
         String raw = intent.has("raw_text") ? intent.get("raw_text").getAsString() : null;
 
-        return new IntentResponse2(type, levelId, minimap, raw);
+        JsonObject worldPatch = intent.has("world_patch") && intent.get("world_patch").isJsonObject()
+                ? intent.getAsJsonObject("world_patch")
+                : null;
+
+        return new IntentResponse2(type, levelId, minimap, raw, worldPatch);
     }
 }

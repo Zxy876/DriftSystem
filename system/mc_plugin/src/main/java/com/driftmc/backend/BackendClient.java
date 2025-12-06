@@ -29,11 +29,11 @@ public class BackendClient {
 
         // ---- 最终稳定配置（适配 DriftSystem） ----
         this.client = new OkHttpClient.Builder()
-                .callTimeout(Duration.ofSeconds(40))        // 整体最大时间
-                .connectTimeout(Duration.ofSeconds(10))     // 连接服务器超时
-                .readTimeout(Duration.ofSeconds(40))        // 读取 JSON 超时
-                .writeTimeout(Duration.ofSeconds(40))       // 发送 JSON 超时
-                .retryOnConnectionFailure(true)             // 避免偶发超时
+                .callTimeout(Duration.ofSeconds(40)) // 整体最大时间
+                .connectTimeout(Duration.ofSeconds(10)) // 连接服务器超时
+                .readTimeout(Duration.ofSeconds(40)) // 读取 JSON 超时
+                .writeTimeout(Duration.ofSeconds(40)) // 发送 JSON 超时
+                .retryOnConnectionFailure(true) // 避免偶发超时
                 .followRedirects(true)
                 .build();
 
@@ -41,7 +41,8 @@ public class BackendClient {
     }
 
     private String buildUrl(String path) {
-        if (!path.startsWith("/")) path = "/" + path;
+        if (!path.startsWith("/"))
+            path = "/" + path;
         return baseUrl + path;
     }
 
@@ -50,9 +51,8 @@ public class BackendClient {
     // ------------------------------------------------------
     public String postJson(String path, String json) throws IOException {
         RequestBody body = RequestBody.create(
-                json,
-                MediaType.parse("application/json; charset=utf-8")
-        );
+            MediaType.parse("application/json; charset=utf-8"),
+            json);
 
         Request request = new Request.Builder()
                 .url(buildUrl(path))
@@ -74,13 +74,24 @@ public class BackendClient {
     public void postJsonAsync(String path, String json, Callback callback) {
 
         RequestBody body = RequestBody.create(
-                json,
-                MediaType.parse("application/json; charset=utf-8")
-        );
+            MediaType.parse("application/json; charset=utf-8"),
+            json);
 
         Request request = new Request.Builder()
                 .url(buildUrl(path))
                 .post(body)
+                .build();
+
+        client.newCall(request).enqueue(callback);
+    }
+
+    // ------------------------------------------------------
+    // 异步 GET 请求（用于获取小地图等资源）
+    // ------------------------------------------------------
+    public void getAsync(String path, Callback callback) {
+        Request request = new Request.Builder()
+                .url(buildUrl(path))
+                .get()
                 .build();
 
         client.newCall(request).enqueue(callback);
