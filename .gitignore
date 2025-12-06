@@ -26,9 +26,14 @@ backend.log
 coverage.xml
 
 # ---- Java Plugin ----
+**/dependency-reduced-pom.xml
+system/mc_plugin/target/
+system/mc_plugin/target/**/*
+system/mc_plugin/*.jar
 DriftMC/target/
 DriftMC/dependency-reduced-pom.xml
 DriftMC/*.jar
+*.class
 
 # ---- Minecraft Server (不要提交) ----
 server/cache/
@@ -58,6 +63,7 @@ backend/server/versions/
 backend/server/paper*.jar
 backend/server/plugins/DriftSystem.jar
 backend/server/plugins/mc_plugin-*.jar
+backend/server/plugins/**
 backend/server/server.log
 backend/server/*.pid
 
