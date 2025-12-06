@@ -1,4 +1,4 @@
-package com.driftmc.minimap;
+package com.driftmc.commands;
 
 import java.io.File;
 
@@ -10,6 +10,9 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import com.driftmc.minimap.MiniMapDownloader;
+import com.driftmc.minimap.MiniMapGUI;
 
 /**
  * /minimap

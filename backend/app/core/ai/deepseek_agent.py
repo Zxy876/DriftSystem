@@ -6,7 +6,7 @@ import json
 import time
 import hashlib
 import threading
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -22,201 +22,201 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-# ---------- 全局节流 + 缓存 ----------
+CONNECT_TIMEOUT = float(os.getenv("DEEPSEEK_CONNECT_TIMEOUT", "10"))
+READ_TIMEOUT = float(os.getenv("DEEPSEEK_READ_TIMEOUT", "30"))
+MAX_RETRIES = int(os.getenv("DEEPSEEK_MAX_RETRIES", "2"))
+RETRY_BACKOFF = float(os.getenv("DEEPSEEK_RETRY_BACKOFF", "1.5"))
+
 _lock = threading.Lock()
 _LAST_CALL_TS: Dict[str, float] = {}
 _CACHE: Dict[str, Dict[str, Any]] = {}
 
-# 每个玩家最短 AI 调用间隔（秒）
-MIN_INTERVAL = 5.0
+# ⭐ 最重要：缩短冷却时间
+MIN_INTERVAL = 0.6
 
-# 缓存最多保存多少条 key -> 结果（简单 LRU 近似）
 MAX_CACHE_SIZE = 128
 
-
 SYSTEM_PROMPT = """
-你是《昆明湖宇宙》的“造物主（Story + World God）”。
+你的身份是《昆明湖宇宙》的“造物主（Story + World God）”。
+只能输出 JSON，不允许任何解释文字。
 
-你必须只输出严格合法 JSON，不输出解释文本。
-
-你的任务：
-1) 生成连贯剧情 node（title,text）
-2) 生成 world_patch，使剧情在 MC 世界中真实发生
-3) 尊重玩家输入（say）和事件树(tree_state)
-4) 避免把玩家传送到方块内部，避免窒息/掉虚空
-5) 当剧情提到具体人物/动物/NPC时，应尽量使用 spawn 生成实体
-
-mc 支持字段：
-{
-  "tell": "给玩家的一句话(可选)",
-  "teleport": {"mode":"relative|absolute","x":0,"y":0,"z":0},
-  "effect": {"type":"LEVITATION|GLOW|BLINDNESS|SPEED|SLOW|WITHER",
-             "seconds":5,"amplifier":1},
-  "time": "day|night|noon|midnight",
-  "weather": "clear|rain|thunder",
-  "build": {
-      "shape":"house|bridge|pillar|platform",
-      "material":"oak_planks|stone|glass|white_wool|...mc方块id",
-      "size": 5,
-      "safe_offset": {"dx":2,"dy":0,"dz":2}
-  },
-  "spawn": {
-      "type":"villager|rabbit|fox|cat|allay|armor_stand|...",
-      "name":"显示名(可选)",
-      "offset":{"dx":1,"dy":0,"dz":1}
-  },
-  "ending": {"type":"good|bad|neutral","reason":"一句话"}
-}
-
-强制规则：
-- 玩家 say 含义 = “上天/飞起来/升空/我要飞”，必须 effect=LEVITATION 或 teleport.y>=10。
-- 若剧情中出现“嫦娥/玉兔/主人公/某某人物/动物”：
-    → 必须生成 spawn，让玩家看到实体。
-- 生成建筑(build) 时必须 safe_offset(dx>=2或dz>=2)。
-- 不要输出未定义字段。
+生成：
+- node {title,text}
+- world_patch {mc:{...}, variables:{...}}
+- 避免把玩家传送进方块内部，避免窒息/掉虚空
+- 若出现 NPC/人物/动物 → 必须 spawn
 """
 
-
-def _make_cache_key(context: Dict[str, Any], messages_history: List[Dict[str, str]]) -> str:
-    """
-    用 context + 最近几条对话构造一个稳定的 key。
-    """
-    key_payload = {
-        "context": context,
-        "messages_tail": messages_history[-8:],
-    }
+def _make_cache_key(context, messages_tail):
+    key_payload = {"context": context, "messages_tail": messages_tail[-8:]}
     s = json.dumps(key_payload, ensure_ascii=False, sort_keys=True, default=str)
-    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+    return hashlib.sha256(s.encode()).hexdigest()
+
+def _cache_get(key): return _CACHE.get(key)
+def _cache_put(key, val):
+    if len(_CACHE) >= MAX_CACHE_SIZE:
+        _CACHE.pop(next(iter(_CACHE)))
+    _CACHE[key] = val
 
 
-def _cache_get(key: str) -> Dict[str, Any] | None:
-    with _lock:
-        return _CACHE.get(key)
+def _call_deepseek_api(payload: Dict[str, Any]) -> Dict[str, Any]:
+    last_error: Exception | None = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            resp = requests.post(
+                f"{BASE_URL}/chat/completions",
+                headers=HEADERS,
+                json=payload,
+                timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
+            )
+            resp.raise_for_status()
+            body = resp.json()
+            content = body["choices"][0]["message"]["content"]
+            return json.loads(content)
+        except requests.Timeout as exc:
+            last_error = exc
+            print(f"[AI WARN] DeepSeek timeout attempt {attempt + 1}: {exc}")
+        except requests.RequestException as exc:
+            last_error = exc
+            status = getattr(exc.response, "status_code", "?")
+            print(
+                f"[AI WARN] DeepSeek HTTP error attempt {attempt + 1}"
+                f" (status={status}): {exc}"
+            )
+        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+            last_error = exc
+            print(f"[AI WARN] DeepSeek parse error attempt {attempt + 1}: {exc}")
+
+        if attempt < MAX_RETRIES:
+            sleep_seconds = RETRY_BACKOFF * (attempt + 1)
+            time.sleep(sleep_seconds)
+
+    if last_error:
+        print("[AI ERROR] DeepSeek failed after retries:", last_error)
+        raise last_error
+    raise RuntimeError("DeepSeek request failed without specific error")
 
 
-def _cache_put(key: str, value: Dict[str, Any]) -> None:
-    with _lock:
-        if len(_CACHE) >= MAX_CACHE_SIZE:
-            # 简单丢弃最早的一条
-            first_key = next(iter(_CACHE.keys()))
-            _CACHE.pop(first_key, None)
-        _CACHE[key] = value
+def deepseek_decide(context, messages_history):
 
-
-def deepseek_decide(context: Dict[str, Any], messages_history: List[Dict[str, Dict[str, str]]]) -> Dict[str, Any]:
-    """
-    DriftSystem 主 AI 调度器（有节流 + 缓存）：
-    - context 中必须包含 player_id（由 StoryEngine 提供）
-    - 若在冷却时间内，则直接返回“静默帧”，不访问远程 LLM
-    - 若命中缓存（相同 context + 对话尾部），直接复用结果
-    """
     player_id = str(context.get("player_id") or "global")
 
+    # ⭐ 节流：改成 0.6 秒
     now = time.time()
-    with _lock:
-        last = _LAST_CALL_TS.get(player_id, 0.0)
-        in_cooldown = (now - last) < MIN_INTERVAL
-
-    if in_cooldown:
-        # 冷却期间：返回一个“节奏帧”，不访问 AI
+    last = _LAST_CALL_TS.get(player_id, 0.0)
+    if (now - last) < MIN_INTERVAL:
         return {
             "option": None,
             "node": {
                 "title": "昆明湖 · 静默帧",
-                "text": "风在湖面打着圈，你感觉世界在蓄力，而不是停下。"
+                "text": "微风轻拂，但故事仍在缓缓流动。"
             },
-            "world_patch": {
-                "variables": {},
-                "mc": {}
-            }
+            "world_patch": {"variables": {}, "mc": {}}
         }
 
-    # ---------- 尝试命中缓存 ----------
-    cache_key = _make_cache_key(context, messages_history)
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        with _lock:
-            _LAST_CALL_TS[player_id] = now
+    # ⭐ 缓存命中
+    key = _make_cache_key(context, messages_history)
+    cached = _cache_get(key)
+    if cached:
+        _LAST_CALL_TS[player_id] = now
         return cached
 
-    # ---------- 真正调用远程 LLM ----------
+    # ⭐ 无 API KEY → 本地占位剧情
     if not API_KEY:
-        # 无密钥：直接返回一个占位剧情节点
-        fallback = {
+        return {
             "option": None,
             "node": {
                 "title": "昆明湖 · 本地风声",
-                "text": "此刻没有连上 AI 服务器，但你仍能在湖边思考下一步要做什么。"
+                "text": "（未配置 AI 密钥，使用占位剧情）"
             },
-            "world_patch": {
-                "variables": {},
-                "mc": {"tell": "（后端未配置 AI 密钥，使用占位剧情）"}
-            }
+            "world_patch": {"variables": {}, "mc": {}}
         }
-        return fallback
 
+    # ⭐ 真正请求 DeepSeek
     user_prompt = f"""
-    根据玩家状态、行动、tree_state 和历史剧情，生成下一段剧情，并给出 world_patch。
-
-    严格返回 JSON：
+    根据玩家输入与历史剧情生成下一步剧情。
+    只输出 JSON：
     {{
-      "option": 0/1/2/... 或 null,
-      "node": {{
-          "title": "...",
-          "text": "..."
-      }},
+      "option": ...,
+      "node": {{ "title": "...", "text": "..." }},
       "world_patch": {{
-          "variables": {{ ...可选... }},
-          "mc": {{ ...可选... }}
+         "variables": {{}},
+         "mc": {{}}
       }}
     }}
-
-    当前输入 context:
-    {json.dumps(context, ensure_ascii=False)}
+    context = {json.dumps(context, ensure_ascii=False)}
     """
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages += messages_history[-12:]
-    messages.append({"role": "user", "content": user_prompt})
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+    msgs += messages_history[-12:]
+    msgs.append({"role": "user", "content": user_prompt})
 
     payload = {
         "model": MODEL,
-        "messages": messages,
+        "messages": msgs,
         "temperature": 0.8,
         "response_format": {"type": "json_object"},
     }
 
     try:
-        resp = requests.post(
-            f"{BASE_URL}/chat/completions",
-            headers=HEADERS,
-            json=payload,
-            timeout=20,  # 比原来 40 更短，避免长时间卡住
-        )
-        data = resp.json()
-        raw = data["choices"][0]["message"]["content"].strip()
-        parsed = json.loads(raw)
-
-        _cache_put(cache_key, parsed)
-        with _lock:
-            _LAST_CALL_TS[player_id] = time.time()
-
+        parsed = _call_deepseek_api(payload)
+        _cache_put(key, parsed)
+        _LAST_CALL_TS[player_id] = time.time()
         return parsed
 
     except Exception as e:
-        print("[AI ERROR deepseek_decide]", e)
-        # 出错：返回一个安全的占位剧情
-        fallback = {
+        print("[AI ERROR]", e)
+        _LAST_CALL_TS[player_id] = time.time()
+        return {
             "option": None,
-            "node": {
-                "title": "昆明湖 · 静默",
-                "text": "AI 沉默了一瞬，但湖面的风仍提醒你：故事没有断。"
-            },
-            "world_patch": {
-                "variables": {},
-                "mc": {"tell": "（AI超时或出错）"}
-            }
+            "node": {"title": "昆明湖 · 静默", "text": "AI 一时沉默，但湖水依旧流动。"},
+            "world_patch": {"variables": {}, "mc": {"tell": "AI 出错，使用安全剧情"}},
         }
-        with _lock:
-            _LAST_CALL_TS[player_id] = time.time()
-        return fallback
+
+
+def call_deepseek(
+    context: Optional[Dict[str, Any]],
+    messages: List[Dict[str, str]],
+    temperature: float = 0.7,
+    response_format: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Generic DeepSeek API wrapper used by story/world tools."""
+
+    if not API_KEY:
+        return {
+            "response": json.dumps(
+                {"error": "missing_api_key", "context": context or {}},
+                ensure_ascii=False,
+            )
+        }
+
+    payload_messages: List[Dict[str, str]] = []
+    if context:
+        ctx_json = json.dumps(context, ensure_ascii=False)
+        payload_messages.append({"role": "system", "content": f"上下文:\n{ctx_json}"})
+    payload_messages.extend(messages)
+
+    payload = {
+        "model": MODEL,
+        "messages": payload_messages,
+        "temperature": temperature,
+    }
+    if response_format is not None:
+        payload["response_format"] = response_format
+    else:
+        payload["response_format"] = {"type": "json_object"}
+
+    try:
+        parsed = _call_deepseek_api(payload)
+        if isinstance(parsed, (dict, list)):
+            response_text = json.dumps(parsed, ensure_ascii=False)
+        else:
+            response_text = str(parsed)
+        return {"response": response_text, "parsed": parsed}
+    except Exception as exc:
+        print("[AI ERROR] call_deepseek failed:", exc)
+        return {
+            "response": json.dumps(
+                {"error": str(exc), "context": context or {}}, ensure_ascii=False
+            )
+        }

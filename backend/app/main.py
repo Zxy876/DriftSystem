@@ -9,6 +9,8 @@ from app.api.dsl_api import router as dsl_router
 from app.api.hint_api import router as hint_router
 from app.api.world_api import router as world_router
 from app.api.story_api import router as story_router
+from app.api.npc_api import router as npc_router
+from app.api.tutorial_api import router as tutorial_router
 from app.routers import ai_router
 from app.routers.minimap import router as minimap_router
 from app.api.minimap_api import router as minimap_png_router
@@ -44,6 +46,8 @@ app.include_router(dsl_router,         tags=["DSL"])
 app.include_router(hint_router,        tags=["Hint"])
 app.include_router(world_router,       tags=["World"])
 app.include_router(story_router,       tags=["Story"])
+app.include_router(npc_router,         tags=["NPC"])
+app.include_router(tutorial_router,    tags=["Tutorial"])
 app.include_router(ai_router.router,   tags=["AI"])
 app.include_router(minimap_router,     tags=["MiniMap"])
 app.include_router(minimap_png_router, tags=["MiniMapPNG"])

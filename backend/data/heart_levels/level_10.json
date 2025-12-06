@@ -53,5 +53,72 @@
     "source": "xinyue_wenji",
     "chapter": 10,
     "word_count": 676
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "诗人",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "wander",
+            "radius": 8,
+            "speed": 0.7,
+            "description": "在湖边漫步思考"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§b[诗人]§r 📖 湖水如镜，映照内心...",
+              "§b[诗人]§r 📖 让我为你吟诵一首诗吧。",
+              "§7提示：说'我想听诗'来欣赏诗歌"
+            ],
+            "description": "吟诵诗歌"
+          },
+          {
+            "type": "quest",
+            "trigger_keywords": [
+              "诗",
+              "文学",
+              "灵感"
+            ],
+            "quest_name": "诗意人生",
+            "rewards": [
+              "poem_book",
+              "inspiration"
+            ],
+            "description": "体验诗歌艺术"
+          }
+        ],
+        "ai_hints": "诗人浪漫感性，富有文采。会即兴创作诗歌，用诗意的语言交流。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "strad"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "aqua",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【湖泊】- 心悦文集 第10章"
+    },
+    "variables": {
+      "theme": "湖泊",
+      "biome": "river",
+      "structure": "pavilion",
+      "unlocked": false
+    }
   }
 }

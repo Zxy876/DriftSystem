@@ -55,5 +55,72 @@
     "source": "xinyue_wenji",
     "chapter": 9,
     "word_count": 862
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "考古学家",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "garden",
+            "animation": "watering",
+            "particle": "water_splash",
+            "description": "浇灌花园"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§d[园丁]§r 🌸 每一朵花都需要细心呵护。",
+              "§d[园丁]§r 🌸 生命的美丽需要耐心培育。",
+              "§7提示：说'我想种花'来学习园艺"
+            ],
+            "description": "教授园艺知识"
+          },
+          {
+            "type": "quest",
+            "trigger_keywords": [
+              "花",
+              "园艺",
+              "种植"
+            ],
+            "quest_name": "花园艺术",
+            "rewards": [
+              "seeds",
+              "flowers"
+            ],
+            "description": "学习园艺技能"
+          }
+        ],
+        "ai_hints": "园丁温柔细致，热爱生命。会用植物生长比喻人生成长。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "stal"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "orange",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【废墟】- 心悦文集 第9章"
+    },
+    "variables": {
+      "theme": "废墟",
+      "biome": "badlands",
+      "structure": "ruins",
+      "unlocked": false
+    }
   }
 }

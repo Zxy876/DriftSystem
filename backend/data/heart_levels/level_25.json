@@ -59,5 +59,60 @@
     "source": "xinyue_wenji",
     "chapter": 25,
     "word_count": 1054
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "工匠",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "stand",
+            "location": {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            "description": "等待玩家到来"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§a[守护者]§r 欢迎来到第25关。",
+              "§7提示：尝试与我对话了解更多"
+            ],
+            "description": "提供关卡指引"
+          }
+        ],
+        "ai_hints": "第25关的守护者，会根据关卡主题提供帮助和指引。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "13"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "brown",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【工坊】- 心悦文集 第25章"
+    },
+    "variables": {
+      "theme": "工坊",
+      "biome": "village",
+      "structure": "workshop",
+      "unlocked": false
+    }
   }
 }

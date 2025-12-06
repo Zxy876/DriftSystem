@@ -55,5 +55,76 @@
     "source": "xinyue_wenji",
     "chapter": 2,
     "word_count": 866
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "图书管理员",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "stand",
+            "location": {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            "look_at": "nearest_player",
+            "description": "站在书架旁，看向最近的玩家"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§b[管理员]§r 欢迎来到知识的殿堂。",
+              "§b[管理员]§r 这里的每本书都蕴含着智慧...",
+              "§7提示：说'我想找关于X的书'来获取知识"
+            ],
+            "description": "提供知识查询服务"
+          },
+          {
+            "type": "quest",
+            "trigger_keywords": [
+              "书",
+              "知识",
+              "学习"
+            ],
+            "quest_name": "知识探索",
+            "rewards": [
+              "book",
+              "wisdom_points"
+            ],
+            "description": "帮助玩家查找知识"
+          }
+        ],
+        "ai_hints": "图书管理员博学多识，说话温和有礼。会根据玩家需求推荐合适的知识内容。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "cat"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "blue",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【图书馆】- 心悦文集 第2章"
+    },
+    "variables": {
+      "theme": "图书馆",
+      "biome": "forest",
+      "structure": "library",
+      "unlocked": false
+    }
   }
 }

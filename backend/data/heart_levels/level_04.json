@@ -51,5 +51,72 @@
     "source": "xinyue_wenji",
     "chapter": 4,
     "word_count": 727
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "渔夫",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "fish",
+            "location": "nearest_water",
+            "animation": "fishing",
+            "description": "在水边垂钓"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§3[渔夫]§r 钓鱼需要耐心，就像人生一样。",
+              "§3[渔夫]§r 有时候，等待比行动更重要。",
+              "§7提示：说'教我钓鱼'来学习技巧"
+            ],
+            "description": "传授钓鱼与人生智慧"
+          },
+          {
+            "type": "quest",
+            "trigger_keywords": [
+              "钓鱼",
+              "耐心",
+              "海边"
+            ],
+            "quest_name": "垂钓时光",
+            "rewards": [
+              "fishing_rod",
+              "patience_buff"
+            ],
+            "description": "学习耐心的艺术"
+          }
+        ],
+        "ai_hints": "渔夫性格平和，富有哲理。喜欢用钓鱼的道理来启发玩家。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "wait"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "cyan",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【海边】- 心悦文集 第4章"
+    },
+    "variables": {
+      "theme": "海边",
+      "biome": "beach",
+      "structure": "dock",
+      "unlocked": false
+    }
   }
 }

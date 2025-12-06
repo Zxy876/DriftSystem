@@ -54,5 +54,76 @@
     "source": "xinyue_wenji",
     "chapter": 6,
     "word_count": 862
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "旅行商人",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "stand",
+            "location": {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            "animation": "trading",
+            "description": "站在摊位前等待顾客"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "trade",
+            "messages": [
+              "§e[商人]§r 欢迎光临！我这里有最好的商品！",
+              "§e[商人]§r 需要什么尽管说，价格公道！",
+              "§7提示：说'我想交易X'来进行买卖"
+            ],
+            "description": "提供交易服务"
+          },
+          {
+            "type": "quest",
+            "trigger_keywords": [
+              "交易",
+              "商品",
+              "买卖"
+            ],
+            "quest_name": "沙漠商路",
+            "rewards": [
+              "coins",
+              "rare_items"
+            ],
+            "description": "参与商业活动"
+          }
+        ],
+        "ai_hints": "商人精明能干，善于交际。会根据玩家需求推荐合适商品，偶尔讨价还价。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "far"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "yellow",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【沙漠】- 心悦文集 第6章"
+    },
+    "variables": {
+      "theme": "沙漠",
+      "biome": "desert",
+      "structure": "oasis",
+      "unlocked": false
+    }
   }
 }

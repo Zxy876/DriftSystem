@@ -56,5 +56,72 @@
     "source": "xinyue_wenji",
     "chapter": 3,
     "word_count": 976
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "登山者",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "climb",
+            "target_height": 10,
+            "speed": 0.8,
+            "description": "缓慢向山顶攀登"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§6[登山者]§r 山顶的风景值得一切付出。",
+              "§6[登山者]§r 每一步都是进步，不要停下脚步。",
+              "§7提示：说'我想攀登高峰'来接受挑战"
+            ],
+            "description": "分享登山哲学"
+          },
+          {
+            "type": "quest",
+            "trigger_keywords": [
+              "攀登",
+              "山峰",
+              "挑战"
+            ],
+            "quest_name": "攀登之路",
+            "rewards": [
+              "climbing_gear",
+              "achievement"
+            ],
+            "description": "引导玩家体验攀登"
+          }
+        ],
+        "ai_hints": "登山者坚韧不拔，充满毅力。会用登山的比喻来引导玩家克服困难。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "ward"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "white",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【山顶】- 心悦文集 第3章"
+    },
+    "variables": {
+      "theme": "山顶",
+      "biome": "mountain",
+      "structure": "summit",
+      "unlocked": false
+    }
   }
 }

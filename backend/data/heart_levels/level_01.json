@@ -53,5 +53,89 @@
     "source": "xinyue_wenji",
     "chapter": 1,
     "word_count": 754
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "赛车手桃子",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "patrol",
+            "path": [
+              {
+                "dx": 0,
+                "dz": 5
+              },
+              {
+                "dx": 5,
+                "dz": 5
+              },
+              {
+                "dx": 5,
+                "dz": 0
+              },
+              {
+                "dx": 0,
+                "dz": 0
+              }
+            ],
+            "speed": 1.2,
+            "description": "在赛道周围巡逻"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§e[桃子]§r 你好！想要挑战一百公里飘移吗？",
+              "§e[桃子]§r 记住，不能驻车！提速就要全力以赴！",
+              "§7提示：尝试说'我想学习飘移技巧'来获得帮助"
+            ],
+            "description": "右键互动时显示对话"
+          },
+          {
+            "type": "quest",
+            "trigger_keywords": [
+              "飘移",
+              "赛车",
+              "技巧"
+            ],
+            "quest_name": "飘移入门",
+            "rewards": [
+              "speed_boost",
+              "experience"
+            ],
+            "description": "玩家提到关键词时触发任务"
+          }
+        ],
+        "ai_hints": "桃子是热血的赛车手，对速度和技巧充满热情。他会鼓励玩家勇敢尝试，不要害怕失败。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "pigstep"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "red",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【赛道】- 心悦文集 第1章"
+    },
+    "variables": {
+      "theme": "赛道",
+      "biome": "plains",
+      "structure": "race_track",
+      "unlocked": false
+    }
   }
 }

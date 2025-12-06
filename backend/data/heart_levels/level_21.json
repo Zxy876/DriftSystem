@@ -56,5 +56,60 @@
     "source": "xinyue_wenji",
     "chapter": 21,
     "word_count": 1259
+  },
+  "world_patch": {
+    "mc": {
+      "spawn": {
+        "type": "villager",
+        "name": "疗养师",
+        "offset": {
+          "dx": 3,
+          "dy": 0,
+          "dz": 3
+        },
+        "behaviors": [
+          {
+            "type": "stand",
+            "location": {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            "description": "等待玩家到来"
+          },
+          {
+            "type": "interact",
+            "trigger": "right_click",
+            "action": "dialogue",
+            "messages": [
+              "§a[守护者]§r 欢迎来到第21关。",
+              "§7提示：尝试与我对话了解更多"
+            ],
+            "description": "提供关卡指引"
+          }
+        ],
+        "ai_hints": "第21关的守护者，会根据关卡主题提供帮助和指引。"
+      },
+      "build": {
+        "shape": "platform",
+        "size": 6,
+        "material": "stone_bricks"
+      },
+      "music": {
+        "record": "mellohi"
+      },
+      "particle": {
+        "type": "end_rod",
+        "color": "pink",
+        "count": 10
+      },
+      "tell": "✨ 欢迎来到【温泉】- 心悦文集 第21章"
+    },
+    "variables": {
+      "theme": "温泉",
+      "biome": "plains",
+      "structure": "hot_spring",
+      "unlocked": false
+    }
   }
 }

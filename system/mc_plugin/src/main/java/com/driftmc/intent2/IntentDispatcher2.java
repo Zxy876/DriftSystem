@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.tutorial.TutorialManager;
 import com.driftmc.world.WorldPatchExecutor;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -27,9 +28,11 @@ public class IntentDispatcher2 {
     private final Plugin plugin;
     private final BackendClient backend;
     private final WorldPatchExecutor world;
+    private TutorialManager tutorialManager;
 
     private static final Gson GSON = new Gson();
-    private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {}.getType();
+    private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {
+    }.getType();
 
     public IntentDispatcher2(Plugin plugin, BackendClient backend, WorldPatchExecutor world) {
         this.plugin = plugin;
@@ -37,6 +40,9 @@ public class IntentDispatcher2 {
         this.world = world;
     }
 
+    public void setTutorialManager(TutorialManager manager) {
+        this.tutorialManager = manager;
+    }
 
     // ============================================================
     // 主入口
@@ -45,97 +51,329 @@ public class IntentDispatcher2 {
 
         switch (intent.type) {
 
-            case SHOW_MINIMAP -> showMinimap(p, intent);
+            case SHOW_MINIMAP:
+                showMinimap(p, intent);
+                break;
 
-            case GOTO_LEVEL, GOTO_NEXT_LEVEL ->
+            case GOTO_LEVEL:
+            case GOTO_NEXT_LEVEL:
                 gotoLevelAndLoad(p, intent);
+                break;
 
-            case SET_DAY, SET_NIGHT, SET_WEATHER,
-                 TELEPORT, SPAWN_ENTITY, BUILD_STRUCTURE ->
+            case SET_DAY:
+            case SET_NIGHT:
+            case SET_WEATHER:
+            case TELEPORT:
+            case SPAWN_ENTITY:
+            case BUILD_STRUCTURE:
                 runWorldCommand(p, intent);
+                break;
 
-            case SAY_ONLY, STORY_CONTINUE, UNKNOWN ->
+            case CREATE_STORY:
+                createStory(p, intent);
+                break;
+
+            case SAY_ONLY:
+            case STORY_CONTINUE:
+            case UNKNOWN:
                 pushToStoryEngine(p, intent.rawText);
+                break;
 
-            default -> {}
+            default:
+                break;
         }
     }
 
+    // ============================================================
+    // 创建剧情 (CREATE_STORY)
+    // ============================================================
+    private void createStory(Player p, IntentResponse2 intent) {
+        final Player fp = p;
+
+        // 从 rawText 中提取标题和内容
+        String rawText = intent.rawText != null ? intent.rawText : "新剧情";
+        String title = rawText.length() > 12 ? rawText.substring(0, 12) : rawText;
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("level_id", "custom_" + System.currentTimeMillis());
+        body.put("title", title);
+        body.put("text", rawText);
+
+        String jsonBody = GSON.toJson(body);
+
+        fp.sendMessage("§e✨ 正在创建新剧情...");
+
+        backend.postJsonAsync("/story/inject", jsonBody, new Callback() {
+
+            @Override
+            public void onFailure(Call call, IOException e) {
+                Bukkit.getScheduler().runTask(plugin,
+                        () -> fp.sendMessage("§c[创建剧情失败] " + e.getMessage()));
+            }
+
+            @Override
+            public void onResponse(Call call, Response resp) throws IOException {
+                try (resp) {
+                    String respStr = resp.body() != null ? resp.body().string() : "{}";
+                    JsonObject root = JsonParser.parseString(respStr).getAsJsonObject();
+
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (root.has("status") && "ok".equals(root.get("status").getAsString())) {
+                            String levelId = root.has("level_id") ? root.get("level_id").getAsString() : "未知";
+                            fp.sendMessage("§a✅ 剧情创建成功！");
+                            fp.sendMessage("§7关卡ID: " + levelId);
+
+                            // 立即加载新创建的关卡（这样会应用场景和NPC）
+                            loadLevelForPlayer(fp, levelId, intent);
+                        } else {
+                            String msg = root.has("detail") ? root.get("detail").getAsString() : "未知错误";
+                            fp.sendMessage("§c创建失败: " + msg);
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    // ============================================================
+    // 为玩家加载关卡（应用场景和NPC）
+    // ============================================================
+    private void loadLevelForPlayer(Player p, String levelId, IntentResponse2 intent) {
+        final Player fp = p;
+
+        fp.sendMessage("§e🌍 正在加载关卡场景...");
+
+        backend.postJsonAsync("/story/load/" + fp.getName() + "/" + levelId, "{}", new Callback() {
+
+            @Override
+            public void onFailure(Call call, IOException e) {
+                plugin.getLogger().warning("[加载关卡] 失败: " + e.getMessage());
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    fp.sendMessage("§c[加载场景失败] " + e.getMessage());
+
+                    // 失败时使用intent中的worldPatch作为备用
+                    if (intent != null && intent.worldPatch != null) {
+                        plugin.getLogger().info("[加载关卡] 使用备用worldPatch");
+                        Map<String, Object> patch = GSON.fromJson(intent.worldPatch, MAP_TYPE);
+                        world.execute(fp, patch);
+                    }
+                });
+            }
+
+            @Override
+            public void onResponse(Call call, Response resp) throws IOException {
+                final String respStr = resp.body() != null ? resp.body().string() : "{}";
+                plugin.getLogger().info("[加载关卡] 收到响应: " + respStr.substring(0, Math.min(200, respStr.length())));
+
+                final JsonObject root = JsonParser.parseString(respStr).getAsJsonObject();
+
+                final JsonObject patchObj = (root.has("bootstrap_patch") && root.get("bootstrap_patch").isJsonObject())
+                        ? root.getAsJsonObject("bootstrap_patch")
+                        : null;
+
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (patchObj != null && patchObj.size() > 0) {
+                        plugin.getLogger().info("[加载关卡] 应用bootstrap_patch");
+                        Map<String, Object> patch = GSON.fromJson(patchObj, MAP_TYPE);
+                        world.execute(fp, patch);
+                        fp.sendMessage("§a✨ 场景已加载！");
+                    } else {
+                        plugin.getLogger().warning("[加载关卡] bootstrap_patch为空");
+
+                        // 如果后端没有返回patch，使用intent中的worldPatch
+                        if (intent != null && intent.worldPatch != null) {
+                            plugin.getLogger().info("[加载关卡] 使用intent的worldPatch");
+                            Map<String, Object> patch = GSON.fromJson(intent.worldPatch, MAP_TYPE);
+                            world.execute(fp, patch);
+                            fp.sendMessage("§a✨ 场景已加载！");
+                        } else {
+                            fp.sendMessage("§7（场景数据为空）");
+                        }
+                    }
+                });
+            }
+        });
+    }
 
     // ============================================================
     // 世界命令
     // ============================================================
     private void runWorldCommand(Player p, IntentResponse2 intent) {
 
-        final Player fp = p;
-        final IntentResponse2 fintent = intent;
-
         Map<String, Object> mc = new HashMap<>();
 
-        switch (fintent.type) {
-            case SET_DAY -> mc.put("time", "day");
-            case SET_NIGHT -> mc.put("time", "night");
-            case SET_WEATHER -> {
-                String raw = fintent.rawText != null ? fintent.rawText : "";
-                String w = raw.contains("雨") ? "rain" :
-                           raw.contains("雷") ? "thunder" : "clear";
+        switch (intent.type) {
+            case SET_DAY:
+                mc.put("time", "day");
+                break;
+
+            case SET_NIGHT:
+                mc.put("time", "night");
+                break;
+
+            case SET_WEATHER:
+                String raw = intent.rawText != null ? intent.rawText : "";
+                String w = raw.contains("雨") ? "rain" : raw.contains("雷") ? "thunder" : "clear";
                 mc.put("weather", w);
-            }
-            case TELEPORT ->
-                mc.put("teleport", Map.of("mode", "relative", "x", 0, "y", 0, "z", 3));
-            case SPAWN_ENTITY ->
-                mc.put("spawn", Map.of("type", "ARMOR_STAND"));
-            case BUILD_STRUCTURE ->
-                mc.put("build", Map.of("shape", "platform", "size", 4));
-            default -> {}
+                break;
+
+            case TELEPORT:
+                Map<String, Object> t = new HashMap<>();
+                t.put("mode", "relative");
+                t.put("x", 0);
+                t.put("y", 0);
+                t.put("z", 3);
+                mc.put("teleport", t);
+                break;
+
+            case SPAWN_ENTITY:
+                Map<String, Object> s = new HashMap<>();
+                s.put("type", "ARMOR_STAND");
+                mc.put("spawn", s);
+                break;
+
+            case BUILD_STRUCTURE:
+                Map<String, Object> b = new HashMap<>();
+                b.put("shape", "platform");
+                b.put("size", 4);
+                mc.put("build", b);
+                break;
+
+            default:
+                break;
         }
 
-        world.execute(fp, Map.of("mc", mc));
+        Map<String, Object> body = new HashMap<>();
+        body.put("mc", mc);
+
+        world.execute(p, body);
     }
 
-
     // ============================================================
-    // 小地图展示
+    // 小地图展示 - 显示PNG图片
     // ============================================================
     private void showMinimap(Player p, IntentResponse2 intent) {
 
-        final Player fp = p;
-        final IntentResponse2 fintent = intent;
-
-        JsonObject mm = fintent.minimap;
+        JsonObject mm = intent.minimap;
         if (mm == null) {
-            fp.sendMessage("§c[小地图] 后端未返回 minimap 数据。");
+            p.sendMessage("§c[小地图] 后端未返回 minimap 数据。");
             return;
         }
 
-        String cur = mm.has("current_level") ? mm.get("current_level").getAsString() : "未知";
-        String nxt = mm.has("recommended_next") ? mm.get("recommended_next").getAsString() : "无";
+        // 显示当前关卡信息
+        String cur = (mm.has("current_level") && !mm.get("current_level").isJsonNull())
+            ? mm.get("current_level").getAsString()
+            : "未知";
+        String nxt = (mm.has("recommended_next") && !mm.get("recommended_next").isJsonNull())
+            ? mm.get("recommended_next").getAsString()
+            : "无";
 
-        fp.sendMessage("§b--- 心悦小地图 ---");
-        fp.sendMessage("当前关卡: §a" + cur);
-        fp.sendMessage("推荐下一关: §d" + nxt);
-        fp.sendMessage("§b-------------------");
+        p.sendMessage("§b--- 心悦小地图 ---");
+        p.sendMessage("当前关卡: §a" + cur);
+        p.sendMessage("推荐下一关: §d" + nxt);
+
+        // 异步获取PNG地图并给予玩家
+        final Player fp = p;
+        backend.getAsync("/minimap/give/" + p.getName(), new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                plugin.getLogger().warning("[小地图PNG] 获取失败: " + e.getMessage());
+                Bukkit.getScheduler().runTask(plugin,
+                        () -> fp.sendMessage("§c[小地图] PNG生成失败"));
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (!response.isSuccessful()) {
+                    plugin.getLogger().warning("[小地图PNG] HTTP " + response.code());
+                    Bukkit.getScheduler().runTask(plugin,
+                            () -> fp.sendMessage("§c[小地图] 服务器返回错误"));
+                    return;
+                }
+
+                String json = response.body().string();
+                JsonObject obj = GSON.fromJson(json, JsonObject.class);
+
+                // 后端返回的格式: { "status": "ok", "mc": { ... } }
+                JsonObject mcPayload = null;
+                if (obj.has("world_patch") && obj.get("world_patch").isJsonObject()) {
+                    JsonObject worldPatch = obj.getAsJsonObject("world_patch");
+                    if (worldPatch.has("mc") && worldPatch.get("mc").isJsonObject()) {
+                        mcPayload = worldPatch.getAsJsonObject("mc");
+                    }
+                }
+                if (mcPayload == null && obj.has("mc") && obj.get("mc").isJsonObject()) {
+                    mcPayload = obj.getAsJsonObject("mc");
+                }
+
+                if (mcPayload != null) {
+                    // 在主线程执行MC命令
+                    JsonObject finalMcPayload = mcPayload;
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (finalMcPayload.has("give_item") && !finalMcPayload.get("give_item").isJsonNull()
+                                && finalMcPayload.has("map_image") && !finalMcPayload.get("map_image").isJsonNull()) {
+                            String itemType = finalMcPayload.get("give_item").getAsString();
+                            String base64Image = finalMcPayload.get("map_image").getAsString();
+                            if ("filled_map".equalsIgnoreCase(itemType)) {
+                                org.bukkit.Material mapMat = org.bukkit.Material.FILLED_MAP;
+                                org.bukkit.inventory.ItemStack mapItem = new org.bukkit.inventory.ItemStack(mapMat);
+                                org.bukkit.inventory.meta.MapMeta mapMeta = (org.bukkit.inventory.meta.MapMeta) mapItem.getItemMeta();
+                                if (mapMeta != null) {
+                                    mapMeta.displayName(net.kyori.adventure.text.Component.text("心悦小地图"));
+                                    try {
+                                        byte[] imgBytes = java.util.Base64.getDecoder().decode(base64Image);
+                                        java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(imgBytes));
+                                        org.bukkit.map.MapView mapView = Bukkit.createMap(fp.getWorld());
+                                        mapView.getRenderers().clear();
+                                        mapView.addRenderer(new com.driftmc.minimap.PNGMapRenderer(img));
+                                        mapMeta.setMapView(mapView);
+                                    } catch (Exception e) {
+                                        plugin.getLogger().warning("[小地图PNG] 渲染失败: " + e.getMessage());
+                                    }
+                                    mapItem.setItemMeta(mapMeta);
+                                }
+                                fp.getInventory().addItem(mapItem);
+                            }
+                        }
+                        if (finalMcPayload.has("tell")) {
+                            String msg = finalMcPayload.get("tell").getAsString();
+                            fp.sendMessage("§e" + msg);
+                        }
+                    });
+                }
+
+                plugin.getLogger().info("[小地图PNG] 已发送给玩家: " + fp.getName());
+            }
+        });
+
+        p.sendMessage("§b-------------------");
     }
 
-
     // ============================================================
-    // 表达类 → 推进剧情
+    // —— 修复后的剧情推进代码（最关键） ——
     // ============================================================
     private void pushToStoryEngine(Player p, String text) {
 
         final Player fp = p;
-        final String ftext = text;
+        final String ftext = (text == null ? "" : text); // ← 彻底防止 null
 
-        Map<String, Object> body = Map.of(
-                "player_id", fp.getName(),
-                "action", Map.of("say", ftext),
-                "world_state", Map.of()
-        );
+        plugin.getLogger().info("[剧情推进] 玩家: " + fp.getName() + ", 文本: " + ftext);
+
+        // 不再使用 Map.of() —— 改为 HashMap 全兼容安全版
+        Map<String, Object> body = new HashMap<>();
+        body.put("player_id", fp.getName());
+
+        Map<String, Object> action = new HashMap<>();
+        action.put("say", ftext);
+        body.put("action", action);
+
+        body.put("world_state", new HashMap<>()); // 空但安全的 map
 
         backend.postJsonAsync("/world/apply", GSON.toJson(body), new Callback() {
 
             @Override
             public void onFailure(Call call, IOException e) {
+                plugin.getLogger().warning("[剧情推进] 请求失败: " + e.getMessage());
                 Bukkit.getScheduler().runTask(plugin,
                         () -> fp.sendMessage("§c[剧情错误] " + e.getMessage()));
             }
@@ -144,32 +382,39 @@ public class IntentDispatcher2 {
             public void onResponse(Call call, Response resp) throws IOException {
 
                 final String respStr = resp.body() != null ? resp.body().string() : "{}";
+                plugin.getLogger().info("[剧情推进] 收到响应: " + respStr.substring(0, Math.min(200, respStr.length())));
+
                 final JsonObject root = JsonParser.parseString(respStr).getAsJsonObject();
 
-                // 安全解析 story_node
-                final JsonObject node =
-                        (root.has("story_node") && root.get("story_node").isJsonObject())
-                                ? root.get("story_node").getAsJsonObject()
-                                : null;
+                final JsonObject node = (root.has("story_node") && root.get("story_node").isJsonObject())
+                        ? root.get("story_node").getAsJsonObject()
+                        : null;
 
-                // 安全解析 world_patch
-                final JsonObject wpatch =
-                        (root.has("world_patch") && root.get("world_patch").isJsonObject())
-                                ? root.get("world_patch").getAsJsonObject()
-                                : null;
+                final JsonObject wpatch = (root.has("world_patch") && root.get("world_patch").isJsonObject())
+                        ? root.get("world_patch").getAsJsonObject()
+                        : null;
 
                 Bukkit.getScheduler().runTask(plugin, () -> {
 
-                    // 打印剧情文本
                     if (node != null) {
-                        if (node.has("title"))
-                            fp.sendMessage("§d【" + node.get("title").getAsString() + "】");
-                        if (node.has("text"))
-                            fp.sendMessage("§f" + node.get("text").getAsString());
+                        if (node.has("title")) {
+                            String title = node.get("title").getAsString();
+                            fp.sendMessage("§d【" + title + "】");
+                            plugin.getLogger().info("[剧情推进] 显示标题: " + title);
+                        }
+
+                        if (node.has("text")) {
+                            String storyText = node.get("text").getAsString();
+                            fp.sendMessage("§f" + storyText);
+                            plugin.getLogger()
+                                    .info("[剧情推进] 显示文本: " + storyText.substring(0, Math.min(50, storyText.length())));
+                        }
+                    } else {
+                        plugin.getLogger().warning("[剧情推进] story_node 为空");
                     }
 
-                    // 执行世界 patch
                     if (wpatch != null && wpatch.size() > 0) {
+                        plugin.getLogger().info("[剧情推进] 执行世界patch");
                         Map<String, Object> patch = GSON.fromJson(wpatch, MAP_TYPE);
                         world.execute(fp, patch);
                     }
@@ -177,7 +422,6 @@ public class IntentDispatcher2 {
             }
         });
     }
-
 
     // ============================================================
     // 跳关（传送 + 加载剧情）
@@ -189,16 +433,16 @@ public class IntentDispatcher2 {
         final JsonObject minimap = intent.minimap;
 
         if (levelId == null) {
-            fp.sendMessage("§c跳关失败：没有 levelId");
+            p.sendMessage("§c跳关失败：没有 levelId");
             return;
         }
 
         if (minimap == null || !minimap.has("nodes")) {
-            fp.sendMessage("§c跳关失败：minimap 缺失");
+            p.sendMessage("§c跳关失败：minimap 缺失");
             return;
         }
 
-        final JsonArray nodes = minimap.getAsJsonArray("nodes");
+        JsonArray nodes = minimap.getAsJsonArray("nodes");
 
         int tx = 0, tz = 0;
         boolean found = false;
@@ -215,21 +459,16 @@ public class IntentDispatcher2 {
         }
 
         if (!found) {
-            fp.sendMessage("§c跳关失败：地图中不存在 " + levelId);
+            p.sendMessage("§c跳关失败：地图中不存在 " + levelId);
             return;
         }
 
-        final int ftx = tx;
-        final int ftz = tz;
-        final int fty = 80;
+        final int fx = tx;
+        final int fy = 80;
+        final int fz = tz;
 
-        // --- 执行传送（主线程） ---
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            fp.teleport(new Location(fp.getWorld(), ftx, fty, ftz));
-            fp.sendMessage("§a已跳转到 " + levelId);
-        });
+        Bukkit.getScheduler().runTask(plugin, () -> fp.teleport(new Location(fp.getWorld(), fx, fy, fz)));
 
-        // --- 加载剧情（异步 → 应用到主线程） ---
         backend.postJsonAsync("/story/load/" + fp.getName() + "/" + levelId,
                 "{}",
                 new Callback() {
@@ -246,19 +485,19 @@ public class IntentDispatcher2 {
                         final String respStr = resp.body() != null ? resp.body().string() : "{}";
                         final JsonObject root = JsonParser.parseString(respStr).getAsJsonObject();
 
-                        final JsonObject patchObj =
-                                (root.has("bootstrap_patch") && root.get("bootstrap_patch").isJsonObject())
+                        final JsonObject patchObj = (root.has("bootstrap_patch")
+                                && root.get("bootstrap_patch").isJsonObject())
                                         ? root.getAsJsonObject("bootstrap_patch")
                                         : null;
 
                         if (patchObj != null) {
+
                             final Map<String, Object> patch = GSON.fromJson(patchObj, MAP_TYPE);
 
                             Bukkit.getScheduler().runTask(plugin,
                                     () -> world.execute(fp, patch));
                         }
                     }
-                }
-        );
+                });
     }
 }

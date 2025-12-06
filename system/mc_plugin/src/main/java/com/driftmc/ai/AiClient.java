@@ -1,13 +1,19 @@
 package com.driftmc.ai;
 
-import com.driftmc.intent.IntentResponse;
-import com.google.gson.Gson;
-import okhttp3.*;
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 import org.bukkit.plugin.Plugin;
 
-import java.io.IOException;
-import java.util.concurrent.TimeUnit;
+import com.driftmc.intent.IntentResponse;
+import com.google.gson.Gson;
+
+import okhttp3.Call;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 /**
  * DeepSeekLLM API Client
@@ -65,8 +71,8 @@ public class AiClient {
         """;
 
         RequestBody body = RequestBody.create(
-                gson.toJson(new ChatRequest(systemPrompt, text)),
-                MediaType.parse("application/json")
+            MediaType.parse("application/json"),
+            gson.toJson(new ChatRequest(systemPrompt, text))
         );
 
         Request req = new Request.Builder()
