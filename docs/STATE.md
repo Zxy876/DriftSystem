@@ -1,11 +1,11 @@
 # Shared World State Authority (STATE.md)
 
 ## 1. Current Phase
-- Phase 1 · Unified Level Format
+- Phase 1.5 · Narrative Scaffold
 - Justification:
-	- `backend/app/core/story/story_loader.py` enforces a consistent `Level` schema backed by the heart level JSON set under `backend/data/heart_levels/`.
-	- `backend/app/core/story/story_graph.py` provides linear mainline traversal, validating that structured level IDs drive progression.
-	- `system/mc_plugin/src/main/java/com/driftmc/DriftPlugin.java` and `backend/app/api/world_api.py` already rely on this shared format to load and render story content.
+	- `backend/app/core/story/level_schema.py` introduces the beats/scene/rules/tasks/exit dataclasses and `ensure_level_extensions`, which `story_engine.load_level_for_player` now invokes to extend legacy levels.
+	- `backend/app/core/story/story_engine.py` records scene handles, beat pointers, and rule listener registration stubs, proving the Phase 1.5 hooks are present (even if mostly placeholders).
+	- `backend/app/core/quest/runtime.py` and `backend/app/api/world_api.py` expose the new rule-trigger/stroy-enter endpoints required for future beat/rule orchestration, while `system/mc_plugin` remains unchanged pending the bridge implementation.
 
 ## 2. Current Goal
 - Establish beat-driven narrative orchestration to unlock Phase 2 (StoryEngine with beat-based progression).
@@ -15,19 +15,20 @@
 	- Unified heart-level JSON with metadata, mood, and `world_patch` assets consumed by `story_loader`.
 	- Automated stage setup via `StoryEngine.load_level_for_player`, including safe teleports and heuristic scene generation (`SceneGenerator`).
 	- FastAPI + Minecraft plugin integration that can load levels, apply world patches, and expose REST/command entry points.
-	- Level dataclass extended with beats/scene/rules/tasks/exit structure.
-	- StoryEngine / QuestRuntime / world_api skeletons added for Phase 1.5.
+	- Phase 1.5 scaffolding in place: `backend/app/core/story/level_schema.py` for structured extensions, StoryEngine hooks for scenes/beats/rules, QuestRuntime rule listener storage, and `/world/story/*` endpoints for enter/end/rule-event workflows.
 
 ## 4. Progress – In Progress
 - Capabilities missing:
-	- No beat schema or runtime in the level data; `story_engine.advance` never references beat structures or `event_manager`.
-	- Quest/task runtime still lacks rule-driven evaluation and JSON hydration despite the new schema scaffolding.
-	- Tests (`backend/test_beats_v1.py`, `backend/test_quest_runtime.py`) target beat/task flows that the live engine does not currently satisfy.
-	- Rule wiring, task evaluation, and MC plugin Scene/Exit bridge not implemented yet.
+	- `backend/data/heart_levels/*.json` files still contain only `world_patch` data; no beats/tasks/rules are hydrated into the new schema during load.
+	- `story_engine.advance` continues to ignore beats and `event_manager`; beat pointers recorded in Phase 1.5 hooks do not affect runtime behavior.
+	- QuestRuntime rule triggers (`handle_rule_trigger`) and `/world/story/rule-event` remain unused by the Minecraft plugin, leaving rule-driven tasks unverified.
+	- Scene/Exit lifecycle bridging is absent on the plugin side; cleanup and teleport handoff rely on legacy safe teleport logic.
+	- Regression tests for beats/tasks (`backend/test_beats_v1.py`, `backend/test_quest_runtime.py`) are stale relative to the new schema expectations.
 
 ## 5. Latest Code Updates (to be auto-updated from git diff or manual input)
 ```
-No updates captured yet
+- Phase 1.5 backend skeleton committed (level schema, StoryEngine hooks, QuestRuntime scaffolding, `/world/story/*` endpoints).
+- Vision and schema design docs added (`docs/PROJECT_VISION.md`, `docs/LEVEL_FORMAT.md`).
 ```
 
 ## 6. File Map (summaries of project folder structures)
@@ -41,15 +42,15 @@ No updates captured yet
 - Root-level shell scripts (e.g., `build_and_deploy.sh`, `test_all.sh`) for building, testing, and deployment workflows
 
 ## 7. Next Actions (task-based, GPT readable)
-- [ ] Extend the heart-level JSON schema and `Level` dataclass to encode beat sequences and task descriptors.
-- [ ] Refactor `story_engine` to drive progression through explicit beats, wiring in `event_manager`, `scene_orchestrator`, and `quest_runtime` data flows.
-- [ ] Update backend tests (`test_beats_v1.py`, `test_quest_runtime.py`) plus add new regression coverage for beat advancement and world patch synchronization.
-- [ ] Confirm the Minecraft plugin applies beat-driven patches without regressions (world sync, minimap, command overrides).
-- [ ] Implement SceneLoader / SceneCleanupService / RuleEventBridge in `mc_plugin` and connect to `/story/rule-event`.
+- [ ] Hydrate beats/scene/rules/tasks/exit data into `backend/data/heart_levels/*.json` and extend `story_loader` to populate `LevelExtensions` from disk.
+- [ ] Evolve `story_engine.advance` to consume beat definitions, emit world patches, and coordinate with `event_manager`.
+- [ ] Wire QuestRuntime rule triggers through `/world/story/rule-event` and deliver actionable updates back to the player.
+- [ ] Implement SceneLoader / SceneCleanupService / RuleEventBridge in `system/mc_plugin` to apply and clean Phase 1.5 scenes.
+- [ ] Refresh backend regression tests (`backend/test_beats_v1.py`, `backend/test_quest_runtime.py`) for the new schema and beat/task flows.
 
 ## 8. Risks
 - Quest runtime and beat tests reference structures that are absent from live level data, creating drift between planned and implemented behavior.
-- Event and scene orchestration modules exist but remain unused, increasing the chance of regressions when integrating beats later.
+- Phase 1.5 HTTP endpoints and rule-listener hooks are unexercised, so regressions may surface when the Minecraft bridge is introduced.
 
 ## 9. Notes (high-level intent)
 - This document is the central source of truth for shared world state; update collaboratively as plans evolve
