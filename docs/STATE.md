@@ -15,12 +15,15 @@
 	- Unified heart-level JSON with metadata, mood, and `world_patch` assets consumed by `story_loader`.
 	- Automated stage setup via `StoryEngine.load_level_for_player`, including safe teleports and heuristic scene generation (`SceneGenerator`).
 	- FastAPI + Minecraft plugin integration that can load levels, apply world patches, and expose REST/command entry points.
+	- Level dataclass extended with beats/scene/rules/tasks/exit structure.
+	- StoryEngine / QuestRuntime / world_api skeletons added for Phase 1.5.
 
 ## 4. Progress – In Progress
 - Capabilities missing:
 	- No beat schema or runtime in the level data; `story_engine.advance` never references beat structures or `event_manager`.
-	- Quest/task runtime (`backend/app/core/quest/runtime.py`) expects `level.tasks`, but the current `Level` dataclass lacks this field.
+	- Quest/task runtime still lacks rule-driven evaluation and JSON hydration despite the new schema scaffolding.
 	- Tests (`backend/test_beats_v1.py`, `backend/test_quest_runtime.py`) target beat/task flows that the live engine does not currently satisfy.
+	- Rule wiring, task evaluation, and MC plugin Scene/Exit bridge not implemented yet.
 
 ## 5. Latest Code Updates (to be auto-updated from git diff or manual input)
 ```
@@ -42,6 +45,7 @@ No updates captured yet
 - [ ] Refactor `story_engine` to drive progression through explicit beats, wiring in `event_manager`, `scene_orchestrator`, and `quest_runtime` data flows.
 - [ ] Update backend tests (`test_beats_v1.py`, `test_quest_runtime.py`) plus add new regression coverage for beat advancement and world patch synchronization.
 - [ ] Confirm the Minecraft plugin applies beat-driven patches without regressions (world sync, minimap, command overrides).
+- [ ] Implement SceneLoader / SceneCleanupService / RuleEventBridge in `mc_plugin` and connect to `/story/rule-event`.
 
 ## 8. Risks
 - Quest runtime and beat tests reference structures that are absent from live level data, creating drift between planned and implemented behavior.

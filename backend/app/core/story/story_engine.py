@@ -13,6 +13,8 @@ from app.core.world.scene_generator import SceneGenerator
 from app.core.world.trigger import trigger_engine
 from app.core.world.trigger import TriggerPoint
 from app.core.npc import npc_engine
+from app.core.quest.runtime import quest_runtime
+from app.core.story.level_schema import ensure_level_extensions
 
 
 class StoryEngine:
@@ -40,6 +42,70 @@ class StoryEngine:
             f"[StoryEngine] loaded {len(self.graph.all_levels())} levels "
             f"from {level_dir}"
         )
+
+    # ============================================================
+    # Phase 1.5 scaffolding hooks (stubs)
+    # ============================================================
+    def enter_level_with_scene(self, player_id: str, level: Level) -> None:
+        """Apply deterministic scene metadata when available.
+
+        TODO: integrate with SceneOrchestrator to emit world patches and handle
+        cleanup. For now we retain the handle on the player state to avoid
+        losing context when future integrations arrive.
+        """
+
+        scene_cfg = getattr(level, "scene", None)
+        if not scene_cfg:
+            return
+
+        player_state = self.players.setdefault(player_id, {})
+        player_state["scene_handle"] = {
+            "scene": scene_cfg,
+            "applied": False,
+        }
+
+    def advance_with_beat(self, player_id: str, beat_id: str) -> None:
+        """Move the active beat pointer forward.
+
+        TODO: trigger beat-driven world patches and ensure quest/task syncing
+        once the runtime supports these hooks.
+        """
+
+        player_state = self.players.setdefault(player_id, {})
+        player_state["current_beat"] = beat_id
+
+    def register_rule_listeners(self, level: Level) -> None:
+        """Register rule listeners with the quest runtime.
+
+        TODO: Bridge into the Minecraft plugin once a transport layer exists.
+        """
+
+        rule_cfg = getattr(level, "rules", None)
+        if not rule_cfg or not getattr(rule_cfg, "listeners", None):
+            return
+
+        for listener in rule_cfg.listeners:
+            quest_runtime.register_rule_listener(listener)
+
+    def inject_tasks(self, player_id: str, level: Level) -> None:
+        """Inject Phase 1.5 task definitions into QuestRuntime."""
+
+        tasks = getattr(level, "tasks", [])
+        if not tasks:
+            return
+
+        # TODO: convert TaskConfig dataclasses into legacy dicts and load them
+        # into QuestRuntime once serialization is finalized.
+        player_state = self.players.setdefault(player_id, {})
+        player_state["pending_tasks"] = tasks
+
+    def exit_level_with_cleanup(self, player_id: str, level: Level) -> None:
+        """Placeholder for future exit wiring."""
+
+        # TODO: invoke SceneCleanupService and QuestRuntime teardown once ready.
+        player_state = self.players.setdefault(player_id, {})
+        player_state.pop("scene_handle", None)
+        player_state.pop("current_beat", None)
 
     # ============================================================
     # 状态查询
@@ -207,6 +273,7 @@ class StoryEngine:
         """
         self._ensure_player(player_id)
         level: Level = load_level(level_id)
+        ensure_level_extensions(level)
         p = self.players[player_id]
 
         # 绑定关卡状态
@@ -292,6 +359,21 @@ class StoryEngine:
         if spawn_data and "behaviors" in spawn_data:
             npc_engine.register_npc(level_id, spawn_data)
         
+        # ============================================================
+        # Phase 1.5 stubs
+        # ============================================================
+        if getattr(level, "scene", None):
+            self.enter_level_with_scene(player_id, level)
+
+        self.register_rule_listeners(level)
+        self.inject_tasks(player_id, level)
+
+        beats = getattr(level, "beats", [])
+        if beats:
+            first = beats[0]
+            beat_id = getattr(first, "id", None) or "beat_0"
+            self.advance_with_beat(player_id, beat_id)
+
         return base_patch
 
     # ============================================================

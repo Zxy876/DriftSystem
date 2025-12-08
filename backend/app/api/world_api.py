@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import logging
 
@@ -7,6 +7,7 @@ from app.core.world.engine import WorldEngine
 from app.core.story.story_engine import story_engine
 from app.core.world.trigger import trigger_engine
 from app.core.ai.intent_engine import parse_intent
+from app.core.quest.runtime import quest_runtime
 
 router = APIRouter(prefix="/world", tags=["World"])
 world_engine = WorldEngine()
@@ -40,6 +41,22 @@ class WorldApplyResponse(BaseModel):
     story_node: Optional[Dict[str, Any]] = None
     world_patch: Optional[Dict[str, Any]] = None
     trigger: Optional[Dict[str, Any]] = None
+
+
+class EnterStoryRequest(BaseModel):
+    player_id: str
+    level_id: Optional[str] = None
+
+
+class EndStoryRequest(BaseModel):
+    player_id: str
+    level_id: Optional[str] = None
+
+
+class RuleTriggerEvent(BaseModel):
+    player_id: str
+    event_type: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
 
 
 # ============================================================
@@ -238,3 +255,49 @@ def apply_action(inp: ApplyInput):
         status="ok",
         world_state=new_state
     )
+
+
+# ============================================================
+# Phase 1.5 skeleton endpoints
+# ============================================================
+
+
+@router.post("/story/enter")
+def story_enter(request: EnterStoryRequest):
+    target_level = request.level_id or story_engine.get_next_level_id(None)
+    patch = None
+    if target_level:
+        patch = story_engine.load_level_for_player(request.player_id, target_level)
+    logger.info("story_enter", extra={"player_id": request.player_id, "level_id": target_level})
+    return {
+        "status": "ok",
+        "level_id": target_level,
+        "world_patch": patch,
+    }
+
+
+@router.post("/story/end")
+def story_end(request: EndStoryRequest):
+    player_state = story_engine.players.get(request.player_id, {})
+    level = player_state.get("level")
+    if level:
+        story_engine.exit_level_with_cleanup(request.player_id, level)
+    quest_runtime.exit_level(request.player_id)
+    logger.info("story_end", extra={"player_id": request.player_id, "level_id": getattr(level, "level_id", None)})
+    return {"status": "ok"}
+
+
+@router.post("/story/rule-event")
+def story_rule_event(event: RuleTriggerEvent):
+    response = quest_runtime.handle_rule_trigger(event.player_id, {
+        "event_type": event.event_type,
+        "payload": event.payload,
+    })
+    logger.debug(
+        "story_rule_event",
+        extra={"player_id": event.player_id, "event_type": event.event_type},
+    )
+    return {
+        "status": "ok",
+        "result": response,
+    }
