@@ -1,34 +1,42 @@
 # Shared World State Authority (STATE.md)
 
 ## 1. Current Phase
-- Phase 1.5 · Narrative Scaffold
-- Justification:
-	- `backend/app/core/story/level_schema.py` introduces the beats/scene/rules/tasks/exit dataclasses and `ensure_level_extensions`, which `story_engine.load_level_for_player` now invokes to extend legacy levels.
-	- `backend/app/core/story/story_engine.py` records scene handles, beat pointers, and rule listener registration stubs, proving the Phase 1.5 hooks are present (even if mostly placeholders).
-	- `backend/app/core/quest/runtime.py` and `backend/app/api/world_api.py` expose the new rule-trigger/stroy-enter endpoints required for future beat/rule orchestration, while `system/mc_plugin` remains unchanged pending the bridge implementation.
+PHASE_1_COMPLETE = true
+PHASE_1_5_COMPLETE = true
+PHASE_2_COMPLETE = true
+PHASE_3_COMPLETE = true
+PHASE_4_COMPLETE = true
+PHASE_5_COMPLETE = true
 
 ## 2. Current Goal
-- Establish beat-driven narrative orchestration to unlock Phase 2 (StoryEngine with beat-based progression).
+- Prepare launch checklist and polish pass now that the mainline exit system is live.
 
 ## 3. Progress – Done
 - Capabilities already achieved:
-	- Unified heart-level JSON with metadata, mood, and `world_patch` assets consumed by `story_loader`.
-	- Automated stage setup via `StoryEngine.load_level_for_player`, including safe teleports and heuristic scene generation (`SceneGenerator`).
-	- FastAPI + Minecraft plugin integration that can load levels, apply world patches, and expose REST/command entry points.
-	- Phase 1.5 scaffolding in place: `backend/app/core/story/level_schema.py` for structured extensions, StoryEngine hooks for scenes/beats/rules, QuestRuntime rule listener storage, and `/world/story/*` endpoints for enter/end/rule-event workflows.
+	- Structured level extensions plus automated stage setup (scene generator, safe teleports, minimap integration).
+	- Beat progression engine: StoryEngine registers level beats with `EventManager`, reacts to chat/near/interact triggers, and emits beat-scoped world patches.
+	- QuestRuntime synchronizes beat-issued tasks, tracks rule references, and exposes `/world/story/rule-event` for bridge catalysts.
+	- FastAPI endpoints and legacy plugin commands still load levels and apply world patches end-to-end.
+	- Scene-aware plugin executor stores applied patches via `SceneLoader`/`SceneCleanupService`, auto-reversing builds when backend sends `_scene_cleanup`.
+	- `RuleEventBridge` now forwards near-NPC events back to `/world/story/rule-event`, closing the basic rule trigger loop.
+	- Scene metadata is now emitted via world patches, enabling plugin-side SceneAwareWorldPatchExecutor to track and clean scene sessions.
+	- QuestRuntime TaskSessions normalize task definitions, track milestones/rewards, and respond to rule-event callbacks with aggregated nodes/world patches.
+	- NPCBehaviorEngine records rulegraph bindings and emits dialogue/command/world patch updates when rule events fire.
+	- `/world/story/rule-event` exposes task/NPC deltas directly for the plugin transport to consume.
+	- Plugin bridge now applies rule-event `world_patch` payloads, emits quest/milestone chat beats, and dispatches backend `commands` to the server console.
+	- Phase 4 contract is documented in `docs/PHASE4_TASK_CONTRACT.md`, covering task sessions, NPC bindings, and plugin duties.
+	- ExitIntentDetector listens to Phase 5 exit aliases, calls `/world/story/end`, and applies the returned cleanup + hub teleport.
+	- StoryEngine now records enter/exit trajectories, exposes exit profiles in `get_public_state`, and returns hub teleport summaries.
 
 ## 4. Progress – In Progress
-- Capabilities missing:
-	- `backend/data/heart_levels/*.json` files still contain only `world_patch` data; no beats/tasks/rules are hydrated into the new schema during load.
-	- `story_engine.advance` continues to ignore beats and `event_manager`; beat pointers recorded in Phase 1.5 hooks do not affect runtime behavior.
-	- QuestRuntime rule triggers (`handle_rule_trigger`) and `/world/story/rule-event` remain unused by the Minecraft plugin, leaving rule-driven tasks unverified.
-	- Scene/Exit lifecycle bridging is absent on the plugin side; cleanup and teleport handoff rely on legacy safe teleport logic.
-	- Regression tests for beats/tasks (`backend/test_beats_v1.py`, `backend/test_quest_runtime.py`) are stale relative to the new schema expectations.
+- Capabilities under active review:
+	- Verify KunmingLakeHub spawn safety for new hub snapshot.
+	- Draft release notes highlighting exit summary UX tweaks.
 
 ## 5. Latest Code Updates (to be auto-updated from git diff or manual input)
 ```
-- Phase 1.5 backend skeleton committed (level schema, StoryEngine hooks, QuestRuntime scaffolding, `/world/story/*` endpoints).
-- Vision and schema design docs added (`docs/PROJECT_VISION.md`, `docs/LEVEL_FORMAT.md`).
+- QuestRuntime now deduplicates task completion/milestone notifications when aggregating rule-trigger responses, preventing duplicate chat spam.
+- StoryEngine, SceneAwareWorldPatchExecutor, and RuleEventBridge retain Phase 4 integration for rule-driven quest feedback.
 ```
 
 ## 6. File Map (summaries of project folder structures)
@@ -42,15 +50,12 @@
 - Root-level shell scripts (e.g., `build_and_deploy.sh`, `test_all.sh`) for building, testing, and deployment workflows
 
 ## 7. Next Actions (task-based, GPT readable)
-- [ ] Hydrate beats/scene/rules/tasks/exit data into `backend/data/heart_levels/*.json` and extend `story_loader` to populate `LevelExtensions` from disk.
-- [ ] Evolve `story_engine.advance` to consume beat definitions, emit world patches, and coordinate with `event_manager`.
-- [ ] Wire QuestRuntime rule triggers through `/world/story/rule-event` and deliver actionable updates back to the player.
-- [ ] Implement SceneLoader / SceneCleanupService / RuleEventBridge in `system/mc_plugin` to apply and clean Phase 1.5 scenes.
-- [ ] Refresh backend regression tests (`backend/test_beats_v1.py`, `backend/test_quest_runtime.py`) for the new schema and beat/task flows.
+- [ ] Run end-to-end story exit playtest (backend + plugin).
+- [ ] Document exit summary UX in `docs/TUTORIAL_SYSTEM.md`.
 
 ## 8. Risks
-- Quest runtime and beat tests reference structures that are absent from live level data, creating drift between planned and implemented behavior.
-- Phase 1.5 HTTP endpoints and rule-listener hooks are unexercised, so regressions may surface when the Minecraft bridge is introduced.
+- Hub teleport assumes KunmingLakeHub world is loaded; server ops should validate availability after restarts.
+- Exit aliases are aggressive; future tuning may add per-level cooldowns to avoid accidental triggers.
 
 ## 9. Notes (high-level intent)
 - This document is the central source of truth for shared world state; update collaboratively as plans evolve

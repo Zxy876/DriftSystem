@@ -2,8 +2,10 @@
 """
 NPC行为引擎：处理NPC的AI驱动行为
 """
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Iterable, List, Optional, Set
 from dataclasses import dataclass
+
+from app.core.story.level_schema import RuleListener
 
 
 @dataclass
@@ -19,10 +21,134 @@ class NPCBehaviorEngine:
     
     def __init__(self):
         self.active_npcs: Dict[str, Dict[str, Any]] = {}  # level_id -> npc_data
+        self.rule_bindings: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self.active_rule_refs: Dict[str, Set[str]] = {}
     
     def register_npc(self, level_id: str, npc_data: Dict[str, Any]):
         """注册NPC及其行为"""
         self.active_npcs[level_id] = npc_data
+        self.rule_bindings.setdefault(level_id, {})
+        self.active_rule_refs.setdefault(level_id, set())
+
+    def register_rule_binding(self, level_id: str, listener: RuleListener) -> None:
+        """记录 rulegraph 监听配置以便触发 NPC 行为。"""
+
+        if not listener:
+            return
+
+        bindings = self.rule_bindings.setdefault(level_id, {})
+        self.active_rule_refs.setdefault(level_id, set())
+
+        meta = dict(getattr(listener, "metadata", {}) or {})
+        refs: Set[str] = set()
+        for candidate in listener.targets or []:
+            if candidate:
+                refs.add(str(candidate).lower())
+        for key in ("id", "rule_ref", "ref"):
+            value = meta.get(key)
+            if value:
+                refs.add(str(value).lower())
+        if listener.quest_event:
+            refs.add(str(listener.quest_event).lower())
+        if listener.type:
+            refs.add(str(listener.type).lower())
+
+        if not refs:
+            refs.add(f"listener_{len(bindings)}")
+
+        payload = {
+            "metadata": meta,
+            "type": listener.type,
+            "quest_event": listener.quest_event,
+        }
+
+        for ref in refs:
+            bindings[ref] = payload
+
+    def activate_rule_refs(self, level_id: str, refs: Iterable[str]) -> None:
+        """标记特定 rule_ref 已激活，允许对应 NPC 行为生效。"""
+
+        if not refs:
+            return
+
+        active = self.active_rule_refs.setdefault(level_id, set())
+        for ref in refs:
+            if ref:
+                active.add(str(ref).lower())
+
+    def apply_rule_trigger(
+        self,
+        level_id: str,
+        event: Dict[str, Any],
+        active_refs: Optional[Iterable[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """根据 rule 事件更新 NPC 状态并返回补充 world_patch/nodes。"""
+
+        bindings = self.rule_bindings.get(level_id)
+        if not bindings:
+            return None
+
+        candidates: Set[str] = set()
+        event_type = event.get("event_type")
+        if event_type:
+            candidates.add(str(event_type).lower())
+        quest_event = event.get("quest_event") or event.get("meta", {}).get("quest_event")
+        if quest_event:
+            candidates.add(str(quest_event).lower())
+        target = event.get("target")
+        if target and event_type:
+            candidates.add(f"{event_type}:{target}".lower())
+
+        active = set(str(ref).lower() for ref in (active_refs or []))
+        active |= self.active_rule_refs.get(level_id, set())
+        candidates |= active
+
+        matched = [bindings[ref] for ref in candidates if ref in bindings]
+        if not matched:
+            return None
+
+        nodes: List[Dict[str, Any]] = []
+        world_patch: Dict[str, Any] = {}
+        commands: List[str] = []
+        applied_behaviors: List[Dict[str, Any]] = []
+
+        for binding in matched:
+            meta = dict(binding.get("metadata") or {})
+
+            dialogue = meta.get("dialogue") or meta.get("npc_dialogue")
+            if dialogue:
+                node = self._build_dialogue_node(dialogue, meta)
+                if node:
+                    nodes.append(node)
+
+            patch = meta.get("world_patch")
+            if isinstance(patch, dict):
+                world_patch = self._merge_world_patch(world_patch, patch)
+
+            cmd_list = meta.get("commands")
+            if isinstance(cmd_list, list):
+                commands.extend(str(cmd) for cmd in cmd_list if cmd)
+
+            behavior_updates = meta.get("update_behaviors")
+            if behavior_updates and isinstance(behavior_updates, list):
+                npc_data = self.active_npcs.setdefault(level_id, {})
+                existing = npc_data.setdefault("behaviors", [])
+                for update in behavior_updates:
+                    if isinstance(update, dict):
+                        existing.append(update)
+                        applied_behaviors.append(update)
+
+        result: Dict[str, Any] = {}
+        if nodes:
+            result["nodes"] = nodes
+        if world_patch:
+            result["world_patch"] = world_patch
+        if commands:
+            result["commands"] = commands
+        if applied_behaviors:
+            result["updated_behaviors"] = applied_behaviors
+
+        return result or None
     
     def get_npc_behaviors(self, level_id: str) -> List[NPCBehavior]:
         """获取NPC的所有行为"""
@@ -164,6 +290,43 @@ class NPCBehaviorEngine:
                 context += f"- 任务「{b.get('quest_name')}」: 关键词包括 {keywords}\n"
         
         return context.strip()
+
+    def _build_dialogue_node(self, dialogue: Any, meta: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if isinstance(dialogue, str):
+            return {
+                "title": meta.get("dialogue_title", "NPC 对话"),
+                "text": dialogue,
+                "type": meta.get("dialogue_type", "npc_dialogue"),
+            }
+        if isinstance(dialogue, dict):
+            return {
+                "title": dialogue.get("title") or meta.get("dialogue_title") or "NPC 对话",
+                "text": dialogue.get("text", ""),
+                "type": dialogue.get("type", "npc_dialogue"),
+            }
+        if isinstance(dialogue, list):
+            text = "\n".join(str(line) for line in dialogue)
+            return {
+                "title": meta.get("dialogue_title", "NPC 对话"),
+                "text": text,
+                "type": meta.get("dialogue_type", "npc_dialogue"),
+            }
+        return None
+
+    def _merge_world_patch(self, base: Optional[Dict[str, Any]], addition: Dict[str, Any]) -> Dict[str, Any]:
+        if not addition:
+            return dict(base or {})
+        merged = dict(base or {})
+        for key, value in addition.items():
+            if key == "mc" and isinstance(value, dict):
+                existing = merged.get("mc")
+                if isinstance(existing, dict):
+                    merged["mc"] = {**existing, **value}
+                else:
+                    merged["mc"] = dict(value)
+            else:
+                merged[key] = value
+        return merged
 
 
 # 全局实例

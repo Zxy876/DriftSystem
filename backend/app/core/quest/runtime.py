@@ -3,11 +3,114 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass, field, is_dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from app.core.story.story_loader import Level
 from app.core.story.level_schema import RuleListener
+from app.core.npc import npc_engine
+
+
+@dataclass
+class TaskMilestone:
+    """Intermediate checkpoints for a task."""
+
+    id: str
+    target: Optional[str] = None
+    count: int = 1
+    progress: int = 0
+    status: str = "pending"
+    history: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class TaskSession:
+    """Runtime container for a single task and its milestones."""
+
+    id: str
+    type: str
+    target: Any
+    count: int = 1
+    reward: Dict[str, Any] = field(default_factory=dict)
+    dialogue: Dict[str, Any] = field(default_factory=dict)
+    status: str = "pending"
+    milestones: List[TaskMilestone] = field(default_factory=list)
+    progress: int = 0
+    history: List[Dict[str, Any]] = field(default_factory=list)
+    rule_refs: List[str] = field(default_factory=list)
+
+    def mark_issued(self, beat_id: Optional[str]) -> Dict[str, Any]:
+        self.status = "issued"
+        entry = {"event": "issued", "beat": beat_id, "ts": time.time()}
+        self.history.append(entry)
+        return entry
+
+    def record_event(self, event: Dict[str, Any]) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        """Update task progress with an incoming normalized event."""
+
+        if self.status != "issued":
+            return False, None
+
+        matched, milestone = self._match_event(event)
+        if not matched:
+            return False, None
+
+        self.progress += 1
+        self.history.append({"event": event, "ts": time.time()})
+
+        milestone_payload: Optional[Dict[str, Any]] = None
+        if milestone:
+            milestone.history.append({"event": event, "ts": time.time()})
+            milestone.progress += 1
+            if milestone.progress >= milestone.count:
+                milestone.status = "completed"
+                milestone_payload = {
+                    "milestone_completed": True,
+                    "milestone_id": milestone.id,
+                    "task_id": self.id,
+                }
+
+        if self.progress >= self.count:
+            if not self.milestones or all(m.status == "completed" for m in self.milestones):
+                self.status = "completed"
+                return True, self._completion_payload()
+
+        return True, milestone_payload
+
+    def _match_event(self, event: Dict[str, Any]) -> Tuple[bool, Optional[TaskMilestone]]:
+        if not event:
+            return False, None
+        if event.get("event_type") != self.type:
+            return False, None
+
+        target = event.get("target")
+        if self.target and target:
+            if isinstance(self.target, str):
+                if str(target).lower() != self.target.lower():
+                    return False, None
+            elif isinstance(self.target, dict):
+                expected = str(self.target.get("name") or self.target.get("type") or "").lower()
+                if expected and str(target).lower() != expected:
+                    return False, None
+
+        for milestone in self.milestones:
+            if milestone.status == "completed":
+                continue
+            if milestone.target and target:
+                if str(target).lower() != str(milestone.target).lower():
+                    continue
+            return True, milestone
+
+        return True, None
+
+    def _completion_payload(self) -> Dict[str, Any]:
+        return {
+            "task_completed": True,
+            "task_id": self.id,
+            "reward": self.reward,
+            "dialogue": self.dialogue,
+        }
 
 
 class QuestRuntime:
@@ -16,30 +119,69 @@ class QuestRuntime:
     def __init__(self) -> None:
         self._players: Dict[str, Dict[str, Any]] = {}
         self._phase3_announced = False
-        self._rule_listeners: List[RuleListener] = []
+        self._rule_listeners: List[Tuple[str, RuleListener]] = []
+        self._rule_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None
 
     # ------------------------------------------------------------------
     # Phase 1.5 scaffolding
     # ------------------------------------------------------------------
-    def register_rule_listener(self, listener: Optional[RuleListener]) -> None:
+    def register_rule_listener(self, level_id: str, listener: Optional[RuleListener]) -> None:
         """Register a rule listener for future bridge wiring."""
 
         if listener is None or not getattr(listener, "type", None):
             return
 
-        self._rule_listeners.append(listener)
-        # TODO: emit to RuleEventBridge once implemented.
+        self._rule_listeners.append((level_id, listener))
+        npc_engine.register_rule_binding(level_id, listener)
+
+    def set_rule_callback(self, callback: Optional[Callable[[str, Dict[str, Any]], None]]) -> None:
+        """Allow StoryEngine to observe rule triggers."""
+
+        self._rule_callback = callback
 
     def handle_rule_trigger(self, player_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Handle an incoming rule trigger (stub)."""
+        """Handle an incoming rule trigger and advance relevant tasks."""
 
         state = self._players.get(player_id)
         if not state:
             return None
 
-        state.setdefault("rule_events", []).append(payload)
-        # TODO: apply payload to active tasks based on TaskEventType.
-        return None
+        normalized = self._normalize_event(payload)
+        if not normalized:
+            return None
+
+        state.setdefault("rule_events", []).append(normalized)
+
+        responses: List[Dict[str, Any]] = []
+        for session in self._iter_active_sessions(state):
+            matched, result = session.record_event(normalized)
+            if not matched:
+                continue
+            if result:
+                responses.append(result)
+            remaining = max(0, session.count - session.progress)
+            if remaining and session.status == "issued":
+                responses.append({
+                    "matched": True,
+                    "remaining": remaining,
+                    "task_id": session.id,
+                })
+
+        npc_payload = None
+        level_id = state.get("level_id")
+        if level_id:
+            npc_payload = npc_engine.apply_rule_trigger(level_id, normalized, state.get("active_rule_refs", set()))
+
+        combined = self._aggregate_rule_responses(state, responses)
+        combined = self._merge_response_payload(combined, npc_payload)
+
+        if self._rule_callback:
+            try:
+                self._rule_callback(player_id, payload)
+            except Exception:
+                pass
+
+        return combined or None
 
     def evaluate_exit_conditions(self, player_id: str) -> Optional[Dict[str, Any]]:
         """Return exit readiness snapshot for the player (stub)."""
@@ -58,7 +200,7 @@ class QuestRuntime:
     # Lifecycle
     # ------------------------------------------------------------------
     def load_level_tasks(self, level: Level, player_id: str) -> None:
-        tasks = [self._normalize_task(raw, index) for index, raw in enumerate(level.tasks or [])]
+        tasks = [self._create_session(raw, index) for index, raw in enumerate(level.tasks or [])]
         state = {
             "level_id": level.level_id,
             "level_title": level.title,
@@ -68,6 +210,7 @@ class QuestRuntime:
             "completed_count": 0,
             "summary_emitted": False,
             "last_completed_type": None,
+            "active_rule_refs": set(),
         }
         self._players[player_id] = state
 
@@ -82,38 +225,26 @@ class QuestRuntime:
         if not state:
             return None
 
-        task = self._find_active_task(state)
-        if not task:
-            return None
-
         normalized_event = self._normalize_event(event)
         if not normalized_event:
             return None
 
         state["last_event"] = normalized_event
+        responses: List[Dict[str, Any]] = []
+        for session in self._iter_active_sessions(state):
+            matched, result = session.record_event(normalized_event)
+            if matched:
+                if result:
+                    responses.append(result)
+                remaining = max(0, session.count - session.progress)
+                if remaining and session.status == "issued":
+                    responses.append({
+                        "matched": True,
+                        "remaining": remaining,
+                        "task_id": session.id,
+                    })
 
-        if not self._event_matches(task, normalized_event):
-            return None
-
-        progress = task.setdefault("progress", 0) + 1
-        task["progress"] = progress
-        required = task.get("count", 1)
-        task.setdefault("history", []).append({
-            "event": normalized_event.get("event_type"),
-            "target": normalized_event.get("target"),
-            "meta": normalized_event.get("meta", {}),
-            "ts": time.time(),
-        })
-
-        if progress < required:
-            remaining = max(0, required - progress)
-            return {"matched": True, "remaining": remaining}
-
-        task["status"] = "completed"
-        return {
-            "completed": True,
-            "task_id": task["id"],
-        }
+        return self._aggregate_rule_responses(state, responses)
 
     def issue_tasks_on_beat(
         self,
@@ -136,6 +267,38 @@ class QuestRuntime:
         return {
             "nodes": [issued],
         }
+
+    def activate_rule_refs(
+        self,
+        level_or_id: Union[Level, str],
+        player_id: str,
+        rule_refs: Optional[List[str]] = None,
+    ) -> None:
+        if not rule_refs:
+            return
+
+        level = self._extract_level(level_or_id, player_id)
+        if not level:
+            return
+
+        state = self._ensure_state(player_id, level)
+        if not state:
+            return
+
+        active = state.setdefault("active_rule_refs", set())
+        active.update(rule_refs)
+
+        for session in self._iter_sessions(state):
+            if not session.rule_refs:
+                continue
+            if any(ref in rule_refs for ref in session.rule_refs):
+                session.history.append({
+                    "event": "rule_ref_activated",
+                    "refs": list(rule_refs),
+                    "ts": time.time(),
+                })
+
+        npc_engine.activate_rule_refs(level.level_id, rule_refs)
 
     def check_completion(self, level_or_id: Union[Level, str], player_id: str) -> Optional[Dict[str, Any]]:
         level = self._extract_level(level_or_id, player_id)
@@ -186,9 +349,14 @@ class QuestRuntime:
         state = self._players.get(player_id)
         if not state:
             return None
-        task = self._normalize_task(task_def, len(state["tasks"]))
-        state["tasks"].append(task)
-        return task
+        session = self._create_session(task_def, len(state["tasks"]))
+        state["tasks"].append(session)
+        return {
+            "id": session.id,
+            "type": session.type,
+            "status": session.status,
+            "count": session.count,
+        }
 
     def get_runtime_snapshot(self, player_id: str) -> Dict[str, Any]:
         state = self._players.get(player_id, {})
@@ -197,18 +365,35 @@ class QuestRuntime:
             "exit_ready": bool(state.get("summary_emitted")),
             "tasks": [
                 {
-                    "id": task.get("id"),
-                    "status": task.get("status"),
-                    "progress": task.get("progress", 0),
-                    "count": task.get("count", 1),
+                    "id": session.id,
+                    "status": session.status,
+                    "progress": session.progress,
+                    "count": session.count,
                 }
-                for task in state.get("tasks", [])
+                for session in state.get("tasks", [])
             ],
+            "active_rule_refs": sorted(list(state.get("active_rule_refs", []))),
         }
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+    def _extract_level(self, level_or_id: Union[Level, str], player_id: str) -> Optional[Level]:
+        if isinstance(level_or_id, Level):
+            return level_or_id
+
+        if isinstance(level_or_id, str):
+            state = self._players.get(player_id)
+            level = state.get("level") if state else None
+            if isinstance(level, Level) and level.level_id == level_or_id:
+                return level
+
+        state = self._players.get(player_id)
+        level = state.get("level") if state else None
+        if isinstance(level, Level):
+            return level
+
+        return None
     def _ensure_state(self, player_id: str, level: Optional[Level] = None) -> Optional[Dict[str, Any]]:
         state = self._players.get(player_id)
         if level is None:
@@ -225,8 +410,19 @@ class QuestRuntime:
             return None
 
         event_type = event.get("event_type") or event.get("type")
-        target = event.get("target") or event.get("target_id")
-        meta = event.get("meta") if isinstance(event.get("meta"), dict) else {}
+        payload_meta = event.get("meta") if isinstance(event.get("meta"), dict) else {}
+        payload_body = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+
+        target = (
+            event.get("target")
+            or event.get("target_id")
+            or payload_body.get("target")
+            or payload_body.get("entity_name")
+            or payload_body.get("entity_type")
+            or payload_body.get("block_type")
+        )
+
+        meta = payload_meta or payload_body
 
         if not isinstance(event_type, str) or not event_type:
             return None
@@ -240,65 +436,222 @@ class QuestRuntime:
         if event.get("count") is not None:
             normalized["count"] = event.get("count")
 
+        if payload_body.get("quest_event"):
+            normalized["quest_event"] = payload_body.get("quest_event")
+
         return normalized
-    # ------------------------------------------------------------------
-    def _normalize_task(self, task: Dict[str, Any], index: int) -> Dict[str, Any]:
+
+    def _aggregate_rule_responses(
+        self,
+        state: Dict[str, Any],
+        responses: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not responses:
+            return None
+
+        world_patch: Dict[str, Any] = {}
+        nodes: List[Dict[str, Any]] = []
+        completed: List[str] = []
+        milestones: List[str] = []
+        seen_completed: Set[str] = set()
+        seen_milestones: Set[str] = set()
+
+        for resp in responses:
+            if resp.get("task_completed"):
+                task_id = resp.get("task_id")
+                if task_id and task_id not in seen_completed:
+                    seen_completed.add(task_id)
+                    completed.append(task_id)
+                    dialogue = resp.get("dialogue") or {}
+                    nodes.append({
+                        "title": f"完成：{task_id}",
+                        "text": dialogue.get("on_complete") or "任务完成，奖励已发放。",
+                        "type": "task_complete",
+                        "task_id": task_id,
+                    })
+                    for session in self._iter_sessions(state):
+                        if session.id == task_id:
+                            state["last_completed_type"] = session.type
+                            break
+                reward = resp.get("reward") or {}
+                world_patch = self._merge_patch(world_patch, reward.get("world_patch"))
+                if reward.get("npc_dialogue"):
+                    world_patch = self._merge_patch(world_patch, {"npc_dialogue": reward["npc_dialogue"]})
+
+            if resp.get("milestone_completed"):
+                milestone_id = resp.get("milestone_id")
+                if milestone_id and milestone_id not in seen_milestones:
+                    seen_milestones.add(milestone_id)
+                    milestones.append(milestone_id)
+                    nodes.append({
+                        "title": f"阶段完成：{milestone_id}",
+                        "text": "继续保持，加油完成剩余目标！",
+                        "type": "task_milestone",
+                        "task_id": resp.get("task_id"),
+                    })
+
+            if resp.get("matched") and not resp.get("task_completed"):
+                nodes.append({
+                    "title": "任务进度更新",
+                    "text": f"任务 {resp.get('task_id')} 剩余 {resp.get('remaining', 0)} 项。",
+                    "type": "task_progress",
+                    "task_id": resp.get("task_id"),
+                })
+
+        if not nodes and not world_patch and not completed and not milestones:
+            return None
+
+        summary: Dict[str, Any] = {"nodes": nodes}
+        if world_patch:
+            summary["world_patch"] = world_patch
+        if completed:
+            summary["completed_tasks"] = completed
+        if milestones:
+            summary["milestones"] = milestones
+        return summary
+
+    def _create_session(self, task: Dict[str, Any], index: int) -> TaskSession:
+        if not isinstance(task, dict):
+            if is_dataclass(task):
+                task = {key: getattr(task, key) for key in getattr(task, "__dataclass_fields__", {})}
+            else:
+                task = dict(getattr(task, "__dict__", {}))
         if not isinstance(task, dict):
             task = {}
         task_id = str(task.get("id") or f"task_{index:02d}")
         task_type = str(task.get("type") or "custom").lower()
         target = task.get("target") or {}
-        count = task.get("count") or 1
-        reward = task.get("reward") or {}
-        dialogue = task.get("dialogue") or {}
+        count = max(1, int(task.get("count") or 1))
+        reward_raw = task.get("reward") or task.get("rewards")
+        if isinstance(reward_raw, list):
+            reward = next((item for item in reward_raw if isinstance(item, dict)), {})
+        elif isinstance(reward_raw, dict):
+            reward = reward_raw
+        else:
+            reward = {}
 
-        normalized = {
-            "id": task_id,
-            "type": task_type,
-            "target": target,
-            "count": max(1, int(count)),
-            "reward": reward,
-            "dialogue": dialogue,
-            "status": "pending",
-        }
-        normalized["history"] = []
+        dialogue_raw = task.get("dialogue") or task.get("dialogues")
+        if isinstance(dialogue_raw, dict):
+            dialogue = dialogue_raw
+        elif isinstance(dialogue_raw, str):
+            dialogue = {"text": dialogue_raw}
+        else:
+            dialogue = {}
+        rule_refs = list(task.get("rule_refs", []) or [])
+
+        milestone_configs = task.get("milestones") or []
+        milestones: List[TaskMilestone] = []
+        for idx, raw in enumerate(milestone_configs):
+            if not isinstance(raw, dict):
+                if is_dataclass(raw):
+                    raw = {key: getattr(raw, key) for key in getattr(raw, "__dataclass_fields__", {})}
+                else:
+                    raw = dict(getattr(raw, "__dict__", {}))
+            if not isinstance(raw, dict):
+                continue
+            milestone_id = str(raw.get("id") or f"{task_id}_milestone_{idx:02d}")
+            milestones.append(TaskMilestone(
+                id=milestone_id,
+                target=raw.get("target"),
+                count=max(1, int(raw.get("count") or 1)),
+            ))
+
+        session = TaskSession(
+            id=task_id,
+            type=task_type,
+            target=target,
+            count=count,
+            reward=reward,
+            dialogue=dialogue,
+            milestones=milestones,
+            rule_refs=rule_refs,
+        )
+
         issue_node = task.get("issue_node")
         if isinstance(issue_node, dict):
-            normalized["issue_node"] = issue_node
-        return normalized
+            setattr(session, "issue_node", issue_node)
+
+        return session
+
+    def _merge_response_payload(
+        self,
+        base: Optional[Dict[str, Any]],
+        addition: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not addition:
+            return base
+
+        merged: Dict[str, Any] = {}
+        if base:
+            merged.update(base)
+
+        nodes = list(merged.get("nodes") or [])
+        added_nodes = addition.get("nodes") if isinstance(addition.get("nodes"), list) else []
+        if added_nodes:
+            nodes.extend(added_nodes)
+        if nodes:
+            merged["nodes"] = nodes
+
+        world_patch = self._merge_patch(merged.get("world_patch"), addition.get("world_patch"))
+        if world_patch:
+            merged["world_patch"] = world_patch
+        elif "world_patch" in merged and not merged["world_patch"]:
+            merged.pop("world_patch")
+
+        for key in ("completed_tasks", "milestones"):
+            existing = list(merged.get(key) or [])
+            incoming = addition.get(key)
+            if isinstance(incoming, list) and incoming:
+                existing.extend(incoming)
+            if existing:
+                merged[key] = existing
+            elif key in merged:
+                merged.pop(key)
+
+        for key, value in addition.items():
+            if key in {"nodes", "world_patch", "completed_tasks", "milestones"}:
+                continue
+            if value is None:
+                continue
+            if isinstance(value, list):
+                existing_list = merged.get(key)
+                if isinstance(existing_list, list):
+                    merged[key] = existing_list + value
+                else:
+                    merged[key] = list(value)
+            else:
+                merged[key] = value
+
+        return merged or base
 
     def _issue_next_task(self, state: Dict[str, Any], level: Level, beat: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        tasks = state.get("tasks", [])
-        for task in tasks:
-            if task.get("status") == "pending":
-                task["status"] = "issued"
-                task.setdefault("progress", 0)
-                task.setdefault("history", []).append({
-                    "event": "issued",
-                    "beat": beat.get("id"),
-                    "ts": time.time(),
-                })
-                state["issued_index"] = tasks.index(task)
-                return self._build_issue_node(level, task)
+        sessions = state.get("tasks", [])
+        for session in sessions:
+            if session.status == "pending":
+                session.mark_issued(beat.get("id"))
+                state["issued_index"] = sessions.index(session)
+                return self._build_issue_node(level, session)
         return None
 
     def _collect_rewards(self, state: Dict[str, Any], level: Level) -> Optional[Dict[str, Any]]:
         world_patch: Dict[str, Any] = {}
         nodes: List[Dict[str, Any]] = []
         completed: List[str] = []
-        for task in state.get("tasks", []):
-            if task.get("status") == "completed" and not task.get("rewarded"):
-                reward = task.get("reward") or {}
+        for session in self._iter_sessions(state):
+            if session.status == "completed" and not getattr(session, "rewarded", False):
+                reward = session.reward or {}
                 world_patch = self._merge_patch(world_patch, reward.get("world_patch"))
                 if "npc_dialogue" in reward:
                     world_patch = self._merge_patch(world_patch, {"npc_dialogue": reward["npc_dialogue"]})
-                nodes.append(self._build_reward_node(level, task))
-                task["rewarded"] = True
+                nodes.append(self._build_reward_node(level, session))
+                setattr(session, "rewarded", True)
                 state["completed_count"] += 1
-                state["last_completed_type"] = task.get("type")
-                completed.append(task.get("id"))
+                state["last_completed_type"] = session.type
+                completed.append(session.id)
+
         if not nodes and not world_patch:
             return None
+
         return {
             "world_patch": world_patch,
             "nodes": nodes,
@@ -306,27 +659,27 @@ class QuestRuntime:
         }
 
     def _all_tasks_completed(self, state: Dict[str, Any]) -> bool:
-        tasks = state.get("tasks", [])
-        return bool(tasks) and all(task.get("status") == "completed" for task in tasks)
+        tasks = list(self._iter_sessions(state))
+        return bool(tasks) and all(session.status == "completed" for session in tasks)
 
-    def _build_issue_node(self, level: Level, task: Dict[str, Any]) -> Dict[str, Any]:
-        node = task.get("issue_node") or {}
-        title = node.get("title") or f"任务：{task['id']}"
-        text = node.get("text") or self._default_issue_text(task)
+    def _build_issue_node(self, level: Level, session: TaskSession) -> Dict[str, Any]:
+        node = getattr(session, "issue_node", {}) or {}
+        title = node.get("title") or f"任务：{session.id}"
+        text = node.get("text") or self._default_issue_text(session)
         return {
             "title": title,
             "text": text,
             "type": "task",
-            "task_id": task["id"],
+            "task_id": session.id,
         }
 
-    def _build_reward_node(self, level: Level, task: Dict[str, Any]) -> Dict[str, Any]:
-        text = task.get("dialogue", {}).get("on_complete") or "任务完成，奖励已发放。"
+    def _build_reward_node(self, level: Level, session: TaskSession) -> Dict[str, Any]:
+        text = session.dialogue.get("on_complete") or "任务完成，奖励已发放。"
         return {
-            "title": f"完成：{task['id']}",
+            "title": f"完成：{session.id}",
             "text": text,
             "type": "task_complete",
-            "task_id": task["id"],
+            "task_id": session.id,
         }
 
     def _build_summary_node(self, level: Level, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -336,40 +689,20 @@ class QuestRuntime:
             "type": "task_summary",
         }
 
-    def _default_issue_text(self, task: Dict[str, Any]) -> str:
-        task_type = task.get("type")
-        target = task.get("target")
-        count = task.get("count", 1)
+    def _default_issue_text(self, session: TaskSession) -> str:
+        task_type = session.type
+        target = session.target
+        count = session.count
         if isinstance(target, dict):
             name = target.get("name") or target.get("type")
         else:
             name = str(target)
         return f"请完成目标（{task_type}:{name}） x{count}."
+    def _iter_sessions(self, state: Dict[str, Any]) -> Iterable[TaskSession]:
+        return state.get("tasks", [])
 
-    def _find_active_task(self, state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        for task in state.get("tasks", []):
-            if task.get("status") == "issued":
-                return task
-        return None
-
-    def _event_matches(self, task: Dict[str, Any], event: Dict[str, Any]) -> bool:
-        expected_type = task.get("type")
-        if event.get("event_type") != expected_type:
-            return False
-
-        target = task.get("target")
-        event_target = event.get("target")
-        if not target or not event_target:
-            return True
-
-        if isinstance(target, str):
-            return str(event_target).lower() == target.lower()
-
-        if isinstance(target, dict):
-            target_name = str(target.get("name") or target.get("type") or "").lower()
-            return target_name == str(event_target).lower()
-
-        return False
+    def _iter_active_sessions(self, state: Dict[str, Any]) -> Iterable[TaskSession]:
+        return [session for session in self._iter_sessions(state) if session.status == "issued"]
 
     @staticmethod
     def _merge_patch(base: Optional[Dict[str, Any]], addition: Optional[Dict[str, Any]]) -> Dict[str, Any]:

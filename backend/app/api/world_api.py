@@ -280,11 +280,16 @@ def story_enter(request: EnterStoryRequest):
 def story_end(request: EndStoryRequest):
     player_state = story_engine.players.get(request.player_id, {})
     level = player_state.get("level")
+    cleanup_patch = None
     if level:
-        story_engine.exit_level_with_cleanup(request.player_id, level)
-    quest_runtime.exit_level(request.player_id)
+        cleanup_patch = story_engine.exit_level_with_cleanup(request.player_id, level)
+    else:
+        quest_runtime.exit_level(request.player_id)
     logger.info("story_end", extra={"player_id": request.player_id, "level_id": getattr(level, "level_id", None)})
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "world_patch": cleanup_patch,
+    }
 
 
 @router.post("/story/rule-event")
@@ -297,7 +302,16 @@ def story_rule_event(event: RuleTriggerEvent):
         "story_rule_event",
         extra={"player_id": event.player_id, "event_type": event.event_type},
     )
-    return {
-        "status": "ok",
-        "result": response,
-    }
+    result = {"status": "ok", "result": response}
+    if isinstance(response, dict):
+        if response.get("world_patch"):
+            result["world_patch"] = response["world_patch"]
+        if response.get("nodes"):
+            result["nodes"] = response["nodes"]
+        if response.get("completed_tasks"):
+            result["completed_tasks"] = response["completed_tasks"]
+        if response.get("milestones"):
+            result["milestones"] = response["milestones"]
+        if response.get("commands"):
+            result["commands"] = response["commands"]
+    return result
