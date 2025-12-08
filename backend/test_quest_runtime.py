@@ -12,27 +12,26 @@ import unittest
 
 from app.core.quest.runtime import QuestRuntime
 from app.core.story.story_loader import Level
+from app.core.story.level_schema import RuleListener
+from app.core.npc import npc_engine
 
 
 def build_level(tasks):
-    return Level(
+    level = Level(
         level_id="quest_test_level",
         title="Quest Test Level",
-        level_type="story",
+        text=["Test narrative block."],
         tags=[],
+        mood={},
+        choices=[],
         meta={},
-        narrative={"text": ["Test narrative block."]},
-        scene={},
         npcs=[],
-        quests=[],
-        tasks=tasks,
-        navigation={},
-        feedback={},
-        ai_guidance={},
         bootstrap_patch={},
         tree=None,
-        mood={},
     )
+    setattr(level, "tasks", tasks)
+    setattr(level, "rule_graph", None)
+    return level
 
 
 class QuestRuntimeTests(unittest.TestCase):
@@ -77,14 +76,24 @@ class QuestRuntimeTests(unittest.TestCase):
             self.player,
             {"type": "kill", "target_id": "GoAt"},
         )
-        self.assertTrue(match and match.get("matched"), "First kill should match")
-        self.assertEqual(match.get("remaining"), 1)
+        self.assertIsNotNone(match, "First kill should produce a progress payload")
+        progress_node = next(
+            (node for node in match.get("nodes", []) if node.get("type") == "task_progress"),
+            None,
+        )
+        self.assertIsNotNone(progress_node, "Progress node should appear after first kill")
+        self.assertEqual(progress_node.get("task_id"), "kill_goat")
 
         completed = self.runtime.record_event(
             self.player,
             {"event_type": "kill", "target": "goat"},
         )
-        self.assertTrue(completed and completed.get("completed"), "Second kill should complete task")
+        self.assertIsNotNone(completed, "Second kill should return completion payload")
+        self.assertIn(
+            "kill_goat",
+            completed.get("completed_tasks", []),
+            "Completion payload should list kill task",
+        )
 
         issued_second = self.runtime.issue_tasks_on_beat(self.level, self.player, {"id": "beat_2"})
         self.assertIsNotNone(issued_second, "Second task should issue after kill task")
@@ -93,7 +102,12 @@ class QuestRuntimeTests(unittest.TestCase):
             self.player,
             {"type": "interact", "target_id": "mentor_awu"},
         )
-        self.assertTrue(talk_completed and talk_completed.get("completed"), "Interact task should complete immediately")
+        self.assertIsNotNone(talk_completed, "Interact task should return completion payload")
+        self.assertIn(
+            "talk_mentor",
+            talk_completed.get("completed_tasks", []),
+            "Interact task should complete immediately",
+        )
 
         updates = self.runtime.check_completion(self.level, self.player)
         self.assertIsNotNone(updates, "Completion check should surface updates")
@@ -109,6 +123,148 @@ class QuestRuntimeTests(unittest.TestCase):
 
         final_snapshot = self.runtime.get_runtime_snapshot(self.player)
         self.assertTrue(final_snapshot.get("exit_ready"), "Snapshot should mark exit readiness after summary")
+
+    def tearDown(self):
+        npc_engine.active_npcs.clear()
+        npc_engine.rule_bindings.clear()
+        npc_engine.active_rule_refs.clear()
+
+
+class QuestRuntimeRuleEventTests(unittest.TestCase):
+    def setUp(self):
+        self.player = "rule_event_player"
+        self.runtime = QuestRuntime()
+        npc_engine.active_npcs.clear()
+        npc_engine.rule_bindings.clear()
+        npc_engine.active_rule_refs.clear()
+
+    def tearDown(self):
+        npc_engine.active_npcs.clear()
+        npc_engine.rule_bindings.clear()
+        npc_engine.active_rule_refs.clear()
+
+    def test_rule_trigger_tracks_milestones_and_rewards(self):
+        tasks = [
+            {
+                "id": "collect_sunflower",
+                "type": "interact",
+                "target": "sunflower",
+                "count": 2,
+                "milestones": [
+                    {
+                        "id": "collect_sunflower_stage1",
+                        "target": "sunflower",
+                        "count": 1,
+                    }
+                ],
+                "reward": {
+                    "world_patch": {
+                        "tell": "你闻到了花香。",
+                    }
+                },
+                "dialogue": {
+                    "on_complete": "你采集了所有向日葵。",
+                },
+            }
+        ]
+        level = build_level(tasks)
+        self.runtime.load_level_tasks(level, self.player)
+        self.runtime.issue_tasks_on_beat(level, self.player, {"id": "beat_seed"})
+
+        first_response = self.runtime.handle_rule_trigger(
+            self.player,
+            {
+                "event_type": "interact",
+                "target": "sunflower",
+            },
+        )
+
+        self.assertIsNotNone(first_response, "Rule trigger should respond for issued task")
+        self.assertIn("milestones", first_response, "Milestone completion should be surfaced")
+        self.assertIn(
+            "collect_sunflower_stage1",
+            first_response.get("milestones", []),
+            "First milestone should complete on initial interaction",
+        )
+        milestone_node = next(
+            (node for node in first_response.get("nodes", []) if node.get("type") == "task_milestone"),
+            None,
+        )
+        self.assertIsNotNone(milestone_node, "Milestone node should be emitted for milestone completion")
+
+        second_response = self.runtime.handle_rule_trigger(
+            self.player,
+            {
+                "event_type": "interact",
+                "target": "sunflower",
+            },
+        )
+
+        self.assertIsNotNone(second_response, "Second trigger should return completion payload")
+        self.assertIn(
+            "collect_sunflower",
+            second_response.get("completed_tasks", []),
+            "Task completion should be listed in completed_tasks",
+        )
+        world_patch = second_response.get("world_patch") or {}
+        self.assertEqual(
+            world_patch.get("tell"),
+            "你闻到了花香。",
+            "Reward world_patch should be merged into aggregated response",
+        )
+        completion_node = next(
+            (node for node in second_response.get("nodes", []) if node.get("type") == "task_complete"),
+            None,
+        )
+        self.assertIsNotNone(completion_node, "Completion node should be emitted for finished task")
+
+    def test_rule_trigger_merges_npc_behavior_payload(self):
+        level = build_level([])
+        self.runtime.load_level_tasks(level, self.player)
+        npc_engine.register_npc(level.level_id, {})
+
+        listener = RuleListener(
+            type="chat",
+            targets=["mia"],
+            quest_event="greet_mia",
+            metadata={
+                "dialogue": {
+                    "title": "米娅",
+                    "text": "你好，旅行者。",
+                },
+                "world_patch": {
+                    "tell": "米娅向你微笑。",
+                },
+                "commands": ["say {player} greeted Mia"],
+            },
+        )
+        self.runtime.register_rule_listener(level.level_id, listener)
+
+        response = self.runtime.handle_rule_trigger(
+            self.player,
+            {
+                "event_type": "chat",
+                "payload": {
+                    "quest_event": "greet_mia",
+                },
+            },
+        )
+
+        self.assertIsNotNone(response, "NPC rule payload should be returned even without tasks")
+        self.assertIn("nodes", response, "NPC dialogue should surface as nodes")
+        dialogue_node = next(
+            (node for node in response.get("nodes", []) if node.get("type") == "npc_dialogue"),
+            None,
+        )
+        self.assertIsNotNone(dialogue_node, "Dialogue node should be emitted from NPC metadata")
+        self.assertIn("commands", response, "NPC commands should be bubbled to caller")
+        self.assertIn(
+            "say {player} greeted Mia",
+            response.get("commands", []),
+            "Command list should propagate metadata commands",
+        )
+        npc_patch = response.get("world_patch", {})
+        self.assertEqual(npc_patch.get("tell"), "米娅向你微笑。", "NPC world_patch should merge into response")
 
 
 if __name__ == "__main__":

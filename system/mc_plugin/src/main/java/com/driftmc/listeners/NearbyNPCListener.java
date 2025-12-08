@@ -10,15 +10,19 @@ import org.bukkit.event.player.PlayerMoveEvent;
 
 import com.driftmc.intent.IntentRouter;
 import com.driftmc.npc.NPCManager;
+import com.driftmc.scene.RuleEventBridge;
 
+@SuppressWarnings("deprecation")
 public class NearbyNPCListener implements Listener {
 
     private final NPCManager npcManager;
     private final IntentRouter router;
+    private final RuleEventBridge ruleEvents;
 
-    public NearbyNPCListener(NPCManager npcManager, IntentRouter router) {
+    public NearbyNPCListener(NPCManager npcManager, IntentRouter router, RuleEventBridge ruleEvents) {
         this.npcManager = npcManager;
         this.router = router;
+        this.ruleEvents = ruleEvents;
     }
 
     @EventHandler
@@ -32,7 +36,6 @@ public class NearbyNPCListener implements Listener {
             if (!entity.isValid()) continue;
 
             Location loc = entity.getLocation();
-            if (loc == null) continue;
             if (loc.getWorld() != p.getWorld()) continue;
 
             // 距离判断
@@ -42,6 +45,9 @@ public class NearbyNPCListener implements Listener {
                 if (name == null) name = "未知NPC";
 
                 p.sendMessage(ChatColor.LIGHT_PURPLE + "你靠近了 " + name + "。");
+                if (ruleEvents != null) {
+                    ruleEvents.emitNearNpc(p, name, entity.getLocation());
+                }
 
                 // 触发自然语言 AI
                 router.handlePlayerSpeak(p, "我靠近了 " + name);

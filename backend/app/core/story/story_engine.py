@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.ai.deepseek_agent import deepseek_decide
 from app.core.story.story_loader import load_level, build_level_prompt, Level
@@ -15,9 +15,22 @@ from app.core.world.trigger import TriggerPoint
 from app.core.npc import npc_engine
 from app.core.quest.runtime import quest_runtime
 from app.core.story.level_schema import ensure_level_extensions
+from app.core.events.event_manager import EventManager
 
 
 class StoryEngine:
+    DEFAULT_EXIT_ALIASES = ["结束剧情", "离开关卡", "退出剧情", "退出", "leave", "exit"]
+    DEFAULT_RETURN_SPAWNS: Dict[str, Dict[str, Any]] = {
+        "KunmingLakeHub": {
+            "world": "KunmingLakeHub",
+            "x": 128.5,
+            "y": 72.0,
+            "z": -16.5,
+            "yaw": 180.0,
+            "pitch": 0.0,
+        }
+    }
+
     def __init__(self):
         # 每个玩家的剧情状态
         self.players: Dict[str, Dict[str, Any]] = {}
@@ -38,10 +51,11 @@ class StoryEngine:
         # 触发器（v2：暂时禁用螺旋触发，避免乱飞）
         self._inject_spiral_triggers()
 
-        print(
-            f"[StoryEngine] loaded {len(self.graph.all_levels())} levels "
-            f"from {level_dir}"
-        )
+        # Phase 2 runtime
+        self.event_manager = EventManager()
+        quest_runtime.set_rule_callback(self._handle_rule_catalyst)
+
+        print(f"[StoryEngine] loading levels from {level_dir}")
 
     # ============================================================
     # Phase 1.5 scaffolding hooks (stubs)
@@ -85,7 +99,7 @@ class StoryEngine:
             return
 
         for listener in rule_cfg.listeners:
-            quest_runtime.register_rule_listener(listener)
+            quest_runtime.register_rule_listener(level.level_id, listener)
 
     def inject_tasks(self, player_id: str, level: Level) -> None:
         """Inject Phase 1.5 task definitions into QuestRuntime."""
@@ -99,13 +113,77 @@ class StoryEngine:
         player_state = self.players.setdefault(player_id, {})
         player_state["pending_tasks"] = tasks
 
-    def exit_level_with_cleanup(self, player_id: str, level: Level) -> None:
-        """Placeholder for future exit wiring."""
+    def exit_level_with_cleanup(self, player_id: str, level: Level) -> Dict[str, Any]:
+        """Compose a cleanup patch when a player exits the level."""
 
-        # TODO: invoke SceneCleanupService and QuestRuntime teardown once ready.
         player_state = self.players.setdefault(player_id, {})
+        exit_profile = player_state.pop("exit_profile", None)
         player_state.pop("scene_handle", None)
         player_state.pop("current_beat", None)
+        player_state.pop("beat_state", None)
+        player_state.pop("pending_nodes", None)
+        player_state.pop("pending_patches", None)
+        self.event_manager.unregister(player_id)
+        quest_runtime.exit_level(player_id)
+
+        cleanup_meta = {
+            "level_id": getattr(level, "level_id", None),
+            "scene": getattr(level, "scene", None) is not None,
+        }
+        hub_target = self._resolve_exit_target(exit_profile)
+
+        farewell = None
+        if isinstance(exit_profile, dict):
+            farewell = exit_profile.get("farewell")
+        if not farewell:
+            farewell = f"已离开《{getattr(level, 'title', getattr(level, 'level_id', '该关卡'))}》，即将返回主线。"
+
+        mc_payload: Dict[str, Any] = {
+            "_scene_cleanup": cleanup_meta,
+            "tell": farewell,
+            "title": {
+                "main": "§6剧情结束",
+                "sub": "欢迎回到昆明湖主线",
+                "fade_in": 10,
+                "stay": 80,
+                "fade_out": 20,
+            },
+        }
+
+        if hub_target:
+            mc_payload["teleport"] = {
+                "mode": "absolute",
+                "world": hub_target.get("world"),
+                "x": hub_target.get("x", 0.0),
+                "y": hub_target.get("y", 70.0),
+                "z": hub_target.get("z", 0.0),
+                "yaw": hub_target.get("yaw", 0.0),
+                "pitch": hub_target.get("pitch", 0.0),
+                "safe_platform": {
+                    "material": "LIGHT_GRAY_CONCRETE",
+                    "radius": 3,
+                },
+            }
+
+        self.graph.update_trajectory(
+            player_id,
+            getattr(level, "level_id", None),
+            "exit",
+            {
+                "hub": hub_target,
+                "farewell": farewell,
+                "aliases": exit_profile.get("aliases") if isinstance(exit_profile, dict) else None,
+            },
+        )
+
+        exit_summary: Dict[str, Any] = {
+            "hub": hub_target,
+            "farewell": farewell,
+        }
+        if isinstance(exit_profile, dict) and exit_profile.get("aliases"):
+            exit_summary["aliases"] = list(exit_profile["aliases"])
+
+        return {"mc": mc_payload, "exit_summary": exit_summary}
 
     # ============================================================
     # 状态查询
@@ -120,7 +198,14 @@ class StoryEngine:
                 if player_id in self.players and self.players[player_id].get("level")
                 else None
             ),
+            "exit_profile": self.get_exit_profile(player_id) if player_id else None,
         }
+
+    def get_exit_profile(self, player_id: str) -> Optional[Dict[str, Any]]:
+        profile = self.players.get(player_id, {}).get("exit_profile")
+        if isinstance(profile, dict):
+            return dict(profile)
+        return None
 
     def _ensure_player(self, player_id: str):
         if player_id not in self.players:
@@ -261,6 +346,60 @@ class StoryEngine:
         return {"mc": stage_mc}
 
     # ============================================================
+    # Scene metadata helpers
+    # ============================================================
+    def _attach_scene_metadata(self, mc_payload: Dict[str, Any], level: Level) -> None:
+        """Enrich world patches with scene metadata consumed by the plugin."""
+
+        if not isinstance(mc_payload, dict):
+            return
+
+        existing = mc_payload.get("_scene")
+        scene_meta = dict(existing) if isinstance(existing, dict) else {}
+
+        level_id = getattr(level, "level_id", None)
+        if level_id and "level_id" not in scene_meta:
+            scene_meta["level_id"] = level_id
+
+        if "scene" not in scene_meta:
+            scene_meta["scene"] = True
+
+        scene_cfg = getattr(level, "scene", None)
+        scene_world = getattr(scene_cfg, "world", None) if scene_cfg else None
+        if scene_world and "scene_world" not in scene_meta:
+            scene_meta["scene_world"] = scene_world
+
+        radius = self._estimate_scene_radius(mc_payload)
+        if radius is not None and "radius" not in scene_meta:
+            scene_meta["radius"] = radius
+
+        scene_meta["ts"] = time.time()
+
+        if scene_meta:
+            mc_payload["_scene"] = scene_meta
+
+    def _estimate_scene_radius(self, mc_payload: Dict[str, Any]) -> Optional[float]:
+        """Best-effort radius guess so the client can size cleanup triggers."""
+
+        build = mc_payload.get("build")
+        if isinstance(build, dict):
+            for key in ("radius", "size"):
+                value = build.get(key)
+                if isinstance(value, (int, float)):
+                    return float(value)
+
+        build_multi = mc_payload.get("build_multi")
+        if isinstance(build_multi, list):
+            for entry in build_multi:
+                if not isinstance(entry, dict):
+                    continue
+                for key in ("radius", "size"):
+                    value = entry.get(key)
+                    if isinstance(value, (int, float)):
+                        return float(value)
+        return None
+
+    # ============================================================
     # 加载指定关卡（带剧情舞台 + 安全传送）
     # ============================================================
     def load_level_for_player(self, player_id: str, level_id: str) -> Dict[str, Any]:
@@ -283,6 +422,19 @@ class StoryEngine:
         p["ended"] = False
         p["messages"].clear()
         p["nodes"].clear()
+
+        exit_profile = self._build_exit_profile(level)
+        if exit_profile:
+            p["exit_profile"] = exit_profile
+        else:
+            p.pop("exit_profile", None)
+
+        self.graph.update_trajectory(
+            player_id,
+            level.level_id,
+            "enter",
+            {"title": level.title},
+        )
 
         # minimap：进度记录 + 点亮节点
         self.minimap.enter_level(player_id, level_id)
@@ -322,11 +474,11 @@ class StoryEngine:
         # 临时存储world_patch的配置
         world_patch_mc = dict(base_mc)
         temp_mc = {}
-        
+
         # 先合并场景和舞台
         merge_mc(temp_mc, scene_mc)
         merge_mc(temp_mc, stage_patch.get("mc", {}))
-        
+
         # 最后用world_patch覆盖（保留world_patch中的所有配置）
         merge_mc(temp_mc, world_patch_mc)
         base_mc = temp_mc
@@ -349,16 +501,17 @@ class StoryEngine:
             "tell": f"进入剧情：《{level.title}》",
         }
         merge_mc(base_mc, safe_tp_mc)
+        self._attach_scene_metadata(base_mc, level)
 
         base_patch["mc"] = base_mc
-        
+
         # ---------------------------------------------
         # 🤖 注册NPC行为到引擎
         # ---------------------------------------------
         spawn_data = base_mc.get("spawn")
         if spawn_data and "behaviors" in spawn_data:
             npc_engine.register_npc(level_id, spawn_data)
-        
+
         # ============================================================
         # Phase 1.5 stubs
         # ============================================================
@@ -373,6 +526,8 @@ class StoryEngine:
             first = beats[0]
             beat_id = getattr(first, "id", None) or "beat_0"
             self.advance_with_beat(player_id, beat_id)
+
+        self._prepare_phase2_state(player_id, level)
 
         return base_patch
 
@@ -397,6 +552,86 @@ class StoryEngine:
             0, {"role": "system", "content": base_prompt}
         )
         p["level_loaded"] = True
+
+    def _build_exit_profile(self, level: Level) -> Optional[Dict[str, Any]]:
+        exit_cfg = getattr(level, "exit", None)
+        if not exit_cfg:
+            return None
+
+        aliases: List[str] = []
+        alias_source = getattr(exit_cfg, "phrase_aliases", None)
+        if isinstance(alias_source, (list, tuple)):
+            aliases = [alias.strip() for alias in alias_source if isinstance(alias, str) and alias.strip()]
+        elif isinstance(alias_source, str) and alias_source.strip():
+            aliases = [token.strip() for token in alias_source.split("|") if token.strip()]
+
+        if not aliases:
+            aliases = list(self.DEFAULT_EXIT_ALIASES)
+        else:
+            lower_aliases = {alias.lower() for alias in aliases}
+            for default_alias in self.DEFAULT_EXIT_ALIASES:
+                if default_alias.lower() not in lower_aliases:
+                    aliases.append(default_alias)
+
+        profile: Dict[str, Any] = {
+            "level_id": getattr(level, "level_id", None),
+            "aliases": aliases,
+            "return_spawn": getattr(exit_cfg, "return_spawn", None),
+        }
+
+        farewell = getattr(exit_cfg, "farewell", None)
+        if isinstance(farewell, str) and farewell.strip():
+            profile["farewell"] = farewell.strip()
+
+        teleport_cfg = getattr(exit_cfg, "teleport", None)
+        target: Optional[Dict[str, Any]] = None
+
+        if teleport_cfg:
+            x = getattr(teleport_cfg, "x", None)
+            y = getattr(teleport_cfg, "y", None)
+            z = getattr(teleport_cfg, "z", None)
+            if None not in (x, y, z):
+                target = {
+                    "world": getattr(teleport_cfg, "world", None)
+                    or getattr(getattr(level, "scene", None), "world", None),
+                    "x": float(x),
+                    "y": float(y),
+                    "z": float(z),
+                    "yaw": float(getattr(teleport_cfg, "yaw", 0.0) or 0.0),
+                    "pitch": float(getattr(teleport_cfg, "pitch", 0.0) or 0.0),
+                }
+
+        if not target:
+            spawn_name = getattr(exit_cfg, "return_spawn", None)
+            if spawn_name and spawn_name in self.DEFAULT_RETURN_SPAWNS:
+                target = dict(self.DEFAULT_RETURN_SPAWNS[spawn_name])
+
+        if not target:
+            default_target = self.DEFAULT_RETURN_SPAWNS.get("KunmingLakeHub")
+            if default_target:
+                target = dict(default_target)
+
+        if target:
+            profile["teleport"] = target
+
+        return profile
+
+    def _resolve_exit_target(self, exit_profile: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not exit_profile:
+            return self.DEFAULT_RETURN_SPAWNS.get("KunmingLakeHub")
+
+        if isinstance(exit_profile, dict):
+            teleport = exit_profile.get("teleport")
+            if isinstance(teleport, dict) and teleport:
+                return teleport
+
+            spawn_name = exit_profile.get("return_spawn")
+            if isinstance(spawn_name, str):
+                resolved = self.DEFAULT_RETURN_SPAWNS.get(spawn_name)
+                if resolved:
+                    return resolved
+
+        return self.DEFAULT_RETURN_SPAWNS.get("KunmingLakeHub")
 
     # ============================================================
     # 触发区（v2：暂时禁用螺旋触发器，避免随机传送）
@@ -447,6 +682,8 @@ class StoryEngine:
         if p["ended"]:
             return None, None, {"mc": {"tell": "本关已结束。"}}
 
+        beat_result = self._process_beat_progress(player_id, world_state, action)
+
         # 记录玩家发言
         say = action.get("say")
         if isinstance(say, str) and say.strip():
@@ -489,7 +726,32 @@ class StoryEngine:
             p["tree_state"] = {"last_option": option, "ts": time.time()}
 
         # 记录 AI 节点
-        if node:
+        pending_nodes = p.setdefault("pending_nodes", [])
+
+        primary_node = beat_result.get("node")
+
+        if primary_node and node:
+            pending_nodes.append(node)
+        elif not primary_node:
+            primary_node = node
+
+        if primary_node:
+            node = primary_node
+            try:
+                pending_nodes.remove(primary_node)
+            except ValueError:
+                pass
+            p["nodes"].append(primary_node)
+            p["messages"].append(
+                {
+                    "role": "assistant",
+                    "content": f"{primary_node.get('title', '')}\n{primary_node.get('text', '')}".strip(),
+                }
+            )
+            cur_level = p["level"].level_id
+            self.minimap.mark_unlocked(player_id, cur_level)
+        elif pending_nodes:
+            node = pending_nodes.pop(0)
             p["nodes"].append(node)
             p["messages"].append(
                 {
@@ -499,6 +761,11 @@ class StoryEngine:
             )
             cur_level = p["level"].level_id
             self.minimap.mark_unlocked(player_id, cur_level)
+
+        patch = self._merge_patch(beat_result.get("world_patch"), patch)
+        for pending in p.get("pending_patches", []):
+            patch = self._merge_patch(pending, patch)
+        p["pending_patches"] = []
 
         # 结束标记
         if mc_patch.get("ending"):
@@ -511,7 +778,358 @@ class StoryEngine:
         else:
             p["last_time"] = now
 
+        quest_updates = quest_runtime.check_completion(p["level"], player_id)
+        if quest_updates:
+            patch = self._merge_patch(quest_updates.get("world_patch"), patch)
+            additional_nodes = quest_updates.get("nodes") or []
+            if additional_nodes:
+                p.setdefault("pending_nodes", []).extend(additional_nodes)
+            completed = quest_updates.get("summary")
+            if completed:
+                p.setdefault("pending_nodes", []).append(completed)
+
         return option, node, patch
+
+    # ============================================================
+    # Phase 2 helpers (private)
+    # ============================================================
+    def _prepare_phase2_state(self, player_id: str, level: Level) -> None:
+        player_state = self.players[player_id]
+        player_state.pop("pending_nodes", None)
+        player_state.pop("pending_patches", None)
+
+        beats = list(getattr(level, "beats", []) or [])
+        beat_ids: List[str] = []
+        beats_by_id: Dict[str, Any] = {}
+        for idx, beat in enumerate(beats):
+            beat_id = getattr(beat, "id", None) or f"beat_{idx:02d}"
+            beat_ids.append(beat_id)
+            beats_by_id[beat_id] = beat
+        player_state["beat_state"] = {
+            "order": beat_ids,
+            "index": 0,
+            "by_id": beats_by_id,
+            "completed": set(),
+            "event_map": {},
+        }
+
+        self.event_manager.unregister(player_id)
+
+        quest_runtime.load_level_tasks(level, player_id)
+
+        for beat_id in beat_ids:
+            beat = beats_by_id.get(beat_id)
+            if beat:
+                self._register_trigger(player_id, level, beat_id, beat)
+
+        initial_updates = self._auto_trigger_beats(player_id, level)
+        for update in initial_updates:
+            self._queue_beat_update(player_id, update)
+
+    def _register_trigger(self, player_id: str, level: Level, beat_id: str, beat: Any) -> None:
+        trigger_spec = self._parse_trigger(getattr(beat, "trigger", None))
+
+        if trigger_spec["kind"] in {"near", "interact", "item_use"}:
+            definition = {"type": trigger_spec["kind"]}
+            if trigger_spec["value"]:
+                key, value = self._parse_key_value(trigger_spec["value"])
+                if key:
+                    definition[key] = value
+                else:
+                    if trigger_spec["kind"] == "near":
+                        definition["entity"] = trigger_spec["value"]
+                    elif trigger_spec["kind"] == "interact":
+                        definition["targets"] = [trigger_spec["value"]]
+                    elif trigger_spec["kind"] == "item_use":
+                        definition["items"] = [trigger_spec["value"]]
+
+            event_id = f"{player_id}:{beat_id}"
+
+            def _callback(payload: Dict[str, Any], pid: str = player_id, bid: str = beat_id) -> None:
+                normalized = {
+                    "event_type": payload.get("type"),
+                    "target": payload.get("config", {}).get("target")
+                    or payload.get("config", {}).get("entity")
+                    or payload.get("config", {}).get("items"),
+                    "meta": payload.get("config", {}),
+                }
+                quest_runtime.record_event(pid, normalized)
+                update = self._activate_beat(pid, bid, level, source="event_manager", context={"payload": payload})
+                if update:
+                    self._queue_beat_update(pid, update)
+
+            self.event_manager.register(player_id, event_id, definition, _callback)
+            state = self.players[player_id].setdefault("beat_state", {})
+            state.setdefault("event_map", {})[event_id] = beat_id
+
+    def _auto_trigger_beats(self, player_id: str, level: Level) -> List[Dict[str, Any]]:
+        updates: List[Dict[str, Any]] = []
+        while True:
+            beat = self._current_pending_beat(player_id)
+            if not beat:
+                break
+            parsed = self._parse_trigger(getattr(beat, "trigger", None))
+            if parsed["kind"] in {"auto", "on_enter", "immediate", ""}:
+                beat_state = self.players[player_id].setdefault("beat_state", {})
+                beat_id = next((identifier for identifier, candidate in (beat_state.get("by_id") or {}).items() if candidate is beat), None)
+                if beat_id is None:
+                    beat_id = getattr(beat, "id", None) or ""
+                update = self._activate_beat(player_id, beat_id, level, source="auto", chain=False)
+                if update:
+                    updates.append(update)
+            else:
+                break
+        return updates
+
+    def _current_pending_beat(self, player_id: str) -> Optional[Any]:
+        player_state = self.players.get(player_id, {})
+        beat_state = player_state.get("beat_state") or {}
+        order = beat_state.get("order") or []
+        completed = beat_state.get("completed") or set()
+        for beat_id in order:
+            if beat_id not in completed:
+                return beat_state.get("by_id", {}).get(beat_id)
+        return None
+
+    def _process_beat_progress(
+        self, player_id: str, world_state: Dict[str, Any], action: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        player_state = self.players[player_id]
+        beat_state = player_state.get("beat_state") or {}
+        if not beat_state.get("order"):
+            return {}
+
+        updates: List[Dict[str, Any]] = []
+
+        triggered_ids = self.event_manager.evaluate(player_id, action, world_state)
+        for event_id in triggered_ids:
+            beat_id = beat_state.get("event_map", {}).get(event_id)
+            if beat_id:
+                beat = beat_state.get("by_id", {}).get(beat_id)
+                if beat:
+                    updates.append(self._activate_beat(player_id, beat_id, self.players[player_id]["level"], source="event_manager"))
+
+        say = action.get("say")
+        if isinstance(say, str) and say.strip():
+            updates.extend(self._check_keyword_triggers(player_id, say))
+
+        result_patch: Dict[str, Any] = {}
+        node: Optional[Dict[str, Any]] = None
+        extra_nodes: List[Dict[str, Any]] = []
+
+        for update in updates:
+            if not update:
+                continue
+            result_patch = self._merge_patch(result_patch, update.get("world_patch"))
+            primary = update.get("node")
+            if primary and not node:
+                node = primary
+            elif primary:
+                extra_nodes.append(primary)
+            extra_nodes.extend(update.get("extra_nodes", []))
+            self._queue_beat_update(player_id, update, include_primary=False, include_patch=False)
+
+        return {
+            "world_patch": result_patch,
+            "node": node,
+            "extra_nodes": extra_nodes,
+        }
+
+    def _check_keyword_triggers(self, player_id: str, say_text: str) -> List[Dict[str, Any]]:
+        player_state = self.players[player_id]
+        beat_state = player_state.get("beat_state") or {}
+        if not beat_state:
+            return []
+
+        lowered = say_text.lower()
+        updates: List[Dict[str, Any]] = []
+        for beat_id in beat_state.get("order", []):
+            if beat_id in beat_state.get("completed", set()):
+                continue
+            beat = beat_state.get("by_id", {}).get(beat_id)
+            if not beat:
+                continue
+            parsed = self._parse_trigger(getattr(beat, "trigger", None))
+            if parsed["kind"] in {"keyword", "say", "command"}:
+                values = [value.strip() for value in (parsed["value"].split("|") if parsed["value"] else []) if value.strip()]
+                if not values:
+                    continue
+                if any(value.lower() in lowered for value in values):
+                    updates.append(self._activate_beat(player_id, beat_id, self.players[player_id]["level"], source="keyword"))
+
+        return updates
+
+    def _activate_beat(
+        self,
+        player_id: str,
+        beat_id: str,
+        level: Level,
+        *,
+        source: str,
+        context: Optional[Dict[str, Any]] = None,
+        chain: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        _ = context  # context reserved for future bridge metadata
+        player_state = self.players[player_id]
+        beat_state = player_state.get("beat_state") or {}
+        if not beat_state:
+            return None
+
+        beats_by_id = beat_state.get("by_id", {})
+        beat = beats_by_id.get(beat_id)
+        if not beat:
+            return None
+
+        completed = beat_state.setdefault("completed", set())
+        if beat_id in completed:
+            return None
+
+        completed.add(beat_id)
+        self.advance_with_beat(player_id, beat_id)
+
+        event_id = f"{player_id}:{beat_id}"
+        self.event_manager.unregister(player_id, event_id)
+
+        beat_patch = self._resolve_scene_patch(level, beat)
+        quest_update = quest_runtime.issue_tasks_on_beat(level, player_id, {"id": beat_id})
+        rule_refs = list(getattr(beat, "rule_refs", []) or [])
+        if rule_refs:
+            quest_runtime.activate_rule_refs(level, player_id, rule_refs)
+
+        extra_nodes = []
+        if quest_update and quest_update.get("nodes"):
+            extra_nodes.extend(quest_update["nodes"])
+
+        node = {
+            "title": f"剧情推进 · {beat_id}",
+            "text": f"触发来源：{source}",
+            "type": "beat",
+            "beat_id": beat_id,
+        }
+
+        mc_patch = beat_patch.setdefault("mc", {})
+        scene_meta: Dict[str, Any] = {
+            "beat_id": beat_id,
+            "source": source,
+            "ts": time.time(),
+            "level_id": getattr(level, "level_id", None),
+        }
+        if rule_refs:
+            scene_meta["rule_refs"] = list(rule_refs)
+        mc_patch.setdefault("_scene", scene_meta)
+
+        if chain:
+            chained_updates = self._auto_trigger_beats(player_id, level)
+            for chained in chained_updates:
+                beat_patch = self._merge_patch(chained.get("world_patch"), beat_patch)
+                chained_node = chained.get("node")
+                if chained_node:
+                    extra_nodes.append(chained_node)
+                extra_nodes.extend(chained.get("extra_nodes", []))
+
+        return {
+            "world_patch": beat_patch,
+            "node": node,
+            "extra_nodes": extra_nodes,
+        }
+
+    def _queue_beat_update(
+        self,
+        player_id: str,
+        update: Optional[Dict[str, Any]],
+        *,
+        include_primary: bool = True,
+        include_patch: bool = True,
+    ) -> None:
+        if not update:
+            return
+
+        player_state = self.players[player_id]
+        if include_patch and update.get("world_patch"):
+            player_state.setdefault("pending_patches", []).append(update["world_patch"])
+
+        nodes_to_store: List[Dict[str, Any]] = []
+        if include_primary and update.get("node"):
+            nodes_to_store.append(update["node"])
+        nodes_to_store.extend(update.get("extra_nodes", []) or [])
+
+        if nodes_to_store:
+            player_state.setdefault("pending_nodes", []).extend(nodes_to_store)
+
+    def _resolve_scene_patch(self, level: Level, beat: Any) -> Dict[str, Any]:
+        scene_key = getattr(beat, "scene_patch", None)
+        patches = getattr(level, "scene_patches", None)
+        if isinstance(patches, dict) and scene_key in patches:
+            candidate = patches.get(scene_key)
+            if isinstance(candidate, dict):
+                return dict(candidate)
+        if scene_key:
+            return {"mc": {"tell": f"{level.title} · 场景变化：{scene_key}"}}
+        return {}
+
+    @staticmethod
+    def _merge_patch(primary: Optional[Dict[str, Any]], secondary: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        if not primary and not secondary:
+            return {}
+        if not secondary:
+            return dict(primary or {})
+        if not primary:
+            return dict(secondary or {})
+
+        merged = dict(secondary or {})
+        for key, value in (primary or {}).items():
+            if key == "mc" and isinstance(value, dict):
+                existing = merged.get("mc")
+                if isinstance(existing, dict):
+                    merged["mc"] = {**existing, **value}
+                else:
+                    merged["mc"] = dict(value)
+            else:
+                merged[key] = value
+        return merged
+
+    @staticmethod
+    def _parse_trigger(raw: Optional[str]) -> Dict[str, str]:
+        if not raw:
+            return {"kind": "", "value": ""}
+        token = raw.strip().lower()
+        if ":" in token:
+            kind, value = token.split(":", 1)
+            return {"kind": kind.strip(), "value": value.strip()}
+        return {"kind": token, "value": ""}
+
+    @staticmethod
+    def _parse_key_value(raw: str) -> Tuple[Optional[str], Optional[str]]:
+        if "=" not in raw:
+            return None, None
+        key, value = raw.split("=", 1)
+        return key.strip(), value.strip()
+
+    def _handle_rule_catalyst(self, player_id: str, payload: Dict[str, Any]) -> None:
+        beat_state = self.players.get(player_id, {}).get("beat_state") or {}
+        matches: List[str] = []
+        event_type = str(payload.get("event_type") or "").lower()
+        quest_event = str(payload.get("payload", {}).get("quest_event") or "").lower()
+
+        for beat_id, beat in (beat_state.get("by_id") or {}).items():
+            if beat_id in (beat_state.get("completed") or set()):
+                continue
+            refs = [ref.lower() for ref in getattr(beat, "rule_refs", []) or []]
+            if not refs:
+                continue
+            if event_type and event_type in refs:
+                matches.append(beat_id)
+                continue
+            if quest_event and quest_event in refs:
+                matches.append(beat_id)
+
+        level = self.players.get(player_id, {}).get("level")
+        if not level:
+            return
+        for bid in matches:
+            update = self._activate_beat(player_id, bid, level, source="rule_event", context=payload)
+            if update:
+                self._queue_beat_update(player_id, update)
 
     # ============================================================
     # 自由模式关卡（无正式 level 时的 fallback）

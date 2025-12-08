@@ -3,7 +3,8 @@
 from collections import deque
 import json
 import os
-from typing import Dict, List, Optional
+import time
+from typing import Any, Dict, List, Optional
 
 
 class StoryGraph:
@@ -23,6 +24,7 @@ class StoryGraph:
         self.level_dir = level_dir
         self.levels: Dict[str, dict] = {}
         self.edges: Dict[str, List[str]] = {}   # 邻接表
+        self.trajectory: Dict[str, List[Dict[str, Any]]] = {}
         self._load_levels()
         self._build_linear_graph()
 
@@ -108,3 +110,19 @@ class StoryGraph:
 
     def all_levels(self) -> List[str]:
         return list(self.levels.keys())
+
+    # ================= Phase 5: 记录剧情轨迹 =================
+    def update_trajectory(self, player_id: str, level_id: Optional[str], action: str,
+                          meta: Optional[Dict[str, Any]] = None) -> None:
+        """Append a trajectory entry for a player's storyline."""
+
+        if not player_id:
+            return
+
+        entry = {
+            "level": level_id,
+            "action": action,
+            "meta": meta or {},
+            "ts": time.time(),
+        }
+        self.trajectory.setdefault(player_id, []).append(entry)

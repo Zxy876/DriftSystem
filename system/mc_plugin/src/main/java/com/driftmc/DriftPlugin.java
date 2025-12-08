@@ -1,5 +1,7 @@
 package com.driftmc;
 
+import java.util.logging.Level;
+
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.PluginCommand;
@@ -22,6 +24,7 @@ import com.driftmc.commands.custom.CmdTeleport;
 import com.driftmc.commands.custom.CmdTime;
 import com.driftmc.dsl.DslExecutor;
 import com.driftmc.dsl.DslRegistry;
+import com.driftmc.exit.ExitIntentDetector;
 import com.driftmc.intent.IntentRouter;
 import com.driftmc.intent2.IntentDispatcher2;
 import com.driftmc.intent2.IntentRouter2;
@@ -29,6 +32,9 @@ import com.driftmc.listeners.NearbyNPCListener;
 import com.driftmc.listeners.PlayerChatListener;
 import com.driftmc.listeners.PlayerJoinListener;
 import com.driftmc.npc.NPCManager;
+import com.driftmc.scene.RuleEventBridge;
+import com.driftmc.scene.RuleEventListener;
+import com.driftmc.scene.SceneAwareWorldPatchExecutor;
 import com.driftmc.session.PlayerSessionManager;
 import com.driftmc.story.StoryCreativeManager;
 import com.driftmc.story.StoryManager;
@@ -38,7 +44,7 @@ import com.driftmc.world.WorldPatchExecutor;
 public class DriftPlugin extends JavaPlugin {
 
     private BackendClient backend;
-    private WorldPatchExecutor worldPatcher;
+    private SceneAwareWorldPatchExecutor worldPatcher;
     private StoryManager storyManager;
     private StoryCreativeManager storyCreativeManager;
     private TutorialManager tutorialManager;
@@ -49,6 +55,8 @@ public class DriftPlugin extends JavaPlugin {
     private IntentRouter intentRouter;
     private IntentRouter2 intentRouter2;
     private IntentDispatcher2 intentDispatcher2;
+    private RuleEventBridge ruleEventBridge;
+    private ExitIntentDetector exitIntentDetector;
 
     @Override
     public void onEnable() {
@@ -63,11 +71,11 @@ public class DriftPlugin extends JavaPlugin {
             url = url.substring(0, url.length() - 1);
         }
 
-        getLogger().info("[DriftPlugin] 后端地址: " + url);
+        getLogger().log(Level.INFO, "[DriftPlugin] 后端地址: {0}", url);
 
         // 初始化核心组件
         this.backend = new BackendClient(url);
-        this.worldPatcher = new WorldPatchExecutor(this);
+        this.worldPatcher = new SceneAwareWorldPatchExecutor(this);
         this.storyManager = new StoryManager(this, backend);
         this.storyCreativeManager = new StoryCreativeManager(this);
         this.tutorialManager = new TutorialManager(this, backend);
@@ -76,15 +84,17 @@ public class DriftPlugin extends JavaPlugin {
         this.dslRegistry = DslRegistry.createDefault(worldPatcher, npcManager, backend);
         this.dslExecutor = new DslExecutor(dslRegistry);
         this.intentRouter = new IntentRouter(this, backend, dslExecutor, npcManager, worldPatcher, sessionManager);
+        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher);
 
         // 意图系统 (新版多意图管线)
         this.intentRouter2 = new IntentRouter2(this, backend);
         this.intentDispatcher2 = new IntentDispatcher2(this, backend, worldPatcher);
         this.intentDispatcher2.setTutorialManager(tutorialManager);
+        this.exitIntentDetector = new ExitIntentDetector(this, backend, worldPatcher);
 
         // 注册聊天监听器（核心：自然语言驱动）
         Bukkit.getPluginManager().registerEvents(
-            new PlayerChatListener(this, intentRouter2, intentDispatcher2, tutorialManager),
+            new PlayerChatListener(this, intentRouter2, intentDispatcher2, tutorialManager, ruleEventBridge, exitIntentDetector),
             this);
 
         // 注册玩家加入/离开监听器（教学系统）
@@ -95,8 +105,11 @@ public class DriftPlugin extends JavaPlugin {
         // 注册剧情创造管理器监听器
         Bukkit.getPluginManager().registerEvents(storyCreativeManager, this);
 
+        // 注册通用规则事件监听器
+        Bukkit.getPluginManager().registerEvents(new RuleEventListener(ruleEventBridge), this);
+
         // 注册 NPC 临近监听（触发老版 IntentRouter）
-        Bukkit.getPluginManager().registerEvents(new NearbyNPCListener(npcManager, intentRouter), this);
+        Bukkit.getPluginManager().registerEvents(new NearbyNPCListener(npcManager, intentRouter, ruleEventBridge), this);
 
         // 注册命令
         registerCommand("drift", new DriftCommand(backend, storyManager, worldPatcher, tutorialManager));
@@ -118,7 +131,7 @@ public class DriftPlugin extends JavaPlugin {
         getLogger().info("   DriftSystem / 心悦宇宙");
         getLogger().info("   完全自然语言驱动的AI冒险系统");
         getLogger().info("======================================");
-        getLogger().info("✓ 后端连接: " + url);
+        getLogger().log(Level.INFO, "✓ 后端连接: {0}", url);
         getLogger().info("✓ 自然语言解析: 已启用");
         getLogger().info("✓ 世界动态渲染: 已启用");
         getLogger().info("✓ 剧情引擎: 已就绪");
@@ -141,6 +154,10 @@ public class DriftPlugin extends JavaPlugin {
             Bukkit.getOnlinePlayers().forEach(tutorialManager::cleanupPlayer);
         }
 
+        if (worldPatcher != null) {
+            worldPatcher.shutdown();
+        }
+
         getLogger().info("======================================");
         getLogger().info("   DriftSystem 已关闭");
         getLogger().info("======================================");
@@ -149,7 +166,7 @@ public class DriftPlugin extends JavaPlugin {
     private void registerCommand(String name, CommandExecutor executor) {
         PluginCommand command = getCommand(name);
         if (command == null) {
-            getLogger().severe("plugin.yml 未定义命令: " + name);
+            getLogger().log(Level.SEVERE, "plugin.yml 未定义命令: {0}", name);
             return;
         }
         command.setExecutor(executor);
