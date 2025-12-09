@@ -1,33 +1,116 @@
-# PHASE RUNNER — Autonomous AI Development Pipeline
 
-## Objective
-Use Copilot to execute each phase incrementally based on STATE.md and /phases/*.md.
+PHASE RUNNER — Autonomous AI Development Pipeline (v2.0)
 
-## Rules
-1. STATE.md 是唯一判断当前阶段的来源。
-2. 读取 CURRENT_PHASE → 加载对应 /phases/phase_x.md。
-3. 执行前必须输出 PLAN（entry conditions + diff skeleton summary）。
-4. 满足 entry conditions 才能执行，否则停止。
-5. 根据 pseudo-diff 修改项目（真实代码变更）。
-6. 汇总 diff。
-7. 在 STATE.md 写 Success Flag。
-8. 将 Current Phase 更新为 Next Phase。
-9. 停止并等待开发者输入 “继续下一阶段”。
+Objective
 
-## Execution Prompt (Developer Issues This)
-"Run Phase Runner"
+让 GitHub Copilot 能够自动读取 STATE.md 和 /phases/*.md，并依序执行任意数量的阶段（Phase 0 → ∞），直到全部完成。
 
-## Internal Execution Steps
-1. Read /docs/STATE.md → determine CURRENT_PHASE.
-2. Load /phases/phase_<CURRENT>.md.
-3. Validate entry conditions.
-4. Generate PLAN summary.
-5. Apply pseudo-diff to produce real code changes.
-6. Show unified diff.
-7. Update STATE.md (success flag + next phase).
-8. Stop with message:
-   "Phase <x> complete. Type 'continue' to move to next phase."
+⸻
 
-## End
-If CURRENT_PHASE = 5 and PHASE_5_COMPLETE = true → output:
-"DriftSystem universe is fully built."
+Core Principles
+	1.	STATE.md 是唯一的世界状态来源。
+	2.	PHASE_RUNNER 不硬编码阶段数量，而是依赖以下方式判断：
+	•	当前阶段对应的 success flag 是否存在
+	•	/phases/phase_<N>.md 文件是否存在
+	3.	如下一阶段存在 → 自动进入下一阶段。
+
+⸻
+
+Phase Numbering Rules
+	•	阶段文件必须放在：
+/phases/phase_0.md
+/phases/phase_1.md
+…
+/phases/phase_N.md
+	•	STATE.md 必须包含：
+	•	当前阶段编号（CURRENT_PHASE = X）
+	•	每阶段成功 Flag（PHASE_X_COMPLETE = true）
+
+⸻
+
+Execution Rules（Copilot 必须遵守）
+
+Rule 1 — 读取当前状态
+	1.	读取 /docs/STATE.md
+	2.	找到字段：
+
+CURRENT_PHASE = X
+
+
+
+Rule 2 — 加载对应阶段文件
+
+加载：
+
+/phases/phase_X.md
+
+如果不存在该文件 → 自动结束执行并提示：No further phases.
+
+Rule 3 — 执行前必须输出 PLAN
+
+PLAN 必须包含：
+	•	Entry Conditions（需要哪些 success flag）
+	•	Expected code areas（预计改动哪些文件）
+	•	Risk summary（若有）
+	•	Next-phase expectation（成功后的切换方向）
+
+Rule 4 — 校验 Entry Conditions
+	•	如果 STATE.md 不满足 entry conditions：
+→ 停止并告知需要补充状态。
+
+Rule 5 — 执行 Phase
+	1.	根据阶段提示词生成 pseudo-diff
+	2.	将 pseudo-diff 转换成真实代码修改
+	3.	展示 unified diff（忽略长文件）
+
+Rule 6 — 更新 STATE.md
+
+必须更新以下内容：
+	•	PHASE_X_COMPLETE = true
+	•	CURRENT_PHASE = X + 1
+	•	更新 Next Actions / Risk / Progress
+
+Rule 7 — 停止，等待用户输入
+
+当阶段结束必须输出：
+
+Phase X complete. Type 'continue' to move to next phase.
+
+用户输入 continue 后才能继续执行下一阶段。
+
+⸻
+
+Termination Rule（自动扩展支持）
+
+如果下一个阶段文件不存在：
+
+/phases/phase_<X+1>.md not found.
+All executable phases are complete.
+DriftSystem universe remains extensible — add new phase_x.md to continue evolution.
+
+
+⸻
+
+Developer Instruction
+
+开发者只需输入：
+
+Run Phase Runner
+
+如要继续下阶段：
+
+continue
+
+
+⸻
+
+End
+
+PHASE RUNNER v2.0 支持：
+	•	无限阶段扩展
+	•	自我推进
+	•	自动修改代码
+	•	自动更新 STATE.md
+	•	自动停止/继续
+	•	完整兼容你未来所有想扩展的能力
+
