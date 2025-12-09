@@ -28,6 +28,7 @@ import com.driftmc.dsl.DslExecutor;
 import com.driftmc.dsl.DslRegistry;
 import com.driftmc.exit.ExitIntentDetector;
 import com.driftmc.hud.QuestLogHud;
+import com.driftmc.hud.dialogue.DialoguePanel;
 import com.driftmc.hud.RecommendationHud;
 import com.driftmc.intent.IntentRouter;
 import com.driftmc.intent2.IntentDispatcher2;
@@ -63,6 +64,7 @@ public class DriftPlugin extends JavaPlugin {
     private ExitIntentDetector exitIntentDetector;
     private RecommendationHud recommendationHud;
     private QuestLogHud questLogHud;
+    private DialoguePanel dialoguePanel;
 
     @Override
     public void onEnable() {
@@ -81,17 +83,18 @@ public class DriftPlugin extends JavaPlugin {
 
         // 初始化核心组件
         this.backend = new BackendClient(url);
-        this.worldPatcher = new SceneAwareWorldPatchExecutor(this);
         this.storyManager = new StoryManager(this, backend);
         this.storyCreativeManager = new StoryCreativeManager(this);
         this.tutorialManager = new TutorialManager(this, backend);
         this.sessionManager = new PlayerSessionManager();
-        this.npcManager = new NPCManager(this, sessionManager);
+        this.npcManager = new NPCManager(this);
+        this.worldPatcher = new SceneAwareWorldPatchExecutor(this, npcManager);
         this.dslRegistry = DslRegistry.createDefault(worldPatcher, npcManager, backend);
         this.dslExecutor = new DslExecutor(dslRegistry);
         this.intentRouter = new IntentRouter(this, backend, dslExecutor, npcManager, worldPatcher, sessionManager);
         this.questLogHud = new QuestLogHud(this, backend);
-        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher, questLogHud);
+        this.dialoguePanel = new DialoguePanel(this);
+        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher, questLogHud, dialoguePanel);
         this.recommendationHud = new RecommendationHud(this, backend, storyManager);
 
         // 意图系统 (新版多意图管线)
@@ -99,6 +102,7 @@ public class DriftPlugin extends JavaPlugin {
         this.intentDispatcher2 = new IntentDispatcher2(this, backend, worldPatcher);
         this.intentDispatcher2.setTutorialManager(tutorialManager);
         this.intentDispatcher2.setQuestLogHud(questLogHud);
+        this.intentDispatcher2.setDialoguePanel(dialoguePanel);
         this.exitIntentDetector = new ExitIntentDetector(this, backend, worldPatcher, recommendationHud, questLogHud);
 
         // 注册聊天监听器（核心：自然语言驱动）
@@ -116,6 +120,9 @@ public class DriftPlugin extends JavaPlugin {
 
         // 注册通用规则事件监听器
         Bukkit.getPluginManager().registerEvents(new RuleEventListener(ruleEventBridge), this);
+
+        // 注册 NPC 生命周期监听
+        Bukkit.getPluginManager().registerEvents(npcManager, this);
 
         // 注册 NPC 临近监听（触发老版 IntentRouter）
         Bukkit.getPluginManager().registerEvents(new NearbyNPCListener(npcManager, intentRouter, ruleEventBridge), this);

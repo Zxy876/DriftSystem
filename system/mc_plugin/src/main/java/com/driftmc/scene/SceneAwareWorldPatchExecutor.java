@@ -7,6 +7,7 @@ import java.util.Map;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import com.driftmc.npc.NPCManager;
 import com.driftmc.world.WorldPatchExecutor;
 
 /**
@@ -16,9 +17,9 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
 
     private final SceneLoader sceneLoader;
 
-    public SceneAwareWorldPatchExecutor(JavaPlugin plugin) {
+    public SceneAwareWorldPatchExecutor(JavaPlugin plugin, NPCManager npcManager) {
         super(plugin);
-        this.sceneLoader = new SceneLoader(plugin, this);
+        this.sceneLoader = new SceneLoader(plugin, this, npcManager);
     }
 
     @Override

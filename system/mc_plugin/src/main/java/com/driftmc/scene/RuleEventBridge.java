@@ -23,6 +23,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.backend.BackendClient;
 import com.driftmc.hud.QuestLogHud;
+import com.driftmc.hud.dialogue.DialoguePanel;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -58,17 +59,19 @@ public final class RuleEventBridge {
     private final BackendClient backend;
     private final SceneAwareWorldPatchExecutor worldPatcher;
     private final QuestLogHud questLogHud;
+    private final DialoguePanel dialoguePanel;
     private final Gson gson = new Gson();
     private final Map<String, Long> cooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, PlayerRuleState> playerStates = new ConcurrentHashMap<>();
     private long cooldownMillis = DEFAULT_COOLDOWN_MS;
 
     public RuleEventBridge(JavaPlugin plugin, BackendClient backend, SceneAwareWorldPatchExecutor worldPatcher,
-            QuestLogHud questLogHud) {
+            QuestLogHud questLogHud, DialoguePanel dialoguePanel) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.backend = Objects.requireNonNull(backend, "backend");
         this.worldPatcher = Objects.requireNonNull(worldPatcher, "worldPatcher");
         this.questLogHud = questLogHud;
+        this.dialoguePanel = dialoguePanel;
     }
 
     public void setCooldownMillis(long millis) {
@@ -339,6 +342,12 @@ public final class RuleEventBridge {
         }
 
         String type = safeString(node.get("type"));
+
+        if ("npc_dialogue".equalsIgnoreCase(type) && dialoguePanel != null) {
+            dialoguePanel.showDialogue(player, node);
+            return;
+        }
+
         QuestMessageStyle style = resolveStyle(type);
 
         String title = safeString(node.get("title"));

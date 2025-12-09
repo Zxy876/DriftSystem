@@ -292,26 +292,72 @@ class NPCBehaviorEngine:
         return context.strip()
 
     def _build_dialogue_node(self, dialogue: Any, meta: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        if isinstance(dialogue, str):
-            return {
-                "title": meta.get("dialogue_title", "NPC 对话"),
-                "text": dialogue,
-                "type": meta.get("dialogue_type", "npc_dialogue"),
-            }
+        meta = meta or {}
+
+        def _normalize_script(candidate: Any) -> Optional[List[Dict[str, Any]]]:
+            if not isinstance(candidate, list):
+                return None
+            script: List[Dict[str, Any]] = []
+            for entry in candidate:
+                if isinstance(entry, dict):
+                    script.append({k: v for k, v in entry.items() if v is not None})
+                elif isinstance(entry, str):
+                    script.append({"op": "narrate", "text": entry})
+            return script or None
+
+        def _normalize_choices(candidate: Any) -> Optional[List[Dict[str, Any]]]:
+            if not isinstance(candidate, list):
+                return None
+            choices: List[Dict[str, Any]] = []
+            for option in candidate:
+                if isinstance(option, dict):
+                    label = option.get("label")
+                    if label:
+                        choices.append({k: v for k, v in option.items() if v is not None})
+                elif isinstance(option, str):
+                    choices.append({"label": option})
+            return choices or None
+
+        node: Dict[str, Any]
         if isinstance(dialogue, dict):
-            return {
-                "title": dialogue.get("title") or meta.get("dialogue_title") or "NPC 对话",
-                "text": dialogue.get("text", ""),
-                "type": dialogue.get("type", "npc_dialogue"),
-            }
-        if isinstance(dialogue, list):
-            text = "\n".join(str(line) for line in dialogue)
-            return {
-                "title": meta.get("dialogue_title", "NPC 对话"),
-                "text": text,
-                "type": meta.get("dialogue_type", "npc_dialogue"),
-            }
-        return None
+            node = {k: v for k, v in dialogue.items() if v is not None}
+        elif isinstance(dialogue, list):
+            text = "\n".join(str(line) for line in dialogue if line is not None)
+            node = {"text": text}
+        elif isinstance(dialogue, str):
+            node = {"text": dialogue}
+        else:
+            return None
+
+        base_title = meta.get("dialogue_title") or node.get("title")
+        node["title"] = base_title or "NPC 对话"
+
+        base_type = node.get("type") or meta.get("dialogue_type") or "npc_dialogue"
+        node["type"] = base_type
+
+        script = _normalize_script(node.get("script")) or _normalize_script(meta.get("dialogue_script"))
+        if script:
+            node["script"] = script
+        else:
+            node.pop("script", None)
+
+        choices = _normalize_choices(node.get("choices")) or _normalize_choices(meta.get("dialogue_choices"))
+        if choices:
+            node["choices"] = choices
+        else:
+            node.pop("choices", None)
+
+        hint = meta.get("dialogue_hint")
+        if hint and "hint" not in node:
+            node["hint"] = hint
+
+        text = node.get("text")
+        if text is not None:
+            node["text"] = str(text)
+        elif "text" in node:
+            node.pop("text")
+
+        return node
 
     def _merge_world_patch(self, base: Optional[Dict[str, Any]], addition: Dict[str, Any]) -> Dict[str, Any]:
         if not addition:

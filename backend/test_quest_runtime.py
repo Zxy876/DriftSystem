@@ -253,8 +253,16 @@ class QuestRuntimeRuleEventTests(unittest.TestCase):
             metadata={
                 "dialogue": {
                     "title": "米娅",
-                    "text": "你好，旅行者。",
+                    "script": [
+                        {"op": "npc_say", "npc": "米娅", "text": "你好，旅行者。"},
+                        {"op": "narrate", "text": "她递来一杯热茶。"},
+                    ],
+                    "choices": [
+                        {"label": "谢谢", "command": "/thank"},
+                        {"label": "有任务吗？"},
+                    ],
                 },
+                "dialogue_hint": "可以继续询问她关于城镇的消息。",
                 "world_patch": {
                     "tell": "米娅向你微笑。",
                 },
@@ -280,6 +288,12 @@ class QuestRuntimeRuleEventTests(unittest.TestCase):
             None,
         )
         self.assertIsNotNone(dialogue_node, "Dialogue node should be emitted from NPC metadata")
+        script = dialogue_node.get("script")
+        self.assertIsNotNone(script, "Structured script should propagate to dialogue nodes")
+        self.assertEqual(script[0].get("npc"), "米娅")
+        self.assertIn("choices", dialogue_node, "Dialogue choices should be forwarded")
+        self.assertEqual(dialogue_node["choices"][0].get("label"), "谢谢")
+        self.assertEqual(dialogue_node.get("hint"), "可以继续询问她关于城镇的消息。")
         self.assertIn("commands", response, "NPC commands should be bubbled to caller")
         self.assertIn(
             "say {player} greeted Mia",

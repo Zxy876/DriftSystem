@@ -12,6 +12,7 @@ import org.bukkit.plugin.Plugin;
 
 import com.driftmc.backend.BackendClient;
 import com.driftmc.hud.QuestLogHud;
+import com.driftmc.hud.dialogue.DialoguePanel;
 import com.driftmc.tutorial.TutorialManager;
 import com.driftmc.world.WorldPatchExecutor;
 import com.google.gson.Gson;
@@ -31,6 +32,7 @@ public class IntentDispatcher2 {
     private final WorldPatchExecutor world;
     private TutorialManager tutorialManager;
     private QuestLogHud questLogHud;
+    private DialoguePanel dialoguePanel;
 
     private static final Gson GSON = new Gson();
     private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {
@@ -48,6 +50,10 @@ public class IntentDispatcher2 {
 
     public void setQuestLogHud(QuestLogHud questLogHud) {
         this.questLogHud = questLogHud;
+    }
+
+    public void setDialoguePanel(DialoguePanel dialoguePanel) {
+        this.dialoguePanel = dialoguePanel;
     }
 
     // ============================================================
@@ -407,17 +413,22 @@ public class IntentDispatcher2 {
                 Bukkit.getScheduler().runTask(plugin, () -> {
 
                     if (node != null) {
-                        if (node.has("title")) {
-                            String title = node.get("title").getAsString();
-                            fp.sendMessage("§d【" + title + "】");
-                            plugin.getLogger().info("[剧情推进] 显示标题: " + title);
-                        }
+                        String nodeType = node.has("type") ? node.get("type").getAsString() : "";
+                        if ("npc_dialogue".equalsIgnoreCase(nodeType) && dialoguePanel != null) {
+                            dialoguePanel.showDialogue(fp, node);
+                        } else {
+                            if (node.has("title")) {
+                                String title = node.get("title").getAsString();
+                                fp.sendMessage("§d【" + title + "】");
+                                plugin.getLogger().info("[剧情推进] 显示标题: " + title);
+                            }
 
-                        if (node.has("text")) {
-                            String storyText = node.get("text").getAsString();
-                            fp.sendMessage("§f" + storyText);
-                            plugin.getLogger()
-                                    .info("[剧情推进] 显示文本: " + storyText.substring(0, Math.min(50, storyText.length())));
+                            if (node.has("text")) {
+                                String storyText = node.get("text").getAsString();
+                                fp.sendMessage("§f" + storyText);
+                                plugin.getLogger()
+                                        .info("[剧情推进] 显示文本: " + storyText.substring(0, Math.min(50, storyText.length())));
+                            }
                         }
                     } else {
                         plugin.getLogger().warning("[剧情推进] story_node 为空");

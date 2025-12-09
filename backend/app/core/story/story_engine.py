@@ -381,6 +381,24 @@ class StoryEngine:
         if scene_world and "scene_world" not in scene_meta:
             scene_meta["scene_world"] = scene_world
 
+        if scene_cfg:
+            skins = getattr(scene_cfg, "npc_skins", None)
+            if skins and "npc_skins" not in scene_meta:
+                packed = []
+                for entry in skins:
+                    if not isinstance(entry, dict):
+                        continue
+                    skin_id = entry.get("id")
+                    skin_key = entry.get("skin")
+                    if not skin_key:
+                        continue
+                    cleaned = {k: v for k, v in entry.items() if v is not None}
+                    if skin_id:
+                        cleaned["id"] = skin_id
+                    packed.append(cleaned)
+                if packed:
+                    scene_meta["npc_skins"] = packed
+
         radius = self._estimate_scene_radius(mc_payload)
         if radius is not None and "radius" not in scene_meta:
             scene_meta["radius"] = radius
