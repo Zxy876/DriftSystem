@@ -308,7 +308,31 @@
           },
           "commands": [
             "title @p subtitle {\"text\":\"踏入心悦世界，创造你的故事！\",\"color\":\"gold\"}"
-          ]
+          ],
+          "world_patch": {
+            "mc": {
+              "title": {
+                "main": "§d教学完成",
+                "sub": "传送门闪耀，心悦世界向你敞开。",
+                "fade_in": 8,
+                "stay": 80,
+                "fade_out": 28
+              },
+              "sound": {
+                "type": "MUSIC_DISC_MELLOHI",
+                "volume": 0.9,
+                "pitch": 1.05
+              },
+              "particle": {
+                "type": "ENCHANTMENT_TABLE",
+                "count": 100,
+                "radius": 3.5,
+                "speed": 0.1
+              },
+              "weather": "dream_sky",
+              "time": "sunset"
+            }
+          }
         }
       }
     ]

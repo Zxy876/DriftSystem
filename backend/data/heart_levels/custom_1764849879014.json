@@ -18,5 +18,14 @@
       "tell": "新剧情"
     }
   },
-  "tree": null
+  "tree": null,
+  "tasks": [
+    {
+      "id": "custom_1764849879014_story",
+      "type": "story",
+      "conditions": [],
+      "milestones": [],
+      "rewards": []
+    }
+  ]
 }

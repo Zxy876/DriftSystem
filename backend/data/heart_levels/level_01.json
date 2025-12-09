@@ -268,6 +268,29 @@
               "particle": "crit",
               "description": "桃子身边迸发火花，提示加速"
             }
+          ],
+          "world_patch": {
+            "mc": {
+              "title": {
+                "main": "§6漂移节奏就绪",
+                "sub": "桃子挥旗指向下一段弯道，保持油门别松！",
+                "fade_in": 5,
+                "stay": 70,
+                "fade_out": 20
+              },
+              "sound": {
+                "type": "MUSIC_DISC_BLOCKS",
+                "volume": 0.9,
+                "pitch": 1.05
+              },
+              "particle": {
+                "type": "FLAME",
+                "count": 60,
+                "radius": 3.5,
+                "speed": 0.12
+              },
+              "time": "sunset"
+            }
           ]
         }
       },
@@ -325,7 +348,31 @@
     }
   ],
   "exit": {
-    "phrase_aliases": [
+            ],
+            "world_patch": {
+              "mc": {
+                "title": {
+                  "main": "§6终点冲刺",
+                  "sub": "桃子为你拉响终点警报，漂移任务完成！",
+                  "fade_in": 10,
+                  "stay": 80,
+                  "fade_out": 30
+                },
+                "sound": {
+                  "type": "UI_TOAST_CHALLENGE_COMPLETE",
+                  "volume": 1.3,
+                  "pitch": 1.0
+                },
+                "particle": {
+                  "type": "FIREWORKS_SPARK",
+                  "count": 120,
+                  "radius": 4.5,
+                  "speed": 0.05
+                },
+                "weather": "dream_sky",
+                "time": "night"
+              }
+            }
       "结束剧情",
       "离开关卡",
       "退出剧情"

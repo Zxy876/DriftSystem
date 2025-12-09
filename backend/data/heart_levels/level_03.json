@@ -274,7 +274,31 @@
               "particle": "snowflake",
               "description": "雪雾环绕营地，标记安全区"
             }
-          ]
+          ],
+          "world_patch": {
+            "mc": {
+              "title": {
+                "main": "§b半山营地",
+                "sub": "雪雾涌动，登山者为你点燃补给火堆。",
+                "fade_in": 5,
+                "stay": 70,
+                "fade_out": 20
+              },
+              "sound": {
+                "type": "AMBIENT_UNDERWATER_ENTER",
+                "volume": 0.6,
+                "pitch": 0.9
+              },
+              "particle": {
+                "type": "SNOW_SHOVEL",
+                "count": 80,
+                "radius": 4.0,
+                "speed": 0.08
+              },
+              "weather": "storm",
+              "time": "sunset"
+            }
+          }
         }
       },
       {
@@ -292,7 +316,31 @@
           "commands": [
             "playsound minecraft:music.game credits @p ~ ~ ~ 1 0.8",
             "title @p subtitle {\"text\":\"云海之上，初心仍在。\",\"color\":\"aqua\"}"
-          ]
+          ],
+          "world_patch": {
+            "mc": {
+              "title": {
+                "main": "§b登顶时刻",
+                "sub": "云海被晨光点亮，旅程写下新的篇章。",
+                "fade_in": 10,
+                "stay": 90,
+                "fade_out": 30
+              },
+              "sound": {
+                "type": "MUSIC_DISC_STRAD",
+                "volume": 1.0,
+                "pitch": 1.0
+              },
+              "particle": {
+                "type": "CLOUD",
+                "count": 90,
+                "radius": 5.0,
+                "speed": 0.04
+              },
+              "weather": "clear",
+              "time": "sunrise"
+            }
+          }
         }
       }
     ]

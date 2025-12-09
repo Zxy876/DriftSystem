@@ -148,7 +148,7 @@ def apply_action(inp: ApplyInput):
             )
 
         if t == "GOTO_NEXT_LEVEL":
-            next_level = story_engine.get_next_level_id(None)
+            next_level = story_engine.get_next_level_id(None, player_id=player_id)
             patch = story_engine.load_level_for_player(player_id, next_level)
             new_state = world_engine.apply_patch(patch)
 
@@ -264,7 +264,7 @@ def apply_action(inp: ApplyInput):
 
 @router.post("/story/enter")
 def story_enter(request: EnterStoryRequest):
-    target_level = request.level_id or story_engine.get_next_level_id(None)
+    target_level = request.level_id or story_engine.get_next_level_id(None, player_id=request.player_id)
     patch = None
     if target_level:
         patch = story_engine.load_level_for_player(request.player_id, target_level)
@@ -315,3 +315,12 @@ def story_rule_event(event: RuleTriggerEvent):
         if response.get("commands"):
             result["commands"] = response["commands"]
     return result
+
+
+@router.get("/story/{player_id}/recommendations")
+def story_recommendations(player_id: str, current_level: Optional[str] = None, limit: int = 3):
+    recs = story_engine.get_level_recommendations(player_id, current_level_id=current_level, limit=limit)
+    return {
+        "status": "ok",
+        "recommendations": recs,
+    }
