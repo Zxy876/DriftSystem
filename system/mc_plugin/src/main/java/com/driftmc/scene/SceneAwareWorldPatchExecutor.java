@@ -7,6 +7,7 @@ import java.util.Map;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import com.driftmc.cinematic.CinematicController;
 import com.driftmc.npc.NPCManager;
 import com.driftmc.world.WorldPatchExecutor;
 
@@ -54,6 +55,8 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
             return;
         }
 
+        boolean sceneHandled = false;
+
         Object cleanup = operations.get("_scene_cleanup");
         if (cleanup instanceof Map<?, ?> cleanupMap) {
             sceneLoader.handleSceneCleanup(player, filterStringKeys(cleanupMap));
@@ -62,6 +65,14 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
         Object scene = operations.get("_scene");
         if (scene instanceof Map<?, ?> sceneMap) {
             sceneLoader.handleScenePatch(player, filterStringKeys(sceneMap), operations);
+            sceneHandled = true;
+        }
+
+        Object cinematic = operations.get("_cinematic");
+        if (cinematic instanceof Map<?, ?> cinematicMap) {
+            if (!sceneHandled) {
+                sceneLoader.handleCinematic(player, filterStringKeys(cinematicMap));
+            }
         }
     }
 
@@ -74,5 +85,9 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
             }
         }
         return result;
+    }
+
+    public void attachCinematicController(CinematicController controller) {
+        this.sceneLoader.setCinematicController(controller);
     }
 }

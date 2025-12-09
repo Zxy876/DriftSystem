@@ -91,7 +91,10 @@ fi
 echo ""
 echo -e "${YELLOW}[4/5] 验证教学系统文件...${NC}"
 
-TUTORIAL_LEVEL="$BACKEND_DIR/data/heart_levels/tutorial_level.json"
+TUTORIAL_LEVEL="$BACKEND_DIR/data/flagship_levels/tutorial_level.json"
+if [ ! -f "$TUTORIAL_LEVEL" ]; then
+    TUTORIAL_LEVEL="$BACKEND_DIR/data/heart_levels/tutorial_level.json"
+fi
 
 if [ -f "$TUTORIAL_LEVEL" ]; then
     echo -e "${GREEN}  ✓ 教学关卡文件存在${NC}"

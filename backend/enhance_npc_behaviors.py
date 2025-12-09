@@ -393,7 +393,7 @@ for i in range(12, 30):
 
 def enhance_npc_behaviors():
     """为所有关卡的world_patch添加NPC行为配置"""
-    data_dir = Path(__file__).parent / "data" / "heart_levels"
+    data_dir = Path(__file__).parent / "data" / "flagship_levels"
     
     if not data_dir.exists():
         print(f"❌ 目录不存在: {data_dir}")

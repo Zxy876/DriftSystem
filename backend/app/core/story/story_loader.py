@@ -1,7 +1,7 @@
 # backend/app/core/story/story_loader.py
 import os, json
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Set
 
 # backend/app/core/story/story_loader.py
 # __file__ = backend/app/core/story/story_loader.py
@@ -9,7 +9,11 @@ from typing import Dict, Any, Optional, List
 BACKEND_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..")
 )
-DATA_DIR = os.path.join(BACKEND_DIR, "data", "heart_levels")
+
+
+# Primary storyline content now lives under `flagship_levels`.
+PRIMARY_DIR_NAME = "flagship_levels"
+DATA_DIR = os.path.join(BACKEND_DIR, "data", PRIMARY_DIR_NAME)
 
 
 @dataclass
@@ -26,22 +30,69 @@ class Level:
     tree: Optional[Dict[str, Any]] = None
 
 
-def _list_json_files() -> List[str]:
-    if not os.path.exists(DATA_DIR):
-        return []
-    return sorted([
-        f for f in os.listdir(DATA_DIR)
-        if f.endswith(".json") and not f.startswith("_")
-    ])
+def _iter_level_files(include_legacy: bool = True):
+    """Yield ``(directory, filename, source)`` tuples in priority order."""
+
+    seen: Set[str] = set()
+
+    if not DATA_DIR or not os.path.exists(DATA_DIR):
+        return
+
+    for filename in sorted(os.listdir(DATA_DIR)):
+        if not filename.endswith(".json") or filename.startswith("_"):
+            continue
+        if filename in seen:
+            continue
+        seen.add(filename)
+        yield DATA_DIR, filename, "flagship"
+
+
+def _canonical_filename(level_id: str) -> str:
+    base = level_id[:-5] if level_id.endswith(".json") else level_id
+    return f"{base}.json"
+
+
+def _candidate_filenames(level_id: str) -> List[str]:
+    """Generate filename candidates for a requested level id.
+
+    Primary storyline files use the ``flagship_`` prefix. Callers migrating
+    from legacy ``level_XX`` ids are still mapped onto the flagship namespace
+    before falling back to their literal value.
+    """
+
+    base = level_id[:-5] if level_id.endswith(".json") else level_id
+    candidates: List[str] = []
+
+    if base.startswith("flagship_"):
+        candidates.append(f"{base}.json")
+    else:
+        # Always try the literal value first (preserves custom player ids).
+        candidates.append(f"{base}.json")
+
+        if base.startswith("level_"):
+            suffix = base.split("_", 1)[1]
+            if suffix:
+                normalized = suffix
+                if suffix.isdigit():
+                    normalized = f"{int(suffix):02d}"
+                remapped = f"flagship_{normalized}"
+                candidates.insert(0, f"{remapped}.json")
+
+    # Deduplicate while preserving order.
+    seen: Set[str] = set()
+    ordered: List[str] = []
+    for name in candidates:
+        if name not in seen:
+            seen.add(name)
+            ordered.append(name)
+    return ordered
 
 
 def list_levels() -> List[Dict[str, Any]]:
-    """
-    返回 heart_levels 目录下的关卡元数据列表
-    """
+    """返回剧情关卡元数据列表。"""
     levels = []
-    for fn in _list_json_files():
-        path = os.path.join(DATA_DIR, fn)
+    for directory, fn, source in _iter_level_files(include_legacy=True):
+        path = os.path.join(directory, fn)
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -52,28 +103,38 @@ def list_levels() -> List[Dict[str, Any]]:
                 "tags": data.get("tags", []),
                 "chapter": (data.get("meta") or {}).get("chapter"),
                 "word_count": (data.get("meta") or {}).get("word_count"),
+                "source": source,
+                "deprecated": False,
             })
         except Exception as e:
             levels.append({
                 "id": fn.replace(".json", ""),
                 "title": f"[BROKEN] {fn}",
                 "file": fn,
+                "source": source,
+                "deprecated": False,
                 "error": str(e)
             })
     return levels
 
 
 def load_level(level_id: str) -> Level:
-    """
-    读取单个 level_xx.json
-    """
-    # 允许用户传 level_1 或 level_1.json
-    filename = level_id if level_id.endswith(".json") else f"{level_id}.json"
-    path = os.path.join(DATA_DIR, filename)
+    """读取单个关卡定义，优先选择旗舰剧情集合。"""
 
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Level file not found: {path}")
+    for candidate in _candidate_filenames(level_id):
+        if not DATA_DIR:
+            continue
+        path = os.path.join(DATA_DIR, candidate)
+        if os.path.exists(path):
+            file_id = os.path.splitext(os.path.basename(path))[0]
+            return _load_level_file(path, file_id, level_id)
 
+    raise FileNotFoundError(
+        f"Level file not found for id '{level_id}' in {DATA_DIR}"
+    )
+
+
+def _load_level_file(path: str, file_id: str, requested_id: str) -> Level:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -93,9 +154,11 @@ def load_level(level_id: str) -> Level:
     })
     tree = data.get("tree")
 
+    level_identifier = data.get("id") or file_id or requested_id
+
     return Level(
-        level_id=data.get("id", level_id),
-        title=data.get("title", level_id),
+        level_id=level_identifier,
+        title=data.get("title", level_identifier),
         text=text_list,
         tags=data.get("tags", []),
         mood=data.get("mood", {"base":"calm","intensity":0.5}),

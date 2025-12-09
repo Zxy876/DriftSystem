@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
-LEVEL_DIR = BACKEND_ROOT / "data" / "heart_levels"
+LEVEL_DIR = BACKEND_ROOT / "data" / "flagship_levels"
 
 
 class ValidationError(Exception):

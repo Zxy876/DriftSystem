@@ -15,22 +15,26 @@ from __future__ import annotations
 
 import json
 from pprint import pprint
+import unittest
 
 from app.core.story.story_engine import story_engine
 
 
 def snapshot_runtime(player_id: str):
-    runtime = story_engine.player_state[player_id].get("beat_runtime") or []
-    compact = [
-        {
-            "id": entry.get("id"),
-            "status": entry.get("status"),
-            "fulfilled": list(entry.get("fulfilled_keys") or []),
-            "requirements": list(entry.get("requirements_keys") or []),
-        }
-        for entry in runtime
-    ]
-    return compact
+    player_state = story_engine.players.get(player_id, {})
+    beat_state = player_state.get("beat_state") or {}
+    order = list(beat_state.get("order") or [])
+    index = beat_state.get("index")
+    completed = sorted(beat_state.get("completed") or [])
+    memory_locked = sorted(beat_state.get("memory_locked") or [])
+    locked_sources = beat_state.get("memory_locked_sources") or {}
+    return {
+        "order": order,
+        "index": index,
+        "completed": completed,
+        "memory_locked": memory_locked,
+        "locked_sources": locked_sources,
+    }
 
 
 def main():
@@ -47,25 +51,43 @@ def main():
         "愿谁记得谁",
     ]
 
-    story_engine.player_state[player] = {"current_level": "level_03"}
+    # 使用新的 StoryEngine API 载入旗舰登山关卡
+    initial_patch = story_engine.load_level_for_player(player, "flagship_03")
+    print("== 初始 world_patch ==")
+    pprint(initial_patch, width=100)
 
     for text in utterances:
-        node, patch, mc = story_engine.advance(player, world, {"say": text})
+        option, node, patch = story_engine.advance(player, world, {"say": text})
         print(f"=== 玩家说: {text}")
+        print("option:")
+        pprint(option, width=100)
         print("node:")
         pprint(node, width=100)
         print("patch:")
         pprint(patch, width=100)
         print("runtime:")
         pprint(snapshot_runtime(player), width=120)
-        print("exit_ready:", story_engine.player_state[player]["beat_state"].get("completed"))
+        beat_state = story_engine.players[player].get("beat_state") or {}
+        print("exit_ready:", sorted(beat_state.get("completed") or []))
         print("--")
 
     print("== 最终状态 ==")
-    pprint(story_engine.player_state[player]["beat_state"])
-    print("pending_events:")
-    pprint(story_engine.player_state[player].get("pending_events"))
+    pprint(story_engine.players[player].get("beat_state"))
+    print("pending_nodes:")
+    pprint(story_engine.players[player].get("pending_nodes"))
 
 
 if __name__ == "__main__":
     main()
+
+
+class StoryEngineSmokeTest(unittest.TestCase):
+    def test_flagship_level_loads(self):
+        player = "beat_unittest"
+        story_engine.players.pop(player, None)
+        patch = story_engine.load_level_for_player(player, "flagship_03")
+        self.assertIsInstance(patch, dict)
+        state = story_engine.players.get(player, {})
+        beat_state = state.get("beat_state")
+        self.assertIsNotNone(beat_state)
+        self.assertIn("order", beat_state)

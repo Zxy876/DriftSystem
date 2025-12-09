@@ -10,6 +10,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.exit.ExitIntentDetector;
+import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.intent2.IntentDispatcher2;
 import com.driftmc.intent2.IntentResponse2;
 import com.driftmc.intent2.IntentRouter2;
@@ -27,15 +28,18 @@ public class PlayerChatListener implements Listener {
     private final TutorialManager tutorialManager;
     private final RuleEventBridge ruleEvents;
     private final ExitIntentDetector exitDetector;
+    private final ChoicePanel choicePanel;
 
     public PlayerChatListener(JavaPlugin plugin, IntentRouter2 router, IntentDispatcher2 dispatcher,
-            TutorialManager tutorialManager, RuleEventBridge ruleEvents, ExitIntentDetector exitDetector) {
+            TutorialManager tutorialManager, RuleEventBridge ruleEvents, ExitIntentDetector exitDetector,
+            ChoicePanel choicePanel) {
         this.plugin = plugin;
         this.router = router;
         this.dispatcher = dispatcher;
         this.tutorialManager = tutorialManager;
         this.ruleEvents = ruleEvents;
         this.exitDetector = exitDetector;
+        this.choicePanel = choicePanel;
     }
 
     @EventHandler
@@ -44,6 +48,10 @@ public class PlayerChatListener implements Listener {
 
         String msg = PlainTextComponentSerializer.plainText().serialize(e.message());
         e.setCancelled(true);
+
+        if (choicePanel != null && choicePanel.consumeSelection(p, msg)) {
+            return;
+        }
 
         p.sendMessage("§7你：" + msg);
         plugin.getLogger().log(Level.INFO, "[聊天] 玩家 {0} 说: {1}", new Object[]{p.getName(), msg});

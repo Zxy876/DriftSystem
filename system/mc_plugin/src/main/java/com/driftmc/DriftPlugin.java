@@ -8,7 +8,9 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.cinematic.CinematicController;
 import com.driftmc.commands.AdvanceCommand;
+import com.driftmc.commands.CinematicCommand;
 import com.driftmc.commands.DriftCommand;
 import com.driftmc.commands.HeartMenuCommand;
 import com.driftmc.commands.LevelCommand;
@@ -28,8 +30,9 @@ import com.driftmc.dsl.DslExecutor;
 import com.driftmc.dsl.DslRegistry;
 import com.driftmc.exit.ExitIntentDetector;
 import com.driftmc.hud.QuestLogHud;
-import com.driftmc.hud.dialogue.DialoguePanel;
 import com.driftmc.hud.RecommendationHud;
+import com.driftmc.hud.dialogue.ChoicePanel;
+import com.driftmc.hud.dialogue.DialoguePanel;
 import com.driftmc.intent.IntentRouter;
 import com.driftmc.intent2.IntentDispatcher2;
 import com.driftmc.intent2.IntentRouter2;
@@ -65,6 +68,8 @@ public class DriftPlugin extends JavaPlugin {
     private RecommendationHud recommendationHud;
     private QuestLogHud questLogHud;
     private DialoguePanel dialoguePanel;
+    private ChoicePanel choicePanel;
+    private CinematicController cinematicController;
 
     @Override
     public void onEnable() {
@@ -89,12 +94,16 @@ public class DriftPlugin extends JavaPlugin {
         this.sessionManager = new PlayerSessionManager();
         this.npcManager = new NPCManager(this);
         this.worldPatcher = new SceneAwareWorldPatchExecutor(this, npcManager);
+        this.cinematicController = new CinematicController(this, worldPatcher);
+        this.worldPatcher.attachCinematicController(cinematicController);
         this.dslRegistry = DslRegistry.createDefault(worldPatcher, npcManager, backend);
         this.dslExecutor = new DslExecutor(dslRegistry);
         this.intentRouter = new IntentRouter(this, backend, dslExecutor, npcManager, worldPatcher, sessionManager);
         this.questLogHud = new QuestLogHud(this, backend);
-        this.dialoguePanel = new DialoguePanel(this);
-        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher, questLogHud, dialoguePanel);
+        this.choicePanel = new ChoicePanel(this);
+        this.dialoguePanel = new DialoguePanel(this, choicePanel);
+        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher, questLogHud, dialoguePanel, choicePanel);
+        this.choicePanel.setRuleEventBridge(ruleEventBridge);
         this.recommendationHud = new RecommendationHud(this, backend, storyManager);
 
         // 意图系统 (新版多意图管线)
@@ -103,11 +112,12 @@ public class DriftPlugin extends JavaPlugin {
         this.intentDispatcher2.setTutorialManager(tutorialManager);
         this.intentDispatcher2.setQuestLogHud(questLogHud);
         this.intentDispatcher2.setDialoguePanel(dialoguePanel);
+        this.intentDispatcher2.setChoicePanel(choicePanel);
         this.exitIntentDetector = new ExitIntentDetector(this, backend, worldPatcher, recommendationHud, questLogHud);
 
         // 注册聊天监听器（核心：自然语言驱动）
         Bukkit.getPluginManager().registerEvents(
-            new PlayerChatListener(this, intentRouter2, intentDispatcher2, tutorialManager, ruleEventBridge, exitIntentDetector),
+            new PlayerChatListener(this, intentRouter2, intentDispatcher2, tutorialManager, ruleEventBridge, exitIntentDetector, choicePanel),
             this);
 
         // 注册玩家加入/离开监听器（教学系统）
@@ -144,6 +154,7 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("sayc", new CmdSay(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("recommend", new RecommendCommand(recommendationHud));
         registerCommand("questlog", new QuestLogCommand(questLogHud));
+        registerCommand("cinematic", new CinematicCommand(cinematicController));
 
         getLogger().info("======================================");
         getLogger().info("   DriftSystem / 心悦宇宙");
@@ -204,5 +215,9 @@ public class DriftPlugin extends JavaPlugin {
 
     public TutorialManager getTutorialManager() {
         return tutorialManager;
+    }
+
+    public CinematicController getCinematicController() {
+        return cinematicController;
     }
 }
