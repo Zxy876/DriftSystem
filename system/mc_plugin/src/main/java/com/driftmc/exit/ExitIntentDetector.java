@@ -20,6 +20,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.hud.QuestLogHud;
 import com.driftmc.hud.RecommendationHud;
 import com.driftmc.world.WorldPatchExecutor;
 import com.google.gson.Gson;
@@ -53,6 +54,7 @@ public final class ExitIntentDetector {
     private final BackendClient backend;
     private final WorldPatchExecutor worldPatcher;
     private final RecommendationHud recommendationHud;
+    private final QuestLogHud questLogHud;
     private final Gson gson = new Gson();
     private final Type mapType = new TypeToken<Map<String, Object>>() {
     }.getType();
@@ -62,11 +64,12 @@ public final class ExitIntentDetector {
     private final Set<String> exitRequests = ConcurrentHashMap.newKeySet();
 
     public ExitIntentDetector(JavaPlugin plugin, BackendClient backend, WorldPatchExecutor worldPatcher,
-            RecommendationHud recommendationHud) {
+            RecommendationHud recommendationHud, QuestLogHud questLogHud) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.backend = Objects.requireNonNull(backend, "backend");
         this.worldPatcher = Objects.requireNonNull(worldPatcher, "worldPatcher");
         this.recommendationHud = recommendationHud;
+        this.questLogHud = questLogHud;
     }
 
     /**
@@ -285,6 +288,10 @@ public final class ExitIntentDetector {
                 deliverExitSummary(target, worldPatchObj);
             } else {
                 target.sendMessage(ChatColor.YELLOW + "剧情已结束，但没有返回场景清理数据。");
+            }
+
+            if (questLogHud != null) {
+                questLogHud.handleLevelExit(target);
             }
 
             if (recommendationHud != null) {

@@ -314,6 +314,11 @@ def story_rule_event(event: RuleTriggerEvent):
             result["milestones"] = response["milestones"]
         if response.get("commands"):
             result["commands"] = response["commands"]
+        if response.get("active_tasks"):
+            result["active_tasks"] = response["active_tasks"]
+        for key in ("task_titles", "milestone_names", "remaining_total", "active_count", "milestone_count"):
+            if key in response:
+                result[key] = response[key]
     return result
 
 
@@ -324,3 +329,17 @@ def story_recommendations(player_id: str, current_level: Optional[str] = None, l
         "status": "ok",
         "recommendations": recs,
     }
+
+
+@router.get("/story/{player_id}/quest-log")
+def story_quest_log(player_id: str):
+    snapshot = quest_runtime.get_active_tasks_snapshot(player_id)
+    response: Dict[str, Any] = {
+        "status": "ok",
+        "active_tasks": snapshot,
+    }
+    if snapshot:
+        for key in ("task_titles", "milestone_names", "remaining_total", "active_count", "milestone_count"):
+            if key in snapshot:
+                response[key] = snapshot[key]
+    return response
