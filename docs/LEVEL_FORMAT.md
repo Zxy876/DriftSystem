@@ -1,12 +1,12 @@
 # Level Format Reference
 
-## Level Schema v1.5 (Planned)
+## Level Schema v2.0 (Active)
 
-> Design draft for Phase 1.5. The schema remains backward compatible with the existing v1 JSON files; unspecified sections should fall back to current defaults and may be safely omitted.
+> Phase 6 promotes the former v1.5 draft into the live baseline. The schema remains backward compatible with existing v1 JSON files; unspecified sections continue to fall back to defaults handled by the runtime and loader.
 
 ### Overview
 
-Level Schema v1.5 extends the current narrative format into five coordinated layers:
+Level Schema v2.0 extends the legacy narrative format into five coordinated layers:
 
 1. **Narrative Beats** – ordered story milestones that can trigger scene patches or rule hooks.
 2. **Scene** – deterministic world setup, including teleport, environment, prefabs, and NPC presentation.
@@ -14,7 +14,7 @@ Level Schema v1.5 extends the current narrative format into five coordinated lay
 4. **Tasks** – quest objectives, milestones, and reward descriptors consumed by `QuestRuntime`.
 5. **Exit** – phrases and return spawn metadata to let players leave gracefully.
 
-### Example (Design Draft)
+### Example
 
 ```json
 {
@@ -79,4 +79,18 @@ Level Schema v1.5 extends the current narrative format into five coordinated lay
   - `phrase_aliases[]` – recognized escape phrases for natural-language exit.
   - `return_spawn` – symbolic identifier or coordinates for the return hub.
 
-> **Backwards compatibility:** Existing v1 JSON files load unchanged. Absent sections resolve to empty lists or `None`, allowing the runtime to continue using default world patches until Phase 1.5 logic is fully implemented.
+### `_scene` Metadata
+
+World patches now expose deterministic scene metadata via the `_scene` key under `world_patch.mc`. Level exporters should stamp:
+
+```json
+"_scene": {
+  "level_id": "level_1",
+  "scene_world": "KunmingLakeStory",
+  "teleport": { "x": 0.5, "y": 70.0, "z": 0.5, "yaw": 0.0, "pitch": 0.0 }
+}
+```
+
+The Minecraft plugin consumes this payload to scope cleanup radii and teleport hints.
+
+> **Backwards compatibility:** Existing v1 JSON files load unchanged. Absent sections resolve to empty lists or `None`, allowing the runtime to continue using default world patches until the richer hooks are fully exercised.

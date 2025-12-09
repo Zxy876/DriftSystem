@@ -1,13 +1,15 @@
 # Shared World State Authority (STATE.md)
 
 ## 1. Current Phase
-CURRENT_PHASE = 6
+CURRENT_PHASE = 8
 PHASE_1_COMPLETE = true
 PHASE_1_5_COMPLETE = true
 PHASE_2_COMPLETE = true
 PHASE_3_COMPLETE = true
 PHASE_4_COMPLETE = true
 PHASE_5_COMPLETE = true
+PHASE_6_COMPLETE = true
+PHASE_7_COMPLETE = true
 
 ## 2. Current Goal
 - Prepare launch checklist and polish pass now that the mainline exit system is live.
@@ -28,11 +30,15 @@ PHASE_5_COMPLETE = true
 	- Phase 4 contract is documented in `docs/PHASE4_TASK_CONTRACT.md`, covering task sessions, NPC bindings, and plugin duties.
 	- ExitIntentDetector listens to Phase 5 exit aliases, calls `/world/story/end`, and applies the returned cleanup + hub teleport.
 	- StoryEngine now records enter/exit trajectories, exposes exit profiles in `get_public_state`, and returns hub teleport summaries.
+	- Heart level content migrated to schema v2.0: every chapter carries beats/scene/rules/tasks/exit scaffolding and emits `_scene` metadata for the plugin cleanup loop.
+	- Key NPC hubs (level_01, level_03, tutorial_level) now expose polished behaviors, rule listeners, and `npc_skins` metadata to make roles visually distinct.
 
 ## 4. Progress – In Progress
 - Capabilities under active review:
 	- Verify KunmingLakeHub spawn safety for new hub snapshot.
 	- Draft release notes highlighting exit summary UX tweaks.
+	- Sample-play Heart Level v2 beats to collect tuning notes for upcoming phase work.
+	- Capture qualitative feedback on refreshed NPC behaviors before rolling polish to later chapters.
 
 ## 5. Latest Code Updates (to be auto-updated from git diff or manual input)
 ```
@@ -53,6 +59,8 @@ PHASE_5_COMPLETE = true
 ## 7. Next Actions (task-based, GPT readable)
 - [ ] Run end-to-end story exit playtest (backend + plugin).
 - [ ] Document exit summary UX in `docs/TUTORIAL_SYSTEM.md`.
+- [ ] Conduct dev-server smoke test for polished NPC behaviors (level_01, level_03, tutorial_level).
+- [ ] Aggregate player transcripts to decide which mid-game chapters receive the next cosmetic pass.
 
 ## 8. Risks
 - Hub teleport assumes KunmingLakeHub world is loaded; server ops should validate availability after restarts.

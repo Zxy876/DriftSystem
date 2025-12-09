@@ -69,13 +69,41 @@
         "behaviors": [
           {
             "type": "stand",
-            "location": {"dx": 0, "dy": 0, "dz": 5},
+            "location": {
+              "dx": 0,
+              "dy": 0,
+              "dz": 5
+            },
             "look_at": "nearest_player",
-            "description": "站在教学平台上，注视着每一位新来的冒险者"
+            "description": "站在教学平台中心迎接新玩家"
+          },
+          {
+            "type": "patrol",
+            "path": [
+              {
+                "dx": 0,
+                "dz": 5
+              },
+              {
+                "dx": 3,
+                "dz": 3
+              },
+              {
+                "dx": -3,
+                "dz": 3
+              }
+            ],
+            "speed": 0.6,
+            "description": "缓步示范教学环线"
           },
           {
             "type": "interact",
             "trigger": "right_click",
+            "trigger_keywords": [
+              "教学",
+              "帮助",
+              "指南"
+            ],
             "action": "dialogue",
             "messages": [
               "§e✨[心悦向导]§r 欢迎来到心悦文集的世界！",
@@ -98,17 +126,25 @@
               "",
               "§a准备好了吗？说§f'开始冒险'§a来开启你的旅程！"
             ],
-            "description": "详细讲解游戏机制"
+            "description": "逐条讲解核心玩法与指令"
           },
           {
             "type": "quest",
-            "trigger_keywords": ["准备好了", "开始", "冒险", "教学"],
+            "trigger_keywords": [
+              "准备好了",
+              "开始",
+              "冒险",
+              "教学"
+            ],
             "quest_name": "心悦之旅启程",
-            "rewards": ["welcome_gift", "tutorial_complete"],
+            "rewards": [
+              "welcome_gift",
+              "tutorial_complete"
+            ],
             "description": "完成新手教学"
           }
         ],
-        "ai_hints": "心悦向导温柔而有耐心，会详细解释每一个游戏机制。他是所有冒险者的第一个朋友，会鼓励玩家勇敢探索。"
+        "ai_hints": "心悦向导会根据玩家的回答动态调整教学节奏，并在关键关键词出现时 触发指引粒子，引导玩家完成所有教程步骤。"
       },
       "build": {
         "shape": "platform",
@@ -126,14 +162,199 @@
         "count": 20,
         "description": "柔和的白色光点，营造神圣的氛围"
       },
-      "tell": "§e✨ 欢迎来到§6心悦文集§e的世界！ ✨"
+      "tell": "§e✨ 欢迎来到§6心悦文集§e的世界！ ✨",
+      "_scene": {
+        "level_id": "tutorial_level",
+        "scene_world": "KunmingLakeTutorial",
+        "teleport": {
+          "x": 4.5,
+          "y": 68.0,
+          "z": 4.5,
+          "yaw": 180.0,
+          "pitch": 0.0
+        },
+        "featured_npc": "心悦向导"
+      }
     },
     "variables": {
       "theme": "教学关卡",
       "biome": "plains",
       "structure": "tutorial_hall",
       "is_tutorial": true,
-      "unlocked": true
+      "unlocked": true,
+      "world": "KunmingLakeTutorial"
+    }
+  },
+  "scene": {
+    "world": "KunmingLakeTutorial",
+    "teleport": {
+      "x": 4.5,
+      "y": 68.0,
+      "z": 4.5,
+      "yaw": 180.0,
+      "pitch": 0.0
+    },
+    "environment": {
+      "weather": "CLEAR",
+      "time": "DAY"
+    },
+    "structures": [
+      "structures/tutorial/spawn_plaza.nbt"
+    ],
+    "npc_skins": [
+      {
+        "id": "心悦向导",
+        "skin": "skins/tutorial_guide.png"
+      }
+    ]
+  },
+  "narrative": {
+    "text": [
+      "欢迎来到心悦文集的世界",
+      "这里是一个由故事与冒险交织而成的奇幻空间。",
+      "在这里，你的每一句话都能改变剧情的走向，",
+      "你的每一个选择都会影响故事的结局。",
+      "",
+      "现在，让我来教你如何在这个世界中冒险...",
+      "",
+      "第一课：对话",
+      "你可以直接在聊天框中输入文字与世界互动。",
+      "试着说 '你好' 或者 '我准备好了' 来开始你的旅程。",
+      "",
+      "第二课：剧情创造",
+      "你可以说 '写一个剧情' 或 '创造一个故事' 来生成新的冒险。",
+      "AI会根据当前关卡的主题为你编织独特的故事。",
+      "",
+      "第三课：关卡跳转",
+      "想要探索其他关卡？只需说 '跳到第X关' 或 '前往XX关卡'。",
+      "心悦文集共有30个关卡，每个都有独特的场景和NPC。",
+      "",
+      "第四课：NPC互动",
+      "每个关卡都有专属的NPC角色。",
+      "你可以通过自然语言与他们对话，触发任务和获得奖励。",
+      "",
+      "第五课：小地图",
+      "说 '给我小地图' 来查看你的进度。",
+      "已解锁的关卡会以青绿色标记，当前关卡是金色。",
+      "",
+      "准备好开始你的心悦之旅了吗？",
+      "让我们从第一关开始吧！"
+    ],
+    "beats": [
+      {
+        "id": "tutorial_intro",
+        "trigger": "on_enter",
+        "scene_patch": "scene_tutorial_plaza",
+        "rule_refs": [
+          "tutorial_guidance"
+        ]
+      },
+      {
+        "id": "tutorial_ready",
+        "trigger": "rule_event:tutorial_ready",
+        "scene_patch": "scene_ready_check",
+        "rule_refs": [
+          "tutorial_launch"
+        ]
+      },
+      {
+        "id": "tutorial_wrap",
+        "trigger": "rule_event:tutorial_complete",
+        "scene_patch": "scene_portal_hub",
+        "rule_refs": [
+          "tutorial_launch"
+        ]
+      }
+    ]
+  },
+  "rules": {
+    "listeners": [
+      {
+        "id": "tutorial_guidance",
+        "type": "chat_keyword",
+        "targets": [
+          "准备好了",
+          "开始冒险"
+        ],
+        "quest_event": "tutorial_ready",
+        "metadata": {
+          "dialogue": [
+            "§e✨[心悦向导]§r 很好！我能感受到你的勇气。",
+            "§7(向导挥动权杖，指引光束照向第一关传送门)"
+          ],
+          "commands": [
+            "playsound minecraft:entity.experience_orb.pickup voice @p ~ ~ ~ 1 1.3"
+          ],
+          "update_behaviors": [
+            {
+              "type": "particle",
+              "particle": "happy_villager",
+              "description": "向导周围冒出绿色光点，提示教学进度"
+            }
+          ]
+        }
+      },
+      {
+        "id": "tutorial_launch",
+        "type": "quest_event",
+        "targets": [
+          "tutorial_complete"
+        ],
+        "quest_event": "tutorial_complete",
+        "metadata": {
+          "dialogue": {
+            "title": "去冒险吧",
+            "text": "向导打开通往第一关的传送门，鼓励你踏出下一步。"
+          },
+          "commands": [
+            "title @p subtitle {\"text\":\"踏入心悦世界，创造你的故事！\",\"color\":\"gold\"}"
+          ]
+        }
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "id": "tutorial_conversation",
+      "type": "conversation",
+      "conditions": [
+        {
+          "entity": "心悦向导",
+          "count": 1
+        }
+      ],
+      "milestones": [
+        "said_hello",
+        "asked_for_help"
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "amount": 1,
+          "data": {
+            "id": "guide_compass"
+          }
+        },
+        {
+          "type": "xp",
+          "amount": 80
+        }
+      ]
+    }
+  ],
+  "exit": {
+    "phrase_aliases": [
+      "结束教学",
+      "返回大厅",
+      "回到中心"
+    ],
+    "return_spawn": "KunmingLakeHub",
+    "teleport": {
+      "x": 128.5,
+      "y": 72.0,
+      "z": -16.5,
+      "yaw": 180.0,
+      "pitch": 0.0
     }
   }
 }
