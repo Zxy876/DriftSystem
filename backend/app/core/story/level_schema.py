@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
+from copy import deepcopy
 
 
 # ---------------------------------------------------------------------------
@@ -377,6 +378,161 @@ class ExitConfig:
 
 
 @dataclass
+class EmotionalWorldPatchProfile:
+    """Emotional world patch override bound to memory flags."""
+
+    profile_id: Optional[str] = None
+    label: Optional[str] = None
+    tone: Optional[str] = None
+    priority: int = 0
+    requires_all: List[str] = field(default_factory=list)
+    requires_any: List[str] = field(default_factory=list)
+    patch: Dict[str, Any] = field(default_factory=dict)
+
+    def matches(self, flags: Iterable[str]) -> bool:
+        universe = {flag for flag in flags if isinstance(flag, str)}
+        if self.requires_all and not all(flag in universe for flag in self.requires_all):
+            return False
+        if self.requires_any:
+            return any(flag in universe for flag in self.requires_any)
+        return bool(self.requires_all)
+
+    @staticmethod
+    def from_dict(data: Optional[Dict[str, Any]]) -> "EmotionalWorldPatchProfile":
+        if not isinstance(data, dict):
+            return EmotionalWorldPatchProfile()
+        profile_id = _coerce_str(
+            data.get("id")
+            or data.get("profile")
+            or data.get("key")
+            or data.get("tag")
+        )
+        requires_all = _coerce_str_list(
+            data.get("requires")
+            or data.get("all")
+            or data.get("requires_all")
+        )
+        requires_any = _coerce_str_list(data.get("any") or data.get("requires_any"))
+        priority = _coerce_int(data.get("priority")) or 0
+        tone = _coerce_str(data.get("tone"))
+        label = _coerce_str(data.get("label"))
+
+        raw_patch = data.get("patch")
+        if isinstance(raw_patch, dict):
+            patch = deepcopy(raw_patch)
+        else:
+            patch = {
+                key: value
+                for key, value in data.items()
+                if key not in {
+                    "id",
+                    "profile",
+                    "key",
+                    "tag",
+                    "requires",
+                    "all",
+                    "requires_all",
+                    "any",
+                    "requires_any",
+                    "priority",
+                    "tone",
+                    "label",
+                    "patch",
+                }
+            }
+
+        return EmotionalWorldPatchProfile(
+            profile_id=profile_id,
+            label=label,
+            tone=tone,
+            priority=priority,
+            requires_all=requires_all,
+            requires_any=requires_any,
+            patch=patch,
+        )
+
+
+@dataclass
+class EmotionalWorldPatchConfig:
+    """Aggregates emotional patch defaults and overrides."""
+
+    default_patch: Dict[str, Any] = field(default_factory=dict)
+    default_label: Optional[str] = None
+    default_tone: Optional[str] = None
+    profiles: List[EmotionalWorldPatchProfile] = field(default_factory=list)
+
+    def is_empty(self) -> bool:
+        return not self.default_patch and not self.profiles
+
+    def select_profile(self, flags: Iterable[str]) -> Optional[EmotionalWorldPatchProfile]:
+        ordered = sorted(self.profiles, key=lambda item: item.priority, reverse=True)
+        for profile in ordered:
+            if profile.matches(flags):
+                return profile
+        return None
+
+    def compose_patch(self, flags: Iterable[str]) -> Dict[str, Any]:
+        patch = deepcopy(self.default_patch)
+        profile = self.select_profile(flags)
+        if profile and profile.patch:
+            patch = _deep_merge(patch, profile.patch)
+        return patch
+
+    def describe(self, flags: Iterable[str]) -> Dict[str, Optional[str]]:
+        profile = self.select_profile(flags)
+        if profile:
+            return {
+                "profile_id": profile.profile_id or "profile",
+                "label": profile.label or profile.profile_id,
+                "tone": profile.tone,
+            }
+        return {
+            "profile_id": "default",
+            "label": self.default_label or "steady",
+            "tone": self.default_tone,
+        }
+
+    @staticmethod
+    def from_dict(data: Optional[Dict[str, Any]]) -> "EmotionalWorldPatchConfig":
+        if not isinstance(data, dict):
+            return EmotionalWorldPatchConfig()
+
+        default_payload = data.get("default") or data.get("baseline")
+        default_patch: Dict[str, Any] = {}
+        default_label: Optional[str] = None
+        default_tone: Optional[str] = None
+        if isinstance(default_payload, dict):
+            default_label = _coerce_str(default_payload.get("label"))
+            default_tone = _coerce_str(default_payload.get("tone"))
+            raw_default_patch = default_payload.get("patch")
+            if isinstance(raw_default_patch, dict):
+                default_patch = deepcopy(raw_default_patch)
+            else:
+                default_patch = {
+                    key: value
+                    for key, value in default_payload.items()
+                    if key not in {"label", "tone"}
+                }
+        elif default_payload is not None:
+            default_patch = deepcopy(default_payload)
+
+        raw_profiles = (
+            data.get("profiles")
+            or data.get("states")
+            or data.get("rules")
+            or []
+        )
+        profiles = [EmotionalWorldPatchProfile.from_dict(item) for item in _coerce_list(raw_profiles)]
+
+        return EmotionalWorldPatchConfig(
+            default_patch=default_patch,
+            default_label=default_label,
+            default_tone=default_tone,
+            profiles=profiles,
+        )
+
+
+@dataclass
 class LevelExtensions:
     """Phase 1.5 extension fields to be attached to legacy level objects."""
 
@@ -385,6 +541,7 @@ class LevelExtensions:
     rules: Optional[RuleGraphConfig] = None
     tasks: List[TaskConfig] = field(default_factory=list)
     exit: Optional[ExitConfig] = None
+    emotional_world_patch: EmotionalWorldPatchConfig = field(default_factory=EmotionalWorldPatchConfig)
 
     @staticmethod
     def from_payload(payload: Optional[Dict[str, Any]]) -> "LevelExtensions":
@@ -404,12 +561,15 @@ class LevelExtensions:
 
         beats = [BeatConfig.from_dict(item) for item in _coerce_list(raw_beats)]
 
+        emotional_cfg = EmotionalWorldPatchConfig.from_dict(payload.get("emotional_world_patch"))
+
         return LevelExtensions(
             beats=beats,
             scene=scene,
             rules=rules,
             tasks=tasks,
             exit=exit_cfg,
+            emotional_world_patch=emotional_cfg,
         )
 
 
@@ -461,6 +621,7 @@ def ensure_level_extensions(level: Any, payload: Optional[Dict[str, Any]] = None
         ("rules", existing.rules),
         ("tasks", existing.tasks),
         ("exit", existing.exit),
+        ("emotional_world_patch", existing.emotional_world_patch),
     ):
         if not hasattr(level, attr):
             setattr(level, attr, value)
@@ -511,3 +672,15 @@ def _coerce_int(value: Any) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _deep_merge(base: Optional[Dict[str, Any]], override: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    result = deepcopy(base) if isinstance(base, dict) else {}
+    if not isinstance(override, dict):
+        return result
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = deepcopy(value)
+    return result

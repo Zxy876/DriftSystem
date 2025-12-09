@@ -24,6 +24,7 @@ from app.core.story.level_schema import (
     ensure_level_extensions,
     MemoryCondition,
     MemoryMutation,
+    EmotionalWorldPatchConfig,
 )
 from app.core.events.event_manager import EventManager
 
@@ -317,6 +318,14 @@ class StoryEngine:
 
         print(f"[StoryEngine] loading levels from {primary_dir}")
 
+    def register_generated_level(self, level_id: Optional[str] = None) -> None:
+        """Refresh story graph and minimap after new level assets are written."""
+
+        self.graph.reload_levels()
+        self.minimap.refresh()
+        if level_id:
+            print(f"[StoryEngine] registered new level: {level_id}")
+
     # ============================================================
     # Phase 1.5 scaffolding hooks (stubs)
     # ============================================================
@@ -383,6 +392,7 @@ class StoryEngine:
         player_state.pop("beat_state", None)
         player_state.pop("pending_nodes", None)
         player_state.pop("pending_patches", None)
+        player_state.pop("emotional_profile", None)
         self.event_manager.unregister(player_id)
         quest_runtime.exit_level(player_id)
 
@@ -480,6 +490,7 @@ class StoryEngine:
                 "last_time": 0.0,
                 "last_say_time": 0.0,
                 "memory_flags": set(),
+                "emotional_profile": None,
             }
 
     # ============================================================
@@ -884,7 +895,7 @@ class StoryEngine:
         """
         self._ensure_player(player_id)
         level: Level = load_level(level_id)
-        ensure_level_extensions(level)
+        ensure_level_extensions(level, getattr(level, "_raw_payload", None))
         p = self.players[player_id]
 
         # 绑定关卡状态
@@ -894,6 +905,7 @@ class StoryEngine:
         p["ended"] = False
         p["messages"].clear()
         p["nodes"].clear()
+        p.pop("emotional_profile", None)
 
         exit_profile = self._build_exit_profile(level)
         if exit_profile:
@@ -1260,6 +1272,22 @@ class StoryEngine:
             completed = quest_updates.get("summary")
             if completed:
                 p.setdefault("pending_nodes", []).append(completed)
+
+        emotional_patch, emotional_summary = self._compose_emotional_patch(player_id)
+        if emotional_summary:
+            previous = p.get("emotional_profile") or {}
+            changed = not previous or (
+                previous.get("profile_id") != emotional_summary.get("profile_id")
+                or previous.get("memory_digest") != emotional_summary.get("memory_digest")
+            )
+            if changed and emotional_patch:
+                patch = self._merge_patch(emotional_patch, patch)
+                emotional_summary["last_patch"] = deepcopy(emotional_patch)
+            elif previous.get("last_patch"):
+                emotional_summary["last_patch"] = deepcopy(previous["last_patch"])
+            p["emotional_profile"] = emotional_summary
+        else:
+            p.pop("emotional_profile", None)
 
         return option, node, patch
 
@@ -1808,6 +1836,57 @@ class StoryEngine:
             else:
                 merged[key] = value
         return merged
+
+    def _compose_emotional_patch(self, player_id: str) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+        player_state = self.players[player_id]
+        level = player_state.get("level")
+        if not level:
+            return {}, None
+
+        config: Optional[EmotionalWorldPatchConfig] = getattr(level, "emotional_world_patch", None)
+        if not isinstance(config, EmotionalWorldPatchConfig) or config.is_empty():
+            return {}, None
+
+        flags = self._get_memory_set(player_id)
+        patch = config.compose_patch(flags)
+        descriptor = config.describe(flags)
+
+        summary = {
+            "profile_id": descriptor.get("profile_id") or "default",
+            "label": descriptor.get("label") or descriptor.get("profile_id") or "default",
+            "tone": descriptor.get("tone"),
+            "level_id": getattr(level, "level_id", None),
+            "level_title": getattr(level, "title", None),
+            "memory_flags": sorted(flags),
+            "memory_digest": "|".join(sorted(flags)),
+            "timestamp": time.time(),
+        }
+
+        mc_payload = patch.get("mc") if isinstance(patch, dict) else None
+        if isinstance(mc_payload, dict):
+            summary["patch_keys"] = sorted(mc_payload.keys())
+        else:
+            summary["patch_keys"] = []
+
+        return patch, summary
+
+    def get_emotional_profile(self, player_id: str) -> Dict[str, Any]:
+        self._ensure_player(player_id)
+        profile = self.players[player_id].get("emotional_profile")
+        if not profile:
+            patch, summary = self._compose_emotional_patch(player_id)
+            if summary:
+                if patch:
+                    summary["last_patch"] = deepcopy(patch)
+                self.players[player_id]["emotional_profile"] = summary
+                profile = summary
+        if not profile:
+            return {}
+        snapshot = dict(profile)
+        last_patch = snapshot.get("last_patch")
+        if isinstance(last_patch, dict):
+            snapshot["last_patch"] = deepcopy(last_patch)
+        return snapshot
 
     @staticmethod
     def _parse_trigger(raw: Optional[str]) -> Dict[str, str]:

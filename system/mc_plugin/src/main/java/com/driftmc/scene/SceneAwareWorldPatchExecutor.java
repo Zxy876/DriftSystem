@@ -17,9 +17,11 @@ import com.driftmc.world.WorldPatchExecutor;
 public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
 
     private final SceneLoader sceneLoader;
+    private final NPCManager npcManager;
 
     public SceneAwareWorldPatchExecutor(JavaPlugin plugin, NPCManager npcManager) {
         super(plugin);
+        this.npcManager = npcManager;
         this.sceneLoader = new SceneLoader(plugin, this, npcManager);
     }
 
@@ -72,6 +74,17 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
         if (cinematic instanceof Map<?, ?> cinematicMap) {
             if (!sceneHandled) {
                 sceneLoader.handleCinematic(player, filterStringKeys(cinematicMap));
+            }
+        }
+
+        Object emotion = operations.get("npc_emotion");
+        if (emotion instanceof Map<?, ?> emotionMap) {
+            npcManager.applyEmotionPatch(player, filterStringKeys(emotionMap));
+        } else if (emotion instanceof List<?> emotionList) {
+            for (Object entry : emotionList) {
+                if (entry instanceof Map<?, ?> entryMap) {
+                    npcManager.applyEmotionPatch(player, filterStringKeys(entryMap));
+                }
             }
         }
     }

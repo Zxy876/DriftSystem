@@ -66,6 +66,7 @@ public class NPCManager implements Listener {
     private final Map<UUID, MarkerHandle> markers = new ConcurrentHashMap<>();
     private final Map<String, NpcSkin> activeSkins = new ConcurrentHashMap<>();
     private final Map<String, Long> pendingSpawns = new ConcurrentHashMap<>();
+    private final Map<String, EmotionProfile> emotionProfiles = new ConcurrentHashMap<>();
 
     public NPCManager(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -113,6 +114,44 @@ public class NPCManager implements Listener {
         activeSkins.clear();
         pendingSpawns.clear();
         refreshNpcAppearances();
+    }
+
+    public void applyEmotionPatch(Player player, Map<String, Object> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return;
+        }
+
+        String tone = asString(payload.get("tone"));
+        String label = asString(payload.get("label"));
+        List<String> targets = asStringList(payload.get("targets"));
+        if (targets.isEmpty()) {
+            targets = List.of("心悦向导", "登山者");
+        }
+
+        EmotionProfile profile = new EmotionProfile(label, tone, System.currentTimeMillis());
+        for (String target : targets) {
+            if (target == null || target.isBlank()) {
+                continue;
+            }
+            emotionProfiles.put(normalize(target), profile);
+        }
+
+        refreshNpcAppearances();
+
+        List<String> lines = asStringList(payload.get("lines"));
+        if (player != null && !lines.isEmpty()) {
+            for (String line : lines) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                player.sendMessage(Component.text(line, NamedTextColor.GOLD));
+            }
+        }
+
+        String actionbar = asString(payload.get("actionbar"));
+        if (player != null && !actionbar.isBlank()) {
+            player.sendActionBar(Component.text(actionbar, NamedTextColor.AQUA));
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -240,6 +279,13 @@ public class NPCManager implements Listener {
         }
         if (styled == null || styled.isBlank()) {
             styled = "旅者";
+        }
+        EmotionProfile profile = emotionProfiles.get(normalize(baseName));
+        if (profile != null) {
+            String cue = !profile.label().isBlank() ? profile.label() : profile.tone();
+            if (cue != null && !cue.isBlank()) {
+                styled = styled + " · " + cue;
+            }
         }
         return Component.text(styled, NamedTextColor.LIGHT_PURPLE);
     }
@@ -395,7 +441,31 @@ public class NPCManager implements Listener {
         return String.valueOf(value);
     }
 
+    private List<String> asStringList(Object value) {
+        if (value == null) {
+            return Collections.emptyList();
+        }
+        if (value instanceof List<?> list) {
+            List<String> result = new ArrayList<>();
+            for (Object element : list) {
+                String str = asString(element).trim();
+                if (!str.isEmpty()) {
+                    result.add(str);
+                }
+            }
+            return result;
+        }
+        String single = asString(value).trim();
+        if (single.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return List.of(single);
+    }
+
     private record NpcSkin(String id, String skinKey) {
+    }
+
+    private record EmotionProfile(String label, String tone, long appliedAt) {
     }
 
     private static final class MarkerHandle {

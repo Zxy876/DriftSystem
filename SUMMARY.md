@@ -322,6 +322,18 @@ def check_progress(self, player_id: str, message: str) -> dict:
 
 ---
 
+## Phase Progress Log
+
+### Phase 18 – Generative Level Authoring
+- Introduced `/world/story/generate-level` endpoint backed by `enhance_generated_level.py` to synthesize flagship-format chapters from natural language prompts.
+- StoryGraph, StoryEngine, and MiniMap now hot-reload generated files and bias recommendations toward fresh player-authored content.
+- Documented the generative pipeline in `docs/GEN_LEVEL_SYSTEM.md`, including schema guarantees and operational workflow.
+
+### Phase 19 – Emotional Weather
+- Emotional world patches map flagship memory flags to weather, lighting, and diegetic music transitions for each player.
+- SceneAwareWorldPatchExecutor applies `npc_emotion` payloads so hub NPC nameplates, dialogue, and actionbars reflect the active emotional profile.
+- Debug endpoint `/world/story/{player}/emotional-weather` reports the current profile, tone, and last applied patch.
+
 ## ✨ 最终状态
 
 **DriftSystem 现在是一个完整的、生产级的游戏系统**

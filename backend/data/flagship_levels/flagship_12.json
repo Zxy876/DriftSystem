@@ -24,6 +24,73 @@
 
   "memory_affinity": ["xinyue.face_once"],
   "memory_recovery": ["xinyue.escape_once"],
+  "storyline_theme": "flagship_resilience",
+  "continuity": {
+    "previous": "flagship_08",
+    "next": "flagship_final",
+    "next_major_level": "flagship_final",
+    "emotional_vector": "nocturne_resolution",
+    "arc_step": 4
+  },
+  "emotional_world_patch": {
+    "default": {
+      "label": "夜行徘徊",
+      "tone": "melancholy",
+      "patch": {
+        "mc": {
+          "lighting_shift": "neon_to_dawn",
+          "music": { "record": "otherside", "volume": 0.6 },
+          "npc_emotion": {
+            "tone": "melancholy",
+            "targets": ["药店店员", "影子少女"],
+            "lines": ["霓虹映在雨里，你的脚步在十字路口徘徊。"]
+          }
+        }
+      }
+    },
+    "profiles": [
+      {
+        "id": "night_face",
+        "label": "夜色开缝",
+        "tone": "encouraging",
+        "requires": ["xinyue.face_once"],
+        "priority": 10,
+        "patch": {
+          "mc": {
+            "weather_transition": { "to": "CLEAR" },
+            "lighting_shift": "bridge_aurora",
+            "music": { "record": "5", "volume": 0.85 },
+            "npc_emotion": {
+              "tone": "encouraging",
+              "targets": ["影子少女"],
+              "lines": ["影子少女放下伞：你愿意停下听听，夜风也跟着慢了。"],
+              "actionbar": "霓虹渐亮 · 面对"
+            }
+          }
+        }
+      },
+      {
+        "id": "night_escape",
+        "label": "雨幕收紧",
+        "tone": "concerned",
+        "requires": ["xinyue.escape_once"],
+        "priority": 5,
+        "patch": {
+          "mc": {
+            "weather_transition": { "to": "RAIN" },
+            "lighting_shift": "neon_loop",
+            "music": { "record": "mellohi", "volume": 0.7 },
+            "npc_emotion": {
+              "tone": "concerned",
+              "targets": ["药店店员"],
+              "lines": ["药店店员把纸袋递给你：别让自己在雨里迷路太久。"],
+              "actionbar": "雨势压肩 · 退却"
+            }
+          }
+        }
+      }
+    ]
+  },
   "world_patch": {
     "mc": {
       "spawn": {
@@ -94,14 +161,17 @@
         },
         "featured_npc": "药店店员",
         "focus": "crossroad_neon"
-      }
+      },
+      "lighting_shift": "neon_to_dawn",
+      "weather_transition": {"from": "RAIN", "to": "MIST_CLEAR"}
     },
     "variables": {
       "theme": "night_city",
       "biome": "minecraft:taiga",
       "weather": "RAIN",
       "structure": "neon_crossroad",
-      "unlocked": true
+      "unlocked": true,
+      "arc_position": "climax"
     }
   },
   "narrative": {
@@ -119,26 +189,30 @@
         "rule_refs": [
           "choice_at_crossroad"
         ],
+        "cinematic_alias": "flagship_12.crossroad",
+        "branch_hint": "flagship_resilience.choice",
         "choices": [
           {
             "id": "go_to_pharmacy",
             "text": "推开药店的玻璃门。",
             "rule_event": "night12_go_pharmacy",
-            "next_level": null,
             "tags": [
               "seek_relief",
               "medication"
-            ]
+            ],
+            "next_level": null,
+            "next_major_level": "flagship_final"
           },
           {
             "id": "keep_walking",
             "text": "绕过药店，继续走向桥边。",
             "rule_event": "night12_keep_walking",
-            "next_level": null,
             "tags": [
               "face_pain",
               "avoid_medication"
-            ]
+            ],
+            "next_level": null,
+            "next_major_level": "flagship_final"
           }
         ]
       },
@@ -149,6 +223,8 @@
         "rule_refs": [
           "pharmacy_counter"
         ],
+        "cinematic_alias": "flagship_12.pharmacy",
+        "branch_hint": "flagship_resilience.pharmacy_path",
         "choices": [
           {
             "id": "take_pills_now",
@@ -158,7 +234,8 @@
             "tags": [
               "numb",
               "fast_exit"
-            ]
+            ],
+            "next_major_level": "flagship_final"
           },
           {
             "id": "pocket_pills",
@@ -168,7 +245,8 @@
             "tags": [
               "delay_choice",
               "ambivalent"
-            ]
+            ],
+            "next_major_level": "flagship_final"
           }
         ]
       },
@@ -179,6 +257,8 @@
         "rule_refs": [
           "shadow_confront"
         ],
+        "cinematic_alias": "flagship_12.bridge",
+        "branch_hint": "flagship_resilience.bridge_path",
         "choices": [
           {
             "id": "listen_shadow",
@@ -188,7 +268,8 @@
             "tags": [
               "introspect",
               "courage"
-            ]
+            ],
+            "next_major_level": "flagship_final"
           },
           {
             "id": "run_from_shadow",
@@ -198,7 +279,8 @@
             "tags": [
               "escape",
               "loop_back"
-            ]
+            ],
+            "next_major_level": "flagship_03"
           }
         ]
       },
@@ -207,6 +289,7 @@
         "trigger": "rule_event:night12_listen_shadow",
         "memory_set": ["xinyue.face_once"],
         "memory_clear": ["xinyue.escape_once"],
+        "branch_hint": "flagship_resilience.face_recap",
         "world_patch": {
           "mc": {
             "tell": "§b 你站在雨中倾听，影子的声音变得柔软。",
@@ -220,6 +303,7 @@
         "trigger": "rule_event:night12_run_shadow",
         "memory_set": ["xinyue.escape_once"],
         "memory_clear": ["xinyue.face_once"],
+        "branch_hint": "flagship_resilience.escape_loop",
         "world_patch": {
           "mc": {
             "tell": "§7 你踏过水洼，身后只剩脚步溅开的涟漪。",
@@ -232,6 +316,7 @@
         "id": "flagship_12_face_recap",
         "trigger": "story:continue",
         "memory_required": ["xinyue.face_once"],
+        "branch_hint": "flagship_resilience.face_recap",
         "scene_patch": "scene_bridge_glow",
         "world_patch": {
           "mc": {
@@ -245,6 +330,7 @@
         "id": "flagship_12_escape_recap",
         "trigger": "story:continue",
         "memory_required": ["xinyue.escape_once"],
+        "branch_hint": "flagship_resilience.escape_recap",
         "scene_patch": "scene_neon_loop",
         "world_patch": {
           "mc": {
@@ -262,7 +348,8 @@
             "tell": "✨ 雨线变得细密，夜行的轨迹在脚下发光。",
             "weather": "CLEAR"
           }
-        }
+        },
+        "next_major_level": "flagship_final"
       }
     ]
   },

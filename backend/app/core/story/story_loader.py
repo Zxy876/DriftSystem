@@ -1,7 +1,7 @@
 # backend/app/core/story/story_loader.py
 import os, json
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, List, Set
+from typing import Dict, Any, Optional, List, Set, Tuple
 
 # backend/app/core/story/story_loader.py
 # __file__ = backend/app/core/story/story_loader.py
@@ -33,18 +33,48 @@ class Level:
 def _iter_level_files(include_legacy: bool = True):
     """Yield ``(directory, filename, source)`` tuples in priority order."""
 
-    seen: Set[str] = set()
+    _ = include_legacy  # legacy paths removed but retained for signature compatibility
 
     if not DATA_DIR or not os.path.exists(DATA_DIR):
         return
 
-    for filename in sorted(os.listdir(DATA_DIR)):
-        if not filename.endswith(".json") or filename.startswith("_"):
+    entries: List[Tuple[str, str, str]] = []
+
+    for dirpath, _, filenames in os.walk(DATA_DIR):
+        rel_dir = os.path.relpath(dirpath, DATA_DIR)
+        primary_segment = rel_dir.split(os.sep)[0] if rel_dir != "." else ""
+        if primary_segment == "generated":
+            source = "generated"
+        else:
+            source = "flagship"
+
+        for filename in filenames:
+            if not filename.endswith(".json") or filename.startswith("_"):
+                continue
+            entries.append((dirpath, filename, source))
+
+    seen: Set[str] = set()
+    for directory, filename, source in sorted(entries, key=lambda item: (0 if os.path.relpath(item[0], DATA_DIR) == "." else 1, item[0], item[1])):
+        key = f"{directory}:{filename}"
+        if key in seen:
             continue
-        if filename in seen:
-            continue
-        seen.add(filename)
-        yield DATA_DIR, filename, "flagship"
+        seen.add(key)
+        yield directory, filename, source
+
+
+def _find_level_path(filename: str) -> Optional[str]:
+    if not DATA_DIR or not os.path.exists(DATA_DIR):
+        return None
+
+    direct_path = os.path.join(DATA_DIR, filename)
+    if os.path.exists(direct_path):
+        return direct_path
+
+    for dirpath, _, _ in os.walk(DATA_DIR):
+        candidate = os.path.join(dirpath, filename)
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
 
 def _canonical_filename(level_id: str) -> str:
@@ -122,10 +152,8 @@ def load_level(level_id: str) -> Level:
     """读取单个关卡定义，优先选择旗舰剧情集合。"""
 
     for candidate in _candidate_filenames(level_id):
-        if not DATA_DIR:
-            continue
-        path = os.path.join(DATA_DIR, candidate)
-        if os.path.exists(path):
+        path = _find_level_path(candidate)
+        if path:
             file_id = os.path.splitext(os.path.basename(path))[0]
             return _load_level_file(path, file_id, level_id)
 
@@ -156,7 +184,7 @@ def _load_level_file(path: str, file_id: str, requested_id: str) -> Level:
 
     level_identifier = data.get("id") or file_id or requested_id
 
-    return Level(
+    level = Level(
         level_id=level_identifier,
         title=data.get("title", level_identifier),
         text=text_list,
@@ -168,6 +196,10 @@ def _load_level_file(path: str, file_id: str, requested_id: str) -> Level:
         bootstrap_patch=world_patch,  # 使用world_patch作为bootstrap_patch
         tree=tree
     )
+
+    # Preserve the raw payload so extension parsers can access structured metadata.
+    setattr(level, "_raw_payload", data)
+    return level
 
 
 def build_level_prompt(level: Level) -> str:
