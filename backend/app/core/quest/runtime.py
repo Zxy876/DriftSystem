@@ -202,6 +202,7 @@ class QuestRuntime:
             if combined is None:
                 combined = {}
             combined["active_tasks"] = active_snapshot
+            self._inject_snapshot_summary(combined, active_snapshot)
 
         if self._rule_callback:
             try:
@@ -230,6 +231,7 @@ class QuestRuntime:
     def load_level_tasks(self, level: Level, player_id: str) -> None:
         tasks = [self._create_session(raw, index) for index, raw in enumerate(level.tasks or [])]
         state = {
+            "player_id": player_id,
             "level_id": level.level_id,
             "level_title": level.title,
             "level": level,
@@ -675,7 +677,9 @@ class QuestRuntime:
         if not nodes and not world_patch and not completed and not milestones:
             snapshot_only = self._build_active_tasks_snapshot(state)
             if snapshot_only:
-                return {"active_tasks": snapshot_only}
+                payload: Dict[str, Any] = {"active_tasks": snapshot_only}
+                self._inject_snapshot_summary(payload, snapshot_only)
+                return payload
             return None
 
         summary: Dict[str, Any] = {"nodes": nodes}
@@ -688,7 +692,20 @@ class QuestRuntime:
         active_snapshot = self._build_active_tasks_snapshot(state)
         if active_snapshot:
             summary["active_tasks"] = active_snapshot
+            self._inject_snapshot_summary(summary, active_snapshot)
         return summary
+
+    def _inject_snapshot_summary(self, target: Dict[str, Any], snapshot: Dict[str, Any]) -> None:
+        if not isinstance(target, dict) or not isinstance(snapshot, dict):
+            return
+        for key in ("task_titles", "milestone_names"):
+            value = snapshot.get(key)
+            if value:
+                target[key] = value
+        for key in ("remaining_total", "active_count", "milestone_count"):
+            value = snapshot.get(key)
+            if value is not None:
+                target[key] = value
 
     def _build_active_tasks_snapshot(self, state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         tasks_data: List[Dict[str, Any]] = []
@@ -738,7 +755,7 @@ class QuestRuntime:
                 }
                 milestone_entries.append(milestone_entry)
 
-                if milestone.title:
+                if milestone.title and milestone.title not in milestone_names:
                     milestone_names.append(milestone.title)
 
             if milestone_entries:
@@ -749,7 +766,16 @@ class QuestRuntime:
         if not tasks_data:
             return None
 
+        def _safe_int(value: Any) -> int:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return 0
+
+        remaining_total = sum(max(0, _safe_int(task.get("remaining"))) for task in tasks_data)
+
         snapshot: Dict[str, Any] = {
+            "player_id": state.get("player_id"),
             "level_id": state.get("level_id"),
             "level_title": state.get("level_title"),
             "tasks": tasks_data,
@@ -757,10 +783,24 @@ class QuestRuntime:
             "milestone_names": milestone_names,
             "issued_count": sum(1 for task in tasks_data if task.get("status") == "issued"),
             "pending_count": sum(1 for task in tasks_data if task.get("status") == "pending"),
+            "active_count": len(tasks_data),
+            "milestone_count": len(milestone_names),
+            "remaining_total": remaining_total,
             "timestamp": time.time(),
         }
 
         return snapshot
+
+    def get_active_tasks_snapshot(self, player_id: str) -> Optional[Dict[str, Any]]:
+        state = self._players.get(player_id)
+        if not state:
+            return None
+        snapshot = self._build_active_tasks_snapshot(state)
+        if not snapshot:
+            return None
+        result = dict(snapshot)
+        result["player_id"] = player_id
+        return result
 
     def _create_session(self, task: Dict[str, Any], index: int) -> TaskSession:
         if not isinstance(task, dict):

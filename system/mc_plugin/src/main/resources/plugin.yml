@@ -66,3 +66,7 @@ commands:
   recommend:
     description: "显示 StoryGraph 推荐章节"
     usage: "/recommend"
+
+  questlog:
+    description: "显示当前任务日志"
+    usage: "/questlog"

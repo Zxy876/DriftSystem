@@ -22,6 +22,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.hud.QuestLogHud;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -56,15 +57,18 @@ public final class RuleEventBridge {
     private final JavaPlugin plugin;
     private final BackendClient backend;
     private final SceneAwareWorldPatchExecutor worldPatcher;
+    private final QuestLogHud questLogHud;
     private final Gson gson = new Gson();
     private final Map<String, Long> cooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, PlayerRuleState> playerStates = new ConcurrentHashMap<>();
     private long cooldownMillis = DEFAULT_COOLDOWN_MS;
 
-    public RuleEventBridge(JavaPlugin plugin, BackendClient backend, SceneAwareWorldPatchExecutor worldPatcher) {
+    public RuleEventBridge(JavaPlugin plugin, BackendClient backend, SceneAwareWorldPatchExecutor worldPatcher,
+            QuestLogHud questLogHud) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.backend = Objects.requireNonNull(backend, "backend");
         this.worldPatcher = Objects.requireNonNull(worldPatcher, "worldPatcher");
+        this.questLogHud = questLogHud;
     }
 
     public void setCooldownMillis(long millis) {
@@ -223,6 +227,7 @@ public final class RuleEventBridge {
         JsonArray milestones = firstArray(result, root, "milestones");
         boolean exitReady = firstBoolean(result, root, "exit_ready");
         JsonObject summary = firstObject(result, root, "summary");
+        JsonObject activeTasks = firstObject(result, root, "active_tasks");
 
         Bukkit.getScheduler().runTask(plugin, () -> applyRuleEventResult(
                 playerId,
@@ -233,7 +238,8 @@ public final class RuleEventBridge {
                 completedTasks,
                 milestones,
                 exitReady,
-                summary));
+                summary,
+                activeTasks));
     }
 
     private void applyRuleEventResult(
@@ -245,13 +251,18 @@ public final class RuleEventBridge {
             JsonArray completedTasks,
             JsonArray milestones,
             boolean exitReady,
-            JsonObject summary) {
+            JsonObject summary,
+            JsonObject activeTasks) {
 
         Player player = Bukkit.getPlayer(playerId);
         if (player == null || !player.isOnline()) {
             plugin.getLogger().log(Level.FINE,
                     "[RuleEventBridge] player {0} offline, skipping rule response", playerName);
             return;
+        }
+
+        if (questLogHud != null && activeTasks != null && activeTasks.size() > 0) {
+            questLogHud.handleSnapshot(player, activeTasks, QuestLogHud.Trigger.RULE_EVENT);
         }
 
         if (worldPatch != null && worldPatch.size() > 0) {
@@ -263,12 +274,19 @@ public final class RuleEventBridge {
 
         if (summary != null && summary.size() > 0) {
             deliverNode(player, summary);
+            if (questLogHud != null) {
+                questLogHud.handleQuestNode(player, summary);
+            }
         }
 
         if (nodes != null) {
             for (JsonElement element : nodes) {
                 if (element != null && element.isJsonObject()) {
-                    deliverNode(player, element.getAsJsonObject());
+                    JsonObject node = element.getAsJsonObject();
+                    deliverNode(player, node);
+                    if (questLogHud != null) {
+                        questLogHud.handleQuestNode(player, node);
+                    }
                 }
             }
         }

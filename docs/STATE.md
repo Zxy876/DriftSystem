@@ -1,7 +1,7 @@
 # Shared World State Authority (STATE.md)
 
 ## 1. Current Phase
-CURRENT_PHASE = 12
+CURRENT_PHASE = 13
 PHASE_1_COMPLETE = true
 PHASE_1_5_COMPLETE = true
 PHASE_2_COMPLETE = true
@@ -14,6 +14,7 @@ PHASE_8_COMPLETE = true
 PHASE_9_COMPLETE = true
 PHASE_10_COMPLETE = true
 PHASE_11_COMPLETE = true
+PHASE_12_COMPLETE = true
 
 ## 2. Current Goal
 - Gather StoryGraph HUD feedback to guide the next narrative polish pass.
@@ -40,6 +41,7 @@ PHASE_11_COMPLETE = true
 	- Key NPC hubs (level_01, level_03, tutorial_level) now expose polished behaviors, rule listeners, and `npc_skins` metadata to make roles visually distinct.
 	- StoryGraph now canonicalizes numeric level ids, records player trajectories, and produces weighted next-level recommendations consumed by StoryEngine.
 	- Minecraft plugin surfaces StoryGraph recommendations via `/recommend` HUD with action-bar prompts and clickable chat shortcuts.
+	- Quest log HUD renders active tasks/milestones via `/questlog`, auto-refreshing on level entry, rule events, and exits with milestone action-bar cues.
 
 ## 4. Progress – In Progress
 - Capabilities under active review:
@@ -50,12 +52,10 @@ PHASE_11_COMPLETE = true
 
 ## 5. Latest Code Updates (to be auto-updated from git diff or manual input)
 ```
-- QuestRuntime now deduplicates task completion/milestone notifications when aggregating rule-trigger responses, preventing duplicate chat spam.
-- StoryEngine, SceneAwareWorldPatchExecutor, and RuleEventBridge retain Phase 4 integration for rule-driven quest feedback.
-	- Quest log UX refreshed: QuestRuntime surfaces task titles/hints/remaining counts, and RuleEventBridge delivers them with concise bullet formatting.
-	- Cinematic world patches highlight chapter beats: racer checkpoint/finish, summit ascent finale, and tutorial portal now emit titles, particles, sounds, and sky transitions.
-	- StoryGraph exposes weighted recommendations, StoryEngine routes `/world/story/{player_id}/recommendations`, and new unit tests cover canonicalization heuristics.
-	- Minecraft plugin exposes `/recommend` command and RecommendationHud action-bar overlays for StoryGraph suggestions.
+- QuestRuntime now exposes `active_tasks` snapshots with remaining counts, task titles, and milestone names for HUD rendering.
+- New `/world/story/{player_id}/quest-log` endpoint delivers quest log payloads and accompanying summary metadata.
+- QuestLogHud surfaces structured quest details via `/questlog`, auto-refreshes on level entry, and fires action-bar notifications on milestones/completions.
+- RuleEventBridge forwards quest snapshots to the HUD and relays milestone events without duplicating chat spam.
 ```
 
 ## 6. File Map (summaries of project folder structures)
@@ -70,10 +70,10 @@ PHASE_11_COMPLETE = true
 
 ## 7. Next Actions (task-based, GPT readable)
 - [ ] Run end-to-end story exit playtest (backend + plugin).
-- [ ] Document exit summary UX in `docs/TUTORIAL_SYSTEM.md`.
 - [ ] Conduct dev-server smoke test for polished NPC behaviors (level_01, level_03, tutorial_level).
 - [ ] Aggregate player transcripts to decide which mid-game chapters receive the next cosmetic pass.
-- [ ] Run multiplayer playtest to observe how players use the new recommendation HUD.
+- [ ] Schedule multiplayer playtest to observe how players use the new recommendation & quest log HUD.
+- [ ] Document quest log onboarding copy in `docs/TUTORIAL_SYSTEM.md`.
 
 ## 8. Risks
 - Hub teleport assumes KunmingLakeHub world is loaded; server ops should validate availability after restarts.

@@ -191,6 +191,11 @@ class QuestRuntimeRuleEventTests(unittest.TestCase):
 
         self.assertIsNotNone(first_response, "Rule trigger should respond for issued task")
         self.assertIn("milestones", first_response, "Milestone completion should be surfaced")
+        self.assertIn("active_tasks", first_response, "Quest snapshot should accompany rule response")
+        active_snapshot = first_response.get("active_tasks") or {}
+        self.assertIn("task_titles", active_snapshot, "Snapshot should list task titles")
+        self.assertIn("milestone_names", active_snapshot, "Snapshot should list milestone names")
+        self.assertGreaterEqual(active_snapshot.get("remaining_total", 0), 0, "Remaining total should be non-negative")
         self.assertIn(
             "collect_sunflower_stage1",
             first_response.get("milestones", []),
@@ -202,6 +207,11 @@ class QuestRuntimeRuleEventTests(unittest.TestCase):
         )
         self.assertIsNotNone(milestone_node, "Milestone node should be emitted for milestone completion")
         self.assertTrue(milestone_node.get("hint"), "Milestone node should include a hint for players")
+
+        snapshot_mid = self.runtime.get_active_tasks_snapshot(self.player)
+        self.assertIsNotNone(snapshot_mid, "Snapshot should be present while tasks remain")
+        self.assertIn("active_count", snapshot_mid, "Snapshot should include active_count metadata")
+        self.assertIn("remaining_total", snapshot_mid, "Snapshot should expose remaining_total metadata")
 
         second_response = self.runtime.handle_rule_trigger(
             self.player,
@@ -228,6 +238,8 @@ class QuestRuntimeRuleEventTests(unittest.TestCase):
             None,
         )
         self.assertIsNotNone(completion_node, "Completion node should be emitted for finished task")
+        final_snapshot = self.runtime.get_active_tasks_snapshot(self.player)
+        self.assertIsNone(final_snapshot, "Snapshot should clear once all quests are complete")
 
     def test_rule_trigger_merges_npc_behavior_payload(self):
         level = build_level([])

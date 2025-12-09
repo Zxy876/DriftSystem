@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.hud.QuestLogHud;
 import com.driftmc.tutorial.TutorialManager;
 import com.driftmc.world.WorldPatchExecutor;
 import com.google.gson.Gson;
@@ -29,6 +30,7 @@ public class IntentDispatcher2 {
     private final BackendClient backend;
     private final WorldPatchExecutor world;
     private TutorialManager tutorialManager;
+    private QuestLogHud questLogHud;
 
     private static final Gson GSON = new Gson();
     private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {
@@ -42,6 +44,10 @@ public class IntentDispatcher2 {
 
     public void setTutorialManager(TutorialManager manager) {
         this.tutorialManager = manager;
+    }
+
+    public void setQuestLogHud(QuestLogHud questLogHud) {
+        this.questLogHud = questLogHud;
     }
 
     // ============================================================
@@ -189,6 +195,10 @@ public class IntentDispatcher2 {
                         } else {
                             fp.sendMessage("§7（场景数据为空）");
                         }
+                    }
+
+                    if (questLogHud != null) {
+                        questLogHud.showQuestLog(fp, QuestLogHud.Trigger.LEVEL_ENTER);
                     }
                 });
             }
@@ -491,11 +501,17 @@ public class IntentDispatcher2 {
                                         : null;
 
                         if (patchObj != null) {
-
                             final Map<String, Object> patch = GSON.fromJson(patchObj, MAP_TYPE);
 
+                            Bukkit.getScheduler().runTask(plugin, () -> {
+                                world.execute(fp, patch);
+                                if (questLogHud != null) {
+                                    questLogHud.showQuestLog(fp, QuestLogHud.Trigger.LEVEL_ENTER);
+                                }
+                            });
+                        } else if (questLogHud != null) {
                             Bukkit.getScheduler().runTask(plugin,
-                                    () -> world.execute(fp, patch));
+                                    () -> questLogHud.showQuestLog(fp, QuestLogHud.Trigger.LEVEL_ENTER));
                         }
                     }
                 });

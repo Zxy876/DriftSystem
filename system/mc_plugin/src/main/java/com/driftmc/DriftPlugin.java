@@ -15,6 +15,8 @@ import com.driftmc.commands.LevelCommand;
 import com.driftmc.commands.LevelsCommand;
 import com.driftmc.commands.MiniMapCommand;
 import com.driftmc.commands.NpcMasterCommand;
+import com.driftmc.commands.QuestLogCommand;
+import com.driftmc.commands.RecommendCommand;
 import com.driftmc.commands.SayToAICommand;
 import com.driftmc.commands.StoryCreativeCommand;
 import com.driftmc.commands.TalkCommand;
@@ -22,10 +24,10 @@ import com.driftmc.commands.custom.CmdSay;
 import com.driftmc.commands.custom.CmdStoryNext;
 import com.driftmc.commands.custom.CmdTeleport;
 import com.driftmc.commands.custom.CmdTime;
-import com.driftmc.commands.RecommendCommand;
 import com.driftmc.dsl.DslExecutor;
 import com.driftmc.dsl.DslRegistry;
 import com.driftmc.exit.ExitIntentDetector;
+import com.driftmc.hud.QuestLogHud;
 import com.driftmc.hud.RecommendationHud;
 import com.driftmc.intent.IntentRouter;
 import com.driftmc.intent2.IntentDispatcher2;
@@ -60,6 +62,7 @@ public class DriftPlugin extends JavaPlugin {
     private RuleEventBridge ruleEventBridge;
     private ExitIntentDetector exitIntentDetector;
     private RecommendationHud recommendationHud;
+    private QuestLogHud questLogHud;
 
     @Override
     public void onEnable() {
@@ -87,14 +90,16 @@ public class DriftPlugin extends JavaPlugin {
         this.dslRegistry = DslRegistry.createDefault(worldPatcher, npcManager, backend);
         this.dslExecutor = new DslExecutor(dslRegistry);
         this.intentRouter = new IntentRouter(this, backend, dslExecutor, npcManager, worldPatcher, sessionManager);
-        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher);
+        this.questLogHud = new QuestLogHud(this, backend);
+        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher, questLogHud);
         this.recommendationHud = new RecommendationHud(this, backend, storyManager);
 
         // 意图系统 (新版多意图管线)
         this.intentRouter2 = new IntentRouter2(this, backend);
         this.intentDispatcher2 = new IntentDispatcher2(this, backend, worldPatcher);
         this.intentDispatcher2.setTutorialManager(tutorialManager);
-        this.exitIntentDetector = new ExitIntentDetector(this, backend, worldPatcher, recommendationHud);
+        this.intentDispatcher2.setQuestLogHud(questLogHud);
+        this.exitIntentDetector = new ExitIntentDetector(this, backend, worldPatcher, recommendationHud, questLogHud);
 
         // 注册聊天监听器（核心：自然语言驱动）
         Bukkit.getPluginManager().registerEvents(
@@ -131,6 +136,7 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("time2", new CmdTime(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("sayc", new CmdSay(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("recommend", new RecommendCommand(recommendationHud));
+        registerCommand("questlog", new QuestLogCommand(questLogHud));
 
         getLogger().info("======================================");
         getLogger().info("   DriftSystem / 心悦宇宙");
