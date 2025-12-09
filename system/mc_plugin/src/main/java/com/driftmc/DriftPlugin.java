@@ -22,9 +22,11 @@ import com.driftmc.commands.custom.CmdSay;
 import com.driftmc.commands.custom.CmdStoryNext;
 import com.driftmc.commands.custom.CmdTeleport;
 import com.driftmc.commands.custom.CmdTime;
+import com.driftmc.commands.RecommendCommand;
 import com.driftmc.dsl.DslExecutor;
 import com.driftmc.dsl.DslRegistry;
 import com.driftmc.exit.ExitIntentDetector;
+import com.driftmc.hud.RecommendationHud;
 import com.driftmc.intent.IntentRouter;
 import com.driftmc.intent2.IntentDispatcher2;
 import com.driftmc.intent2.IntentRouter2;
@@ -57,6 +59,7 @@ public class DriftPlugin extends JavaPlugin {
     private IntentDispatcher2 intentDispatcher2;
     private RuleEventBridge ruleEventBridge;
     private ExitIntentDetector exitIntentDetector;
+    private RecommendationHud recommendationHud;
 
     @Override
     public void onEnable() {
@@ -85,12 +88,13 @@ public class DriftPlugin extends JavaPlugin {
         this.dslExecutor = new DslExecutor(dslRegistry);
         this.intentRouter = new IntentRouter(this, backend, dslExecutor, npcManager, worldPatcher, sessionManager);
         this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher);
+        this.recommendationHud = new RecommendationHud(this, backend, storyManager);
 
         // 意图系统 (新版多意图管线)
         this.intentRouter2 = new IntentRouter2(this, backend);
         this.intentDispatcher2 = new IntentDispatcher2(this, backend, worldPatcher);
         this.intentDispatcher2.setTutorialManager(tutorialManager);
-        this.exitIntentDetector = new ExitIntentDetector(this, backend, worldPatcher);
+        this.exitIntentDetector = new ExitIntentDetector(this, backend, worldPatcher, recommendationHud);
 
         // 注册聊天监听器（核心：自然语言驱动）
         Bukkit.getPluginManager().registerEvents(
@@ -126,6 +130,7 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("tp2", new CmdTeleport(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("time2", new CmdTime(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("sayc", new CmdSay(backend, intentRouter, worldPatcher, sessionManager));
+        registerCommand("recommend", new RecommendCommand(recommendationHud));
 
         getLogger().info("======================================");
         getLogger().info("   DriftSystem / 心悦宇宙");

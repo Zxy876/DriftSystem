@@ -1,7 +1,7 @@
 # Shared World State Authority (STATE.md)
 
 ## 1. Current Phase
-CURRENT_PHASE = 11
+CURRENT_PHASE = 12
 PHASE_1_COMPLETE = true
 PHASE_1_5_COMPLETE = true
 PHASE_2_COMPLETE = true
@@ -13,9 +13,10 @@ PHASE_7_COMPLETE = true
 PHASE_8_COMPLETE = true
 PHASE_9_COMPLETE = true
 PHASE_10_COMPLETE = true
+PHASE_11_COMPLETE = true
 
 ## 2. Current Goal
-- Prepare launch checklist and polish pass now that the mainline exit system is live.
+- Gather StoryGraph HUD feedback to guide the next narrative polish pass.
 
 ## 3. Progress – Done
 - Capabilities already achieved:
@@ -38,6 +39,7 @@ PHASE_10_COMPLETE = true
 	- Heart level content migrated to schema v2.0: every chapter carries beats/scene/rules/tasks/exit scaffolding and emits `_scene` metadata for the plugin cleanup loop.
 	- Key NPC hubs (level_01, level_03, tutorial_level) now expose polished behaviors, rule listeners, and `npc_skins` metadata to make roles visually distinct.
 	- StoryGraph now canonicalizes numeric level ids, records player trajectories, and produces weighted next-level recommendations consumed by StoryEngine.
+	- Minecraft plugin surfaces StoryGraph recommendations via `/recommend` HUD with action-bar prompts and clickable chat shortcuts.
 
 ## 4. Progress – In Progress
 - Capabilities under active review:
@@ -53,6 +55,7 @@ PHASE_10_COMPLETE = true
 	- Quest log UX refreshed: QuestRuntime surfaces task titles/hints/remaining counts, and RuleEventBridge delivers them with concise bullet formatting.
 	- Cinematic world patches highlight chapter beats: racer checkpoint/finish, summit ascent finale, and tutorial portal now emit titles, particles, sounds, and sky transitions.
 	- StoryGraph exposes weighted recommendations, StoryEngine routes `/world/story/{player_id}/recommendations`, and new unit tests cover canonicalization heuristics.
+	- Minecraft plugin exposes `/recommend` command and RecommendationHud action-bar overlays for StoryGraph suggestions.
 ```
 
 ## 6. File Map (summaries of project folder structures)
@@ -70,7 +73,7 @@ PHASE_10_COMPLETE = true
 - [ ] Document exit summary UX in `docs/TUTORIAL_SYSTEM.md`.
 - [ ] Conduct dev-server smoke test for polished NPC behaviors (level_01, level_03, tutorial_level).
 - [ ] Aggregate player transcripts to decide which mid-game chapters receive the next cosmetic pass.
-- [ ] Wire recommendation endpoint into plugin HUD for playtest feedback.
+- [ ] Run multiplayer playtest to observe how players use the new recommendation HUD.
 
 ## 8. Risks
 - Hub teleport assumes KunmingLakeHub world is loaded; server ops should validate availability after restarts.

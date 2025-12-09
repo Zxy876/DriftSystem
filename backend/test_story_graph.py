@@ -55,11 +55,13 @@ class StoryGraphRecommendationTest(unittest.TestCase):
         recommendations = self.graph.recommend_next_levels(player_id, "level_1", limit=2)
         self.assertGreaterEqual(len(recommendations), 1)
         self.assertEqual(recommendations[0]["level_id"], "level_02")
+        self.assertEqual(recommendations[0]["title"], "Level 2")
 
     def test_recommendation_returns_fresh_start(self):
         recommendations = self.graph.recommend_next_levels("new_player", None, limit=1)
         self.assertEqual(recommendations[0]["level_id"], "level_01")
         self.assertTrue(recommendations[0]["reasons"])
+        self.assertEqual(recommendations[0]["title"], "Level 1")
 
     def _write_level(self, filename: str, payload: dict) -> None:
         path = os.path.join(self.tempdir, filename)

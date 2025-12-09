@@ -197,6 +197,12 @@ class QuestRuntime:
         combined = self._aggregate_rule_responses(state, responses)
         combined = self._merge_response_payload(combined, npc_payload)
 
+        active_snapshot = self._build_active_tasks_snapshot(state)
+        if active_snapshot:
+            if combined is None:
+                combined = {}
+            combined["active_tasks"] = active_snapshot
+
         if self._rule_callback:
             try:
                 self._rule_callback(player_id, payload)
@@ -667,6 +673,9 @@ class QuestRuntime:
                 nodes.append(node_payload)
 
         if not nodes and not world_patch and not completed and not milestones:
+            snapshot_only = self._build_active_tasks_snapshot(state)
+            if snapshot_only:
+                return {"active_tasks": snapshot_only}
             return None
 
         summary: Dict[str, Any] = {"nodes": nodes}
@@ -676,7 +685,82 @@ class QuestRuntime:
             summary["completed_tasks"] = completed
         if milestones:
             summary["milestones"] = milestones
+        active_snapshot = self._build_active_tasks_snapshot(state)
+        if active_snapshot:
+            summary["active_tasks"] = active_snapshot
         return summary
+
+    def _build_active_tasks_snapshot(self, state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        tasks_data: List[Dict[str, Any]] = []
+        milestone_names: List[str] = []
+
+        for session in self._iter_sessions(state):
+            status = getattr(session, "status", None)
+            if status == "completed":
+                continue
+
+            remaining = max(0, getattr(session, "count", 0) - getattr(session, "progress", 0))
+
+            task_entry: Dict[str, Any] = {
+                "task_id": session.id,
+                "title": session.title,
+                "hint": session.hint,
+                "status": status,
+                "progress": getattr(session, "progress", 0),
+                "count": getattr(session, "count", 0),
+                "remaining": remaining,
+                "type": session.type,
+            }
+
+            reward = getattr(session, "reward", None)
+            if isinstance(reward, dict) and reward:
+                task_entry["reward"] = dict(reward)
+
+            rule_refs = getattr(session, "rule_refs", None)
+            if rule_refs:
+                task_entry["rule_refs"] = list(rule_refs)
+
+            target = getattr(session, "target", None)
+            if target:
+                task_entry["target"] = target
+
+            milestone_entries: List[Dict[str, Any]] = []
+            for milestone in getattr(session, "milestones", []) or []:
+                milestone_remaining = max(0, milestone.count - milestone.progress)
+                milestone_entry = {
+                    "milestone_id": milestone.id,
+                    "title": milestone.title,
+                    "hint": milestone.hint,
+                    "status": milestone.status,
+                    "progress": milestone.progress,
+                    "count": milestone.count,
+                    "remaining": milestone_remaining,
+                }
+                milestone_entries.append(milestone_entry)
+
+                if milestone.title:
+                    milestone_names.append(milestone.title)
+
+            if milestone_entries:
+                task_entry["milestones"] = milestone_entries
+
+            tasks_data.append(task_entry)
+
+        if not tasks_data:
+            return None
+
+        snapshot: Dict[str, Any] = {
+            "level_id": state.get("level_id"),
+            "level_title": state.get("level_title"),
+            "tasks": tasks_data,
+            "task_titles": [task.get("title") for task in tasks_data if task.get("title")],
+            "milestone_names": milestone_names,
+            "issued_count": sum(1 for task in tasks_data if task.get("status") == "issued"),
+            "pending_count": sum(1 for task in tasks_data if task.get("status") == "pending"),
+            "timestamp": time.time(),
+        }
+
+        return snapshot
 
     def _create_session(self, task: Dict[str, Any], index: int) -> TaskSession:
         if not isinstance(task, dict):
