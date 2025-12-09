@@ -9,7 +9,7 @@ attaching these structures to legacy level instances.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +92,114 @@ class SceneConfig:
 
 
 @dataclass
+class MemoryFlag:
+    """Represents a narrative memory bit stored per player."""
+
+    key: str = ""
+    value: bool = True
+
+    @staticmethod
+    def from_value(raw: Any) -> "MemoryFlag":
+        if isinstance(raw, MemoryFlag):
+            return raw
+        if isinstance(raw, dict):
+            key = _coerce_str(raw.get("key") or raw.get("id") or raw.get("flag")) or ""
+            value = raw.get("value")
+            if isinstance(value, str):
+                value = value.strip().lower() not in {"false", "0", "no"}
+            elif not isinstance(value, bool):
+                value = True
+            return MemoryFlag(key=key, value=value)
+        key = _coerce_str(raw)
+        return MemoryFlag(key=key or "", value=True if raw is not None else False)
+
+
+@dataclass
+class MemoryCondition:
+    """Conditions that must be satisfied before content can trigger."""
+
+    require_all: List[str] = field(default_factory=list)
+    require_any: List[str] = field(default_factory=list)
+
+    def is_satisfied(self, flags: Iterable[str]) -> bool:
+        universe = {flag for flag in flags if isinstance(flag, str)}
+        if self.require_all and not all(flag in universe for flag in self.require_all):
+            return False
+        if self.require_any:
+            return any(flag in universe for flag in self.require_any)
+        return True
+
+    @staticmethod
+    def from_value(raw: Any) -> "MemoryCondition":
+        if isinstance(raw, MemoryCondition):
+            return raw
+        if isinstance(raw, dict):
+            require_all = _coerce_str_list(
+                raw.get("all")
+                or raw.get("require")
+                or raw.get("all_of")
+                or raw.get("memory")
+            )
+            require_any = _coerce_str_list(raw.get("any") or raw.get("any_of"))
+            return MemoryCondition(require_all=require_all, require_any=require_any)
+        return MemoryCondition(require_all=_coerce_str_list(raw))
+
+
+@dataclass
+class MemoryMutation:
+    """Defines how a beat or task mutates the memory state."""
+
+    set_flags: List[str] = field(default_factory=list)
+    clear_flags: List[str] = field(default_factory=list)
+
+    @staticmethod
+    def from_parts(set_raw: Any, clear_raw: Any) -> "MemoryMutation":
+        return MemoryMutation(
+            set_flags=_coerce_str_list(set_raw),
+            clear_flags=_coerce_str_list(clear_raw),
+        )
+
+    @staticmethod
+    def from_value(raw: Any) -> "MemoryMutation":
+        if isinstance(raw, MemoryMutation):
+            return raw
+        if isinstance(raw, dict):
+            return MemoryMutation.from_parts(
+                raw.get("set") or raw.get("memory_set") or raw.get("add"),
+                raw.get("clear") or raw.get("memory_clear") or raw.get("remove"),
+            )
+        if raw is None:
+            return MemoryMutation()
+        return MemoryMutation(set_flags=_coerce_str_list(raw))
+
+    def is_noop(self) -> bool:
+        return not self.set_flags and not self.clear_flags
+
+
+@dataclass
+class BeatChoice:
+    """Player-facing branching option."""
+
+    id: str = ""
+    text: Optional[str] = None
+    rule_event: Optional[str] = None
+    next_level: Optional[str] = None
+    tags: List[str] = field(default_factory=list)
+
+    @staticmethod
+    def from_dict(data: Optional[Dict[str, Any]]) -> "BeatChoice":
+        if not isinstance(data, dict):
+            return BeatChoice()
+        return BeatChoice(
+            id=_coerce_str(data.get("id")) or "",
+            text=_coerce_str(data.get("text")) or _coerce_str(data.get("label")),
+            rule_event=_coerce_str(data.get("rule_event")) or _coerce_str(data.get("event")),
+            next_level=_coerce_str(data.get("next")) or _coerce_str(data.get("next_level")),
+            tags=_coerce_str_list(data.get("tags")) or _coerce_str_list(data.get("affinity_tags")),
+        )
+
+
+@dataclass
 class BeatConfig:
     """Narrative beat metadata."""
 
@@ -99,16 +207,33 @@ class BeatConfig:
     trigger: Optional[str] = None
     scene_patch: Optional[str] = None
     rule_refs: List[str] = field(default_factory=list)
+    choices: List[BeatChoice] = field(default_factory=list)
+    choice_prompt: Optional[str] = None
+    memory_required: MemoryCondition = field(default_factory=MemoryCondition)
+    memory_mutation: MemoryMutation = field(default_factory=MemoryMutation)
 
     @staticmethod
     def from_dict(data: Optional[Dict[str, Any]]) -> "BeatConfig":
         if not isinstance(data, dict):
             return BeatConfig()
+        raw_choices = data.get("choices")
+        choices = [BeatChoice.from_dict(item) for item in _coerce_list(raw_choices)]
+        memory_required = MemoryCondition.from_value(data.get("memory_required"))
+        memory_mutation = MemoryMutation.from_parts(
+            data.get("memory_set"),
+            data.get("memory_clear"),
+        )
+        if memory_mutation.is_noop():
+            memory_mutation = MemoryMutation.from_value(data.get("memory"))
         return BeatConfig(
             id=_coerce_str(data.get("id")) or "",
             trigger=_coerce_str(data.get("trigger")),
             scene_patch=_coerce_str(data.get("scene_patch")),
             rule_refs=_coerce_str_list(data.get("rule_refs")),
+            choices=choices,
+            choice_prompt=_coerce_str(data.get("choice_prompt")) or _coerce_str(data.get("prompt")),
+            memory_required=memory_required,
+            memory_mutation=memory_mutation,
         )
 
 
@@ -203,6 +328,8 @@ class TaskConfig:
     conditions: List[TaskCondition] = field(default_factory=list)
     milestones: List[str] = field(default_factory=list)
     rewards: List[TaskReward] = field(default_factory=list)
+    milestone_memory: Dict[str, MemoryMutation] = field(default_factory=dict)
+    completion_memory: MemoryMutation = field(default_factory=MemoryMutation)
 
     @staticmethod
     def from_dict(data: Optional[Dict[str, Any]]) -> "TaskConfig":
@@ -212,12 +339,21 @@ class TaskConfig:
             TaskCondition.from_dict(item) for item in _coerce_list(data.get("conditions"))
         ]
         rewards = [TaskReward.from_dict(item) for item in _coerce_list(data.get("rewards"))]
+        milestone_memory = _parse_milestone_memory(data.get("milestone_memory"))
+        completion_memory = MemoryMutation.from_parts(
+            data.get("memory_set_on_complete") or data.get("memory_set"),
+            data.get("memory_clear_on_complete") or data.get("memory_clear"),
+        )
+        if completion_memory.is_noop():
+            completion_memory = MemoryMutation.from_value(data.get("memory_on_complete"))
         return TaskConfig(
             id=_coerce_str(data.get("id")) or "",
             type=_coerce_str(data.get("type")),
             conditions=conditions,
             milestones=_coerce_str_list(data.get("milestones")),
             rewards=rewards,
+            milestone_memory=milestone_memory,
+            completion_memory=completion_memory,
         )
 
 
@@ -280,6 +416,33 @@ class LevelExtensions:
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
+
+
+def _parse_milestone_memory(raw: Any) -> Dict[str, MemoryMutation]:
+    result: Dict[str, MemoryMutation] = {}
+    if raw is None:
+        return result
+    if isinstance(raw, dict):
+        items = raw.items()
+    else:
+        items = []
+        for entry in _coerce_list(raw):
+            if isinstance(entry, dict):
+                key = _coerce_str(entry.get("id") or entry.get("milestone_id"))
+                if not key:
+                    continue
+                items.append((key, entry))
+    for key, value in items:
+        milestone_id = _coerce_str(key)
+        if not milestone_id:
+            continue
+        mutation = MemoryMutation.from_value(value)
+        if mutation.is_noop() and isinstance(value, dict):
+            mutation = MemoryMutation.from_parts(value.get("set"), value.get("clear"))
+        if mutation.is_noop():
+            continue
+        result[milestone_id] = mutation
+    return result
 
 
 def ensure_level_extensions(level: Any, payload: Optional[Dict[str, Any]] = None) -> LevelExtensions:

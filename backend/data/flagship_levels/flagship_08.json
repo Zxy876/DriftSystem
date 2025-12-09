@@ -1,0 +1,250 @@
+{
+  "id": "flagship_08",
+  "title": "天黑欲雨 · 心魔迷宫",
+  "tags": ["心悦文集", "心理", "叙事", "迷宫", "心象"],
+  "meta": {
+    "chapter": 8,
+    "source": "xinyue_wenji",
+    "template_version": "v3"
+  },
+
+  "memory_affinity": ["xinyue.face_once"],
+  "memory_recovery": ["xinyue.escape_once"],
+
+  "scene": {
+    "world": "KunmingLakeStory",
+    "teleport": { "x": 0.5, "y": 70, "z": 0.5, "yaw": 0, "pitch": 0 },
+    "environment": {
+      "weather": "RAIN",
+      "time": "NIGHT"
+    },
+    "npc_skins": [
+      {
+        "id": "grandma_memory",
+        "name": "回忆中的奶奶",
+        "skin": "old_wisdom_01",
+        "x": 3,
+        "y": 70,
+        "z": 3
+      },
+      {
+        "id": "heart_demon",
+        "name": "心魔裂口",
+        "skin": "shadow_creature_01",
+        "x": -4,
+        "y": 70,
+        "z": -4
+      }
+    ],
+    "structures": [
+      {
+        "id": "memory_maze",
+        "shape": "maze",
+        "size": 22,
+        "material": "blackstone"
+      }
+    ]
+  },
+
+  "world_patch": {
+    "mc": {},
+    "variables": {}
+  },
+
+  "narrative": {
+    "text": [
+      "天黑了，也下起了雨。",
+      "你的世界像泥泞的街道，每前进一步都像是拖着过去的重量。",
+      "耳边只有自己的呼吸和雨声。",
+      "在迷宫深处，有什么东西正在苏醒。"
+    ],
+
+    "beats": [
+      {
+        "id": "intro",
+        "trigger": "on_enter",
+        "rule_refs": [],
+        "choices": [
+          {
+            "id": "face_memory",
+            "text": "走向奶奶的幻影",
+            "rule_event": "approach_grandma"
+          },
+          {
+            "id": "follow_crack",
+            "text": "追随地面裂开的黑暗",
+            "rule_event": "approach_heart_demon"
+          }
+        ],
+        "world_patch": {
+          "mc": {
+            "tell": "✨ 雨夜降临。记忆化作迷宫，你必须面对内心的影子。",
+            "music": { "record": "ward" },
+            "particle": { "type": "ash", "count": 50 }
+          }
+        },
+        "cinematic": "rain_intro"
+      },
+
+      {
+        "id": "flagship_08_memory_face",
+        "trigger": ["rule_event:comfort_path", "rule_event:fight_path"],
+        "memory_set": ["xinyue.face_once"],
+        "memory_clear": ["xinyue.escape_once"],
+        "world_patch": {
+          "mc": {
+            "tell": "§a 雨声渐弱，你踩在泥水里的脚步慢慢稳了下来。",
+            "particle": {"type": "happy_villager", "count": 16},
+            "sound": {"type": "BLOCK_AMETHYST_BLOCK_STEP", "volume": 0.8, "pitch": 1.0}
+          }
+        }
+      },
+
+      {
+        "id": "flagship_08_memory_escape",
+        "trigger": ["rule_event:deny_path", "rule_event:escape_path"],
+        "memory_set": ["xinyue.escape_once"],
+        "memory_clear": ["xinyue.face_once"],
+        "world_patch": {
+          "mc": {
+            "tell": "§7 泥水溅起，你转身离开的背影被夜色吞没。",
+            "particle": {"type": "ash", "count": 30},
+            "sound": {"type": "BLOCK_MUD_STEP", "volume": 0.9, "pitch": 0.8}
+          }
+        }
+      },
+
+      {
+        "id": "flagship_08_reconcile",
+        "trigger": "story:continue",
+        "memory_required": ["xinyue.face_once"],
+        "world_patch": {
+          "mc": {
+            "tell": "✨ 你回头望向迷宫，光束像线索一样指向更深处。",
+            "weather": "CLEAR",
+            "music": {"record": "otherside"}
+          }
+        },
+        "scene_patch": "scene_calm_after_rain"
+      },
+
+      {
+        "id": "flagship_08_linger",
+        "trigger": "story:continue",
+        "memory_required": ["xinyue.escape_once"],
+        "world_patch": {
+          "mc": {
+            "tell": "☔ 雨更密了，迷宫墙面映出你匆忙的倒影。",
+            "particle": {"type": "dripping_water", "count": 45},
+            "music": {"record": "ward"}
+          }
+        },
+        "scene_patch": "scene_rain_intensifies"
+      },
+
+      {
+        "id": "meet_grandma",
+        "trigger": "rule:approach_grandma",
+        "rule_refs": ["calm_gain"],
+        "npc_dialogue": [
+          {
+            "npc": "grandma_memory",
+            "lines": [
+              "孩子，你为什么害怕回头？",
+              "烦恼不是黑暗，它只是想被你看见。"
+            ]
+          }
+        ],
+        "choices": [
+          {
+            "id": "accept_comfort",
+            "text": "我愿意面对自己",
+            "rule_event": "comfort_path"
+          },
+          {
+            "id": "deny_past",
+            "text": "我不想再想过去了",
+            "rule_event": "deny_path"
+          }
+        ],
+        "world_patch": {
+          "mc": {
+            "particle": { "type": "heart", "count": 20 },
+            "sound": "entity.experience_orb.pickup"
+          }
+        }
+      },
+
+      {
+        "id": "meet_heart_demon",
+        "trigger": "rule:approach_heart_demon",
+        "npc_dialogue": [
+          {
+            "npc": "heart_demon",
+            "lines": [
+              "你以为努力能让你逃出去？",
+              "痛苦一直都在，你只是害怕看它。"
+            ]
+          }
+        ],
+        "choices": [
+          {
+            "id": "confront_demon",
+            "text": "直面心魔",
+            "rule_event": "fight_path"
+          },
+          {
+            "id": "escape_demon",
+            "text": "逃离它",
+            "rule_event": "escape_path"
+          }
+        ],
+        "world_patch": {
+          "mc": { "particle": { "type": "smoke", "count": 35 } }
+        },
+        "cinematic": "heart_demon_rise"
+      },
+
+      {
+        "id": "ending",
+        "trigger": "story:continue",
+        "rule_refs": [],
+        "world_patch": {
+          "mc": {
+            "tell": "✨ 雨停了。你穿过迷宫，迈向下一个阶段。",
+            "weather": "CLEAR"
+          }
+        }
+      }
+    ]
+  },
+
+  "rules": {
+    "listeners": [
+      { "id": "calm_gain", "on": "comfort_path" },
+      { "id": "fear_gain", "on": "deny_path" },
+      { "id": "resolve_gain", "on": "fight_path" },
+      { "id": "avoidance_gain", "on": "escape_path" }
+    ]
+  },
+
+  "tasks": [
+    {
+      "id": "explore_maze",
+      "title": "穿越心象迷宫",
+      "type": "story",
+      "conditions": [],
+      "milestones": [
+        { "id": "find_grandma", "title": "找到奶奶的幻影" },
+        { "id": "face_demon", "title": "面对心魔裂口" }
+      ],
+      "rewards": ["clarity_fragment"]
+    }
+  ],
+
+  "exit": {
+    "phrase_aliases": ["离开雨夜", "离开迷宫", "结束剧情"],
+    "return_spawn": "KunmingLakeHub",
+    "teleport": { "x": 0.5, "y": 70, "z": 0.5, "yaw": 0, "pitch": 0 }
+  }
+}

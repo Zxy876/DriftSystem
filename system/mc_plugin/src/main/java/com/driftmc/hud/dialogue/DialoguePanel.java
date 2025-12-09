@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -30,10 +31,12 @@ public final class DialoguePanel {
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
 
     private final JavaPlugin plugin;
+    private final ChoicePanel choicePanel;
     private final Map<UUID, List<Integer>> activeTasks = new ConcurrentHashMap<>();
 
-    public DialoguePanel(JavaPlugin plugin) {
+    public DialoguePanel(JavaPlugin plugin, ChoicePanel choicePanel) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
+        this.choicePanel = choicePanel;
     }
 
     /**
@@ -44,6 +47,9 @@ public final class DialoguePanel {
             return;
         }
         clearScheduled(player);
+        if (choicePanel != null) {
+            choicePanel.clear(player);
+        }
 
         DialoguePayload payload = DialoguePayload.from(node);
         if (payload.lines.isEmpty() && payload.choices.isEmpty()) {
@@ -72,10 +78,18 @@ public final class DialoguePanel {
             delay += LINE_INTERVAL_TICKS;
         }
 
-        if (!payload.choices.isEmpty()) {
+        boolean hasChoiceArray = node.has("choices") && node.get("choices").isJsonArray()
+            && node.getAsJsonArray("choices").size() > 0;
+
+        if (hasChoiceArray && choicePanel != null) {
             int taskId = Bukkit.getScheduler().scheduleSyncDelayedTask(plugin,
-                    () -> renderChoices(player, payload.choices),
-                    delay);
+                () -> choicePanel.presentChoiceNode(player, node),
+                delay);
+            taskIds.add(taskId);
+        } else if (!payload.choices.isEmpty()) {
+            int taskId = Bukkit.getScheduler().scheduleSyncDelayedTask(plugin,
+                () -> renderChoices(player, payload.choices),
+                delay);
             taskIds.add(taskId);
         }
 

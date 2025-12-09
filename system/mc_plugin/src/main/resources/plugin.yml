@@ -70,3 +70,7 @@ commands:
   questlog:
     description: "显示当前任务日志"
     usage: "/questlog"
+
+  cinematic:
+    description: "测试和触发过场动画"
+    usage: "/cinematic test"

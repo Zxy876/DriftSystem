@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Set, List, Optional, Tuple
+from typing import Dict, Set, List, Optional, Tuple, Any
+
+from app.core.story.story_loader import list_levels
 
 
 @dataclass
@@ -39,15 +41,49 @@ class TriggerEngine:
         - 从 JSON 读
         - 一关多个触发点等等
         """
+        default_level = self._resolve_default_level_id()
         self.triggers.append(
             TriggerPoint(
-                id="start_level_01",
+                id=f"start_{default_level}",
                 center=(0.0, 0.0, 0.0),   # (x, y, z)
                 radius=5.0,
                 action="load_level",
-                level_id="level_01",
+                level_id=default_level,
             )
         )
+
+    def _resolve_default_level_id(self) -> str:
+        try:
+            levels = list_levels()
+        except Exception:
+            levels = []
+
+        def _entry_to_id(entry: Dict[str, Any]) -> Optional[str]:
+            file_name = entry.get("file")
+            if isinstance(file_name, str):
+                return file_name.replace(".json", "")
+            identifier = entry.get("id")
+            if isinstance(identifier, str):
+                return identifier
+            return None
+
+        for entry in levels:
+            level_id = _entry_to_id(entry)
+            if level_id == "flagship_tutorial":
+                return level_id
+
+        for entry in levels:
+            if entry.get("source") == "flagship" and not entry.get("deprecated"):
+                level_id = _entry_to_id(entry)
+                if level_id:
+                    return level_id
+
+        for entry in levels:
+            level_id = _entry_to_id(entry)
+            if level_id:
+                return level_id
+
+        return "flagship_01"
 
     def reset_player(self, player_id: str):
         """清空某个玩家已经触发过的记录"""

@@ -12,6 +12,7 @@ import org.bukkit.plugin.Plugin;
 
 import com.driftmc.backend.BackendClient;
 import com.driftmc.hud.QuestLogHud;
+import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.hud.dialogue.DialoguePanel;
 import com.driftmc.tutorial.TutorialManager;
 import com.driftmc.world.WorldPatchExecutor;
@@ -33,6 +34,7 @@ public class IntentDispatcher2 {
     private TutorialManager tutorialManager;
     private QuestLogHud questLogHud;
     private DialoguePanel dialoguePanel;
+    private ChoicePanel choicePanel;
 
     private static final Gson GSON = new Gson();
     private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {
@@ -54,6 +56,10 @@ public class IntentDispatcher2 {
 
     public void setDialoguePanel(DialoguePanel dialoguePanel) {
         this.dialoguePanel = dialoguePanel;
+    }
+
+    public void setChoicePanel(ChoicePanel choicePanel) {
+        this.choicePanel = choicePanel;
     }
 
     // ============================================================
@@ -107,7 +113,7 @@ public class IntentDispatcher2 {
         String title = rawText.length() > 12 ? rawText.substring(0, 12) : rawText;
 
         Map<String, Object> body = new HashMap<>();
-        body.put("level_id", "custom_" + System.currentTimeMillis());
+        body.put("level_id", "flagship_custom_" + System.currentTimeMillis());
         body.put("title", title);
         body.put("text", rawText);
 
@@ -416,6 +422,8 @@ public class IntentDispatcher2 {
                         String nodeType = node.has("type") ? node.get("type").getAsString() : "";
                         if ("npc_dialogue".equalsIgnoreCase(nodeType) && dialoguePanel != null) {
                             dialoguePanel.showDialogue(fp, node);
+                        } else if ("story_choice".equalsIgnoreCase(nodeType) && choicePanel != null) {
+                            choicePanel.presentChoiceNode(fp, node);
                         } else {
                             if (node.has("title")) {
                                 String title = node.get("title").getAsString();

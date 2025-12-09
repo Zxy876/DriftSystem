@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-为心悦文集的30个关卡添加独特的场景、NPC和音乐配置
+为旗舰剧情关卡添加独特的场景、NPC和音乐配置。
 """
 import json
 import os
 from pathlib import Path
 
-LEVEL_DIR = Path("data/heart_levels")
+LEVEL_DIR = Path("data/flagship_levels")
 
 # 为每个关卡定义独特的场景配置
 LEVEL_THEMES = {

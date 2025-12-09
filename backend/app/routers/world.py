@@ -27,8 +27,11 @@ def apply(req: ApplyReq):
     if isinstance(say, str) and say.strip().startswith("/level"):
         parts = say.strip().split()
         if len(parts) >= 2:
-            suffix = parts[1]
-            level_id = f"level_{suffix}" if not suffix.startswith("level_") else suffix
+            suffix = parts[1].rstrip(".json")
+            canonical = story_engine.graph.canonicalize_level_id(suffix)
+            if not canonical and not suffix.startswith("flagship_"):
+                canonical = story_engine.graph.canonicalize_level_id(f"flagship_{suffix}")
+            level_id = canonical or suffix
             patch = story_engine.load_level_for_player(player_id, level_id)
 
             result = {

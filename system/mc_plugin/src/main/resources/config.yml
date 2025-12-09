@@ -19,7 +19,7 @@ system:
 # 剧情系统
 story:
   # 默认起始关卡
-  start_level: "level_01"
+  start_level: "flagship_01"
   
   # 自动保存进度间隔(秒)
   auto_save_interval: 300

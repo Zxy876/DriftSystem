@@ -1,7 +1,7 @@
 # Shared World State Authority (STATE.md)
 
 ## 1. Current Phase
-CURRENT_PHASE = 14
+CURRENT_PHASE = 17
 PHASE_1_COMPLETE = true
 PHASE_1_5_COMPLETE = true
 PHASE_2_COMPLETE = true
@@ -16,9 +16,12 @@ PHASE_10_COMPLETE = true
 PHASE_11_COMPLETE = true
 PHASE_12_COMPLETE = true
 PHASE_13_COMPLETE = true
+PHASE_14_COMPLETE = true
+PHASE_15_COMPLETE = true
+PHASE_16_COMPLETE = true
 
 ## 2. Current Goal
-- Capture feedback from the new NPC dialogue panel to guide the next narrative polish pass.
+- Pilot the branching choice UI and collect story-path telemetry for upcoming narrative tweaks.
 
 ## 3. Progress – Done
 - Capabilities already achieved:
@@ -43,6 +46,7 @@ PHASE_13_COMPLETE = true
 	- StoryGraph now canonicalizes numeric level ids, records player trajectories, and produces weighted next-level recommendations consumed by StoryEngine.
 	- Minecraft plugin surfaces StoryGraph recommendations via `/recommend` HUD with action-bar prompts and clickable chat shortcuts.
 	- Quest log HUD renders active tasks/milestones via `/questlog`, auto-refreshing on level entry, rule events, and exits with milestone action-bar cues.
+	- Story choices UI powers beat-defined branches: ChoicePanel renders options, RuleEventBridge forwards selections, and StoryGraph biases recommendations based on recorded decisions.
 
 ## 4. Progress – In Progress
 - Capabilities under active review:
@@ -58,6 +62,12 @@ PHASE_13_COMPLETE = true
 - QuestLogHud surfaces structured quest details via `/questlog`, auto-refreshes on level entry, and fires action-bar notifications on milestones/completions.
 	- NPC dialogue HUD renders cinematic conversations with typing cadence, right-click activation, and nameplate styling; skin metadata now flows from scenes into the plugin.
 - RuleEventBridge forwards quest snapshots to the HUD and relays milestone events without duplicating chat spam.
+- `level_01.json` exit metadata repaired so StoryGraph loads all heart levels without JSON warnings.
+- CinematicController sequences fades, slow-motion, particles, and camera pans for heart-level beats and `/cinematic test` validation.
+- StoryEngine `CINEMATIC_LIBRARY` now emits preset cinematics for level_01 podium and level_03 summit transitions.
+- ChoicePanel intercepts `story_choice` nodes, renders numbered options, and emits `rule_event` payloads so StoryEngine can resolve branches.
+- StoryEngine records `choice_history`, surfaces prompt metadata, and updates StoryGraph with `next_level`/tag affinities to personalize recommendations.
+	- Flagship arc now persists `xinyue.*` memory flags (admitted pain, face/escape loops, summit progress) to retarget NPC tone, cinematics, and StoryGraph affinity.
 ```
 
 ## 6. File Map (summaries of project folder structures)
@@ -74,8 +84,10 @@ PHASE_13_COMPLETE = true
 - [ ] Run end-to-end story exit playtest (backend + plugin).
 - [ ] Conduct dev-server smoke test for polished NPC behaviors (level_01, level_03, tutorial_level).
 - [ ] Aggregate player transcripts to decide which mid-game chapters receive the next cosmetic pass.
+- [ ] Run branching playtest covering at least two beats to verify rule events, recommendations, and analytics output.
 - [ ] Schedule multiplayer playtest to observe how players use the new recommendation & quest log HUD.
 - [ ] Document quest log onboarding copy in `docs/TUTORIAL_SYSTEM.md`.
+- [ ] Backfill `scene.npc_skins` metadata for remaining heart levels (26 entries outstanding).
 
 ## 8. Risks
 - Hub teleport assumes KunmingLakeHub world is loaded; server ops should validate availability after restarts.

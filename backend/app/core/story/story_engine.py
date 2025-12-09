@@ -2,11 +2,17 @@
 from __future__ import annotations
 
 import time
+from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from app.core.ai.deepseek_agent import deepseek_decide
-from app.core.story.story_loader import load_level, build_level_prompt, Level
+from app.core.story.story_loader import (
+    DATA_DIR,
+    load_level,
+    build_level_prompt,
+    Level,
+)
 from app.core.story.story_graph import StoryGraph
 from app.core.world.minimap import MiniMap
 from app.core.world.scene_generator import SceneGenerator
@@ -14,8 +20,257 @@ from app.core.world.trigger import trigger_engine
 from app.core.world.trigger import TriggerPoint
 from app.core.npc import npc_engine
 from app.core.quest.runtime import quest_runtime
-from app.core.story.level_schema import ensure_level_extensions
+from app.core.story.level_schema import (
+    ensure_level_extensions,
+    MemoryCondition,
+    MemoryMutation,
+)
 from app.core.events.event_manager import EventManager
+
+
+CINEMATIC_LIBRARY: Dict[str, Dict[str, Any]] = {
+    "scene_grid_intro": {
+        "mc": {
+            "tell": "🏁 漂移热身开启，赛道灯光逐段点亮。",
+            "title": {
+                "main": "§6漂移节奏",
+                "sub": "桃子挥旗示意，你的油门已就绪。",
+                "fade_in": 10,
+                "stay": 60,
+                "fade_out": 20,
+            },
+            "sound": {
+                "type": "MUSIC_DISC_BLOCKS",
+                "volume": 0.8,
+                "pitch": 1.0,
+            },
+            "particle": {
+                "type": "CLOUD",
+                "count": 90,
+                "radius": 2.2,
+                "speed": 0.01,
+            },
+            "_cinematic": {
+                "slow_motion": 0.85,
+                "sequence": [
+                    {"action": "fade_out", "duration": 1.0},
+                    {"action": "wait", "duration": 0.25},
+                    {"action": "camera", "offset": {"yaw": 22.0, "pitch": -8.0}, "hold": 0.6},
+                    {
+                        "action": "sound",
+                        "sound": "ENTITY_PLAYER_LEVELUP",
+                        "volume": 0.8,
+                        "pitch": 1.3,
+                        "hold": 0.35,
+                    },
+                    {
+                        "action": "particle",
+                        "particle": "CRIT",
+                        "count": 100,
+                        "radius": 1.6,
+                        "offset": {"y": 0.4},
+                        "hold": 0.45,
+                    },
+                    {"action": "fade_in", "duration": 0.8},
+                ],
+            },
+        }
+    },
+    "scene_midfield_boost": {
+        "mc": {
+            "actionbar": "§e赛道加速区开启，保持油门别松！",
+            "sound": {
+                "type": "ENTITY_BLAZE_SHOOT",
+                "volume": 0.9,
+                "pitch": 1.1,
+            },
+            "particle": {
+                "type": "FLAME",
+                "count": 120,
+                "radius": 1.4,
+                "speed": 0.05,
+            },
+            "_cinematic": {
+                "sequence": [
+                    {"action": "camera", "offset": {"yaw": -18.0, "pitch": -5.0}, "hold": 0.45},
+                    {
+                        "action": "particle",
+                        "particle": "FLAME",
+                        "count": 140,
+                        "radius": 1.5,
+                        "offset": {"y": 0.2},
+                        "hold": 0.5,
+                    },
+                ],
+            },
+        }
+    },
+    "scene_podium": {
+        "mc": {
+            "title": {
+                "main": "§6终点庆典",
+                "sub": "桃子为你点亮终点烟火。",
+                "fade_in": 12,
+                "stay": 80,
+                "fade_out": 30,
+            },
+            "sound": {
+                "type": "UI_TOAST_CHALLENGE_COMPLETE",
+                "volume": 1.3,
+                "pitch": 1.0,
+            },
+            "particle": {
+                "type": "FIREWORKS_SPARK",
+                "count": 160,
+                "radius": 2.6,
+                "speed": 0.04,
+            },
+            "_cinematic": {
+                "slow_motion": 0.65,
+                "sequence": [
+                    {"action": "fade_out", "duration": 1.1},
+                    {"action": "wait", "duration": 0.2},
+                    {"action": "camera", "offset": {"yaw": -30.0, "pitch": -10.0}, "hold": 0.7},
+                    {
+                        "action": "sound",
+                        "sound": "ENTITY_FIREWORK_ROCKET_LAUNCH",
+                        "volume": 1.4,
+                        "pitch": 1.0,
+                        "hold": 0.5,
+                    },
+                    {
+                        "action": "particle",
+                        "particle": "FIREWORKS_SPARK",
+                        "count": 140,
+                        "radius": 2.4,
+                        "offset": {"y": 1.2},
+                        "hold": 0.6,
+                    },
+                    {"action": "fade_in", "duration": 1.0},
+                ],
+            },
+        }
+    },
+    "scene_base_camp": {
+        "mc": {
+            "title": {
+                "main": "§b登山营地",
+                "sub": "帐篷灯光在雪线下闪烁。",
+                "fade_in": 10,
+                "stay": 70,
+                "fade_out": 20,
+            },
+            "sound": {
+                "type": "MUSIC_DISC_CHIRP",
+                "volume": 0.7,
+                "pitch": 1.0,
+            },
+            "particle": {
+                "type": "CAMPFIRE_COSY_SMOKE",
+                "count": 90,
+                "radius": 1.8,
+                "speed": 0.01,
+            },
+            "_cinematic": {
+                "slow_motion": 0.9,
+                "sequence": [
+                    {"action": "fade_out", "duration": 0.8},
+                    {"action": "camera", "offset": {"pitch": -20.0}, "hold": 0.5},
+                    {
+                        "action": "sound",
+                        "sound": "BLOCK_NOTE_BLOCK_FLUTE",
+                        "volume": 0.8,
+                        "pitch": 1.2,
+                        "hold": 0.4,
+                    },
+                    {
+                        "action": "particle",
+                        "particle": "FALLING_SPORE_BLOSSOM",
+                        "count": 80,
+                        "radius": 1.5,
+                        "offset": {"y": 1.0},
+                        "hold": 0.5,
+                    },
+                    {"action": "fade_in", "duration": 0.9},
+                ],
+            },
+        }
+    },
+    "scene_mid_camp": {
+        "mc": {
+            "actionbar": "§b半山腰补给点 · 棉花糖香味弥漫。",
+            "sound": {
+                "type": "BLOCK_CAMPFIRE_CRACKLE",
+                "volume": 1.0,
+                "pitch": 1.0,
+            },
+            "particle": {
+                "type": "CAMPFIRE_SIGNAL_SMOKE",
+                "count": 120,
+                "radius": 2.0,
+                "speed": 0.02,
+            },
+            "_cinematic": {
+                "sequence": [
+                    {"action": "camera", "offset": {"yaw": 18.0}, "hold": 0.4},
+                    {
+                        "action": "particle",
+                        "particle": "CAMPFIRE_SIGNAL_SMOKE",
+                        "count": 120,
+                        "radius": 1.9,
+                        "offset": {"y": 1.0},
+                        "hold": 0.45,
+                    },
+                ],
+            },
+        }
+    },
+    "scene_summit_fire": {
+        "mc": {
+            "title": {
+                "main": "§f山顶篝火",
+                "sub": "你与阿无在火光中对视。",
+                "fade_in": 12,
+                "stay": 90,
+                "fade_out": 30,
+            },
+            "sound": {
+                "type": "MUSIC_DISC_PIGSTEP",
+                "volume": 0.8,
+                "pitch": 0.95,
+            },
+            "particle": {
+                "type": "ASH",
+                "count": 160,
+                "radius": 2.8,
+                "speed": 0.02,
+            },
+            "_cinematic": {
+                "slow_motion": 0.6,
+                "sequence": [
+                    {"action": "fade_out", "duration": 1.2},
+                    {"action": "camera", "offset": {"pitch": -25.0}, "hold": 0.7},
+                    {
+                        "action": "sound",
+                        "sound": "ENTITY_LIGHTNING_BOLT_THUNDER",
+                        "volume": 0.6,
+                        "pitch": 1.1,
+                        "hold": 0.4,
+                    },
+                    {
+                        "action": "particle",
+                        "particle": "FIREWORKS_SPARK",
+                        "count": 200,
+                        "radius": 3.0,
+                        "offset": {"y": 1.5},
+                        "hold": 0.7,
+                    },
+                    {"action": "fade_in", "duration": 1.2},
+                ],
+            },
+        }
+    },
+}
 
 
 class StoryEngine:
@@ -30,6 +285,7 @@ class StoryEngine:
             "pitch": 0.0,
         }
     }
+    DEFAULT_ENTRY_LEVEL = "flagship_tutorial"
 
     def __init__(self):
         # 每个玩家的剧情状态
@@ -39,12 +295,14 @@ class StoryEngine:
         self.move_cooldown = 3.0
         self.say_cooldown = 0.8
 
-        # 关卡目录
-        base_dir = Path(__file__).resolve().parents[3]
-        level_dir = base_dir / "data" / "heart_levels"
+        # 关卡目录（旗舰 → 旧版）
+        primary_dir = Path(DATA_DIR)
+
+        # 确保主目录存在，便于后续写入玩家自定义剧情
+        primary_dir.mkdir(parents=True, exist_ok=True)
 
         # 整体剧情图谱 + 小地图 + 场景生成
-        self.graph = StoryGraph(str(level_dir))
+        self.graph = StoryGraph(str(primary_dir))
         self.minimap = MiniMap(self.graph)
         self.scene_gen = SceneGenerator()
 
@@ -55,7 +313,9 @@ class StoryEngine:
         self.event_manager = EventManager()
         quest_runtime.set_rule_callback(self._handle_rule_catalyst)
 
-        print(f"[StoryEngine] loading levels from {level_dir}")
+        self._custom_story_dir = primary_dir
+
+        print(f"[StoryEngine] loading levels from {primary_dir}")
 
     # ============================================================
     # Phase 1.5 scaffolding hooks (stubs)
@@ -130,6 +390,7 @@ class StoryEngine:
             "level_id": getattr(level, "level_id", None),
             "scene": getattr(level, "scene", None) is not None,
         }
+        cleanup_meta["memory_flags"] = sorted(self._get_memory_set(player_id))
         hub_target = self._resolve_exit_target(exit_profile)
 
         farewell = None
@@ -218,7 +479,183 @@ class StoryEngine:
                 "ended": False,
                 "last_time": 0.0,
                 "last_say_time": 0.0,
+                "memory_flags": set(),
             }
+
+    # ============================================================
+    # Memory helpers
+    # ============================================================
+    def _normalize_flag(self, flag: Any) -> Optional[str]:
+        if flag is None:
+            return None
+        if isinstance(flag, str):
+            token = flag.strip()
+        else:
+            token = str(flag).strip()
+        return token or None
+
+    def _get_memory_set(self, player_id: str) -> Set[str]:
+        state = self.players[player_id]
+        flags = state.setdefault("memory_flags", set())
+        if isinstance(flags, list):
+            normalized = {
+                token
+                for token in (self._normalize_flag(item) for item in flags)
+                if token
+            }
+            flags = normalized
+            state["memory_flags"] = flags
+        return flags
+
+    def _is_memory_satisfied(self, player_id: str, requirement: Any) -> bool:
+        memory = self._get_memory_set(player_id)
+        if isinstance(requirement, MemoryCondition):
+            return requirement.is_satisfied(memory)
+        if isinstance(requirement, (list, tuple, set)):
+            required = [self._normalize_flag(item) for item in requirement]
+            return all(flag in memory for flag in required if flag)
+        token = self._normalize_flag(requirement)
+        if token:
+            return token in memory
+        return True
+
+    def _apply_memory_mutation(
+        self,
+        player_id: str,
+        mutation: Optional[MemoryMutation],
+        *,
+        level: Optional[Level] = None,
+        source: Optional[str] = None,
+        ref: Optional[str] = None,
+    ) -> bool:
+        if not mutation or mutation.is_noop():
+            return False
+
+        memory = self._get_memory_set(player_id)
+        changed = False
+
+        for flag in mutation.set_flags:
+            token = self._normalize_flag(flag)
+            if not token:
+                continue
+            if token not in memory:
+                memory.add(token)
+                changed = True
+
+        for flag in mutation.clear_flags:
+            token = self._normalize_flag(flag)
+            if not token:
+                continue
+            if token in memory:
+                memory.remove(token)
+                changed = True
+
+        if changed:
+            level_id = None
+            if level and getattr(level, "level_id", None):
+                level_id = level.level_id
+            elif self.players[player_id].get("level") and getattr(
+                self.players[player_id]["level"], "level_id", None
+            ):
+                level_id = self.players[player_id]["level"].level_id
+            self.graph.update_memory_flags(
+                player_id,
+                sorted(memory),
+                level_id=level_id,
+                source=source,
+                ref=ref,
+            )
+            self._retry_memory_locked_beats(player_id)
+
+        return changed
+
+    def _retry_memory_locked_beats(self, player_id: str) -> None:
+        player_state = self.players.get(player_id)
+        if not player_state:
+            return
+        beat_state = player_state.get("beat_state") or {}
+        locked: Set[str] = beat_state.get("memory_locked") or set()
+        if not locked:
+            return
+        level = player_state.get("level")
+        if not level:
+            return
+        locked_sources = beat_state.get("memory_locked_sources") or {}
+        pending = list(locked)
+        for beat_id in pending:
+            beat = (beat_state.get("by_id") or {}).get(beat_id)
+            if not beat:
+                locked.discard(beat_id)
+                locked_sources.pop(beat_id, None)
+                continue
+            requirement = getattr(beat, "memory_required", None)
+            if not self._is_memory_satisfied(player_id, requirement):
+                continue
+            trigger_info = self._parse_trigger(getattr(beat, "trigger", None))
+            source = locked_sources.get(beat_id) or "memory_refresh"
+            if trigger_info["kind"] in {"auto", "on_enter", "immediate", ""}:
+                update = self._activate_beat(
+                    player_id,
+                    beat_id,
+                    level,
+                    source=source,
+                    context={"memory_unlock": True},
+                )
+                if update:
+                    self._queue_beat_update(player_id, update)
+            locked.discard(beat_id)
+            locked_sources.pop(beat_id, None)
+
+    def apply_quest_updates(self, player_id: str, updates: Optional[Dict[str, Any]]) -> None:
+        if not updates or not isinstance(updates, dict):
+            return
+
+        player_state = self.players.get(player_id)
+        if not player_state:
+            return
+
+        level = player_state.get("level")
+        completion_memory: Dict[str, MemoryMutation] = player_state.get("task_completion_memory") or {}
+        milestone_memory: Dict[str, MemoryMutation] = player_state.get("milestone_memory") or {}
+
+        changed = False
+
+        for task_id in updates.get("completed_tasks", []) or []:
+            normalized = self._normalize_flag(task_id)
+            if not normalized:
+                continue
+            mutation = completion_memory.get(normalized)
+            if isinstance(mutation, MemoryMutation) and not mutation.is_noop():
+                if self._apply_memory_mutation(
+                    player_id,
+                    mutation,
+                    level=level,
+                    source="task_complete",
+                    ref=normalized,
+                ):
+                    changed = True
+
+        for milestone_id in updates.get("milestones", []) or []:
+            normalized = self._normalize_flag(milestone_id)
+            if not normalized:
+                continue
+            mutation = milestone_memory.get(normalized)
+            if isinstance(mutation, MemoryMutation) and not mutation.is_noop():
+                if self._apply_memory_mutation(
+                    player_id,
+                    mutation,
+                    level=level,
+                    source="task_milestone",
+                    ref=normalized,
+                ):
+                    changed = True
+
+        if changed:
+            updates.setdefault("memory_flags", sorted(self._get_memory_set(player_id)))
+
+    def get_player_memory(self, player_id: str) -> List[str]:
+        self._ensure_player(player_id)
+        return sorted(self._get_memory_set(player_id))
 
     # ============================================================
     # 关卡跳转逻辑（下一关）
@@ -231,8 +668,13 @@ class StoryEngine:
 
         canonical_current = self.graph.canonicalize_level_id(current_level_id)
         if not canonical_current:
+            start_level = self.graph.get_start_level() or self.DEFAULT_ENTRY_LEVEL
+            if start_level:
+                return start_level
             all_levels = sorted(self.graph.all_levels())
-            return "level_01" if "level_01" in all_levels else (all_levels[0] if all_levels else None)
+            if all_levels:
+                return all_levels[0]
+            return self.DEFAULT_ENTRY_LEVEL
 
         return self.graph.bfs_next(canonical_current)
 
@@ -467,8 +909,8 @@ class StoryEngine:
         )
 
         # minimap：进度记录 + 点亮节点
-        self.minimap.enter_level(player_id, level_id)
-        self.minimap.mark_unlocked(player_id, level_id)
+        self.minimap.enter_level(player_id, level.level_id)
+        self.minimap.mark_unlocked(player_id, level.level_id)
 
         # ---------------------------------------------
         # 🎭 剧情舞台渲染器
@@ -810,6 +1252,7 @@ class StoryEngine:
 
         quest_updates = quest_runtime.check_completion(p["level"], player_id)
         if quest_updates:
+            self.apply_quest_updates(player_id, quest_updates)
             patch = self._merge_patch(quest_updates.get("world_patch"), patch)
             additional_nodes = quest_updates.get("nodes") or []
             if additional_nodes:
@@ -841,11 +1284,35 @@ class StoryEngine:
             "by_id": beats_by_id,
             "completed": set(),
             "event_map": {},
+            "memory_locked": set(),
+            "memory_locked_sources": {},
         }
 
         self.event_manager.unregister(player_id)
 
         quest_runtime.load_level_tasks(level, player_id)
+
+        task_map: Dict[str, Any] = {}
+        completion_memory: Dict[str, MemoryMutation] = {}
+        milestone_memory: Dict[str, MemoryMutation] = {}
+        for task in getattr(level, "tasks", []) or []:
+            raw_task_id = getattr(task, "id", None) or ""
+            task_id = self._normalize_flag(raw_task_id)
+            if task_id:
+                task_map[task_id] = task
+                task_mutation = getattr(task, "completion_memory", None)
+                if isinstance(task_mutation, MemoryMutation) and not task_mutation.is_noop():
+                    completion_memory[task_id] = task_mutation
+            for milestone_id, mutation in (getattr(task, "milestone_memory", {}) or {}).items():
+                if not isinstance(mutation, MemoryMutation) or mutation.is_noop():
+                    continue
+                key = self._normalize_flag(milestone_id)
+                if key:
+                    milestone_memory[key] = mutation
+
+        player_state["task_memory_map"] = task_map
+        player_state["task_completion_memory"] = completion_memory
+        player_state["milestone_memory"] = milestone_memory
 
         for beat_id in beat_ids:
             beat = beats_by_id.get(beat_id)
@@ -899,6 +1366,21 @@ class StoryEngine:
             if not beat:
                 break
             parsed = self._parse_trigger(getattr(beat, "trigger", None))
+            requirement = getattr(beat, "memory_required", None)
+            if not self._is_memory_satisfied(player_id, requirement):
+                beat_state = self.players[player_id].setdefault("beat_state", {})
+                beat_id = next(
+                    (
+                        identifier
+                        for identifier, candidate in (beat_state.get("by_id") or {}).items()
+                        if candidate is beat
+                    ),
+                    None,
+                )
+                if beat_id is not None:
+                    beat_state.setdefault("memory_locked", set()).add(beat_id)
+                    beat_state.setdefault("memory_locked_sources", {})[beat_id] = parsed.get("kind") or "auto"
+                break
             if parsed["kind"] in {"auto", "on_enter", "immediate", ""}:
                 beat_state = self.players[player_id].setdefault("beat_state", {})
                 beat_id = next((identifier for identifier, candidate in (beat_state.get("by_id") or {}).items() if candidate is beat), None)
@@ -916,9 +1398,22 @@ class StoryEngine:
         beat_state = player_state.get("beat_state") or {}
         order = beat_state.get("order") or []
         completed = beat_state.get("completed") or set()
+        locked = beat_state.setdefault("memory_locked", set())
+        locked_sources = beat_state.setdefault("memory_locked_sources", {})
         for beat_id in order:
             if beat_id not in completed:
-                return beat_state.get("by_id", {}).get(beat_id)
+                beat = beat_state.get("by_id", {}).get(beat_id)
+                if not beat:
+                    continue
+                requirement = getattr(beat, "memory_required", None)
+                if not self._is_memory_satisfied(player_id, requirement):
+                    locked.add(beat_id)
+                    locked_sources.setdefault(
+                        beat_id,
+                        self._parse_trigger(getattr(beat, "trigger", None)).get("kind") or "pending",
+                    )
+                    continue
+                return beat
         return None
 
     def _process_beat_progress(
@@ -1010,11 +1505,19 @@ class StoryEngine:
         if not beat:
             return None
 
+        requirement = getattr(beat, "memory_required", None)
+        if not self._is_memory_satisfied(player_id, requirement):
+            beat_state.setdefault("memory_locked", set()).add(beat_id)
+            beat_state.setdefault("memory_locked_sources", {})[beat_id] = source
+            return None
+
         completed = beat_state.setdefault("completed", set())
         if beat_id in completed:
             return None
 
         completed.add(beat_id)
+        beat_state.setdefault("memory_locked", set()).discard(beat_id)
+        beat_state.setdefault("memory_locked_sources", {}).pop(beat_id, None)
         self.advance_with_beat(player_id, beat_id)
 
         event_id = f"{player_id}:{beat_id}"
@@ -1030,12 +1533,19 @@ class StoryEngine:
         if quest_update and quest_update.get("nodes"):
             extra_nodes.extend(quest_update["nodes"])
 
-        node = {
+        base_node = {
             "title": f"剧情推进 · {beat_id}",
             "text": f"触发来源：{source}",
             "type": "beat",
             "beat_id": beat_id,
         }
+
+        choice_node = self._prepare_choice_node(player_id, level, beat_id, beat)
+        if choice_node:
+            node = choice_node
+            extra_nodes.append(base_node)
+        else:
+            node = base_node
 
         mc_patch = beat_patch.setdefault("mc", {})
         scene_meta: Dict[str, Any] = {
@@ -1057,10 +1567,124 @@ class StoryEngine:
                     extra_nodes.append(chained_node)
                 extra_nodes.extend(chained.get("extra_nodes", []))
 
+        mutation = getattr(beat, "memory_mutation", None)
+        applied = False
+        if isinstance(mutation, MemoryMutation) and not mutation.is_noop():
+            applied = self._apply_memory_mutation(
+                player_id,
+                mutation,
+                level=level,
+                source="beat",
+                ref=beat_id,
+            )
+        if not applied:
+            fallback_mutation = MemoryMutation.from_parts(
+                getattr(beat, "memory_set", None),
+                getattr(beat, "memory_clear", None),
+            )
+            if not fallback_mutation.is_noop():
+                self._apply_memory_mutation(
+                    player_id,
+                    fallback_mutation,
+                    level=level,
+                    source="beat",
+                    ref=beat_id,
+                )
+
         return {
             "world_patch": beat_patch,
             "node": node,
             "extra_nodes": extra_nodes,
+        }
+
+    def _prepare_choice_node(
+        self,
+        player_id: str,
+        level: Level,
+        beat_id: str,
+        beat: Any,
+    ) -> Optional[Dict[str, Any]]:
+        raw_choices = getattr(beat, "choices", None)
+        if not raw_choices:
+            return None
+
+        prepared: List[Dict[str, Any]] = []
+        registry: Dict[str, Dict[str, Any]] = {}
+        by_choice: Dict[str, Dict[str, Any]] = {}
+
+        for index, choice in enumerate(raw_choices, start=1):
+            cid = getattr(choice, "id", None)
+            if not cid and isinstance(choice, dict):
+                cid = choice.get("id") or choice.get("value")
+            cid = (cid or f"choice_{beat_id}_{index}").strip()
+
+            label = getattr(choice, "text", None)
+            if not label and isinstance(choice, dict):
+                label = choice.get("text") or choice.get("label")
+            label = label or f"选项 {index}"
+
+            rule_event = getattr(choice, "rule_event", None)
+            if not rule_event and isinstance(choice, dict):
+                rule_event = choice.get("rule_event") or choice.get("event")
+
+            next_level = getattr(choice, "next_level", None)
+            if not next_level and isinstance(choice, dict):
+                next_level = choice.get("next") or choice.get("next_level")
+
+            tags = list(getattr(choice, "tags", []) or [])
+            if not tags and isinstance(choice, dict):
+                raw_tags = choice.get("tags") or choice.get("affinity_tags") or []
+                if isinstance(raw_tags, str):
+                    tags = [token.strip() for token in raw_tags.split(",") if token.strip()]
+                elif isinstance(raw_tags, list):
+                    tags = [str(token).strip() for token in raw_tags if str(token).strip()]
+
+            entry = {
+                "id": cid,
+                "label": label,
+                "index": index,
+                "rule_event": rule_event,
+                "next_level": next_level,
+                "tags": tags,
+            }
+            prepared.append(entry)
+
+            snapshot = {
+                "choice_id": cid,
+                "label": label,
+                "rule_event": rule_event,
+                "index": index,
+                "beat_id": beat_id,
+                "level_id": getattr(level, "level_id", None),
+                "next_level": next_level,
+                "tags": tags,
+                "ts": time.time(),
+            }
+            if rule_event:
+                registry[rule_event.strip().lower()] = snapshot
+            by_choice[cid] = snapshot
+
+        if not prepared:
+            return None
+
+        state = self.players[player_id]
+        choice_registry = state.setdefault("choice_registry", {})
+        choice_registry.update(registry)
+        state.setdefault("choice_registry_by_id", {}).update(by_choice)
+        state.setdefault("choice_sessions", {})[beat_id] = {
+            "beat_id": beat_id,
+            "level_id": getattr(level, "level_id", None),
+            "choices": prepared,
+        }
+
+        prompt = getattr(beat, "choice_prompt", None) or "你决定怎么做？"
+        return {
+            "type": "story_choice",
+            "title": prompt,
+            "prompt": prompt,
+            "beat_id": beat_id,
+            "level_id": getattr(level, "level_id", None),
+            "choices": prepared,
         }
 
     def _queue_beat_update(
@@ -1086,6 +1710,71 @@ class StoryEngine:
         if nodes_to_store:
             player_state.setdefault("pending_nodes", []).extend(nodes_to_store)
 
+    def _record_story_choice(self, player_id: str, event_type: str, payload: Dict[str, Any]) -> None:
+        player_state = self.players.get(player_id)
+        if not player_state:
+            return
+
+        normalized = (event_type or "").strip().lower()
+        registry = player_state.setdefault("choice_registry", {})
+        by_id = player_state.setdefault("choice_registry_by_id", {})
+
+        snapshot = registry.pop(normalized, None)
+        choice_id = None
+
+        if not snapshot:
+            choice_id = (payload.get("choice_id") or payload.get("id") or "").strip()
+            if choice_id:
+                snapshot = by_id.pop(choice_id, None)
+        else:
+            choice_id = snapshot.get("choice_id")
+            if choice_id:
+                by_id.pop(choice_id, None)
+
+        if not snapshot:
+            snapshot = {
+                "choice_id": (payload.get("choice_id") or payload.get("id") or "").strip(),
+                "label": payload.get("choice_label") or payload.get("label"),
+                "rule_event": normalized or event_type,
+                "beat_id": payload.get("beat_id"),
+                "level_id": payload.get("level_id"),
+                "next_level": payload.get("next_level"),
+                "tags": payload.get("tags") or [],
+            }
+        else:
+            snapshot = dict(snapshot)
+            if payload.get("choice_label"):
+                snapshot["label"] = payload.get("choice_label")
+            if payload.get("choice_id"):
+                snapshot["choice_id"] = payload.get("choice_id")
+            if payload.get("next_level") and not snapshot.get("next_level"):
+                snapshot["next_level"] = payload.get("next_level")
+            if payload.get("tags") and not snapshot.get("tags"):
+                snapshot["tags"] = payload.get("tags")
+            snapshot["rule_event"] = normalized or event_type
+
+        if not snapshot.get("choice_id") and choice_id:
+            snapshot["choice_id"] = choice_id
+
+        level = player_state.get("level")
+        if level and not snapshot.get("level_id"):
+            snapshot["level_id"] = getattr(level, "level_id", None)
+
+        snapshot["ts"] = time.time()
+        snapshot.setdefault("source", "player_choice")
+
+        sessions = player_state.get("choice_sessions") or {}
+        beat_id = snapshot.get("beat_id")
+        if beat_id and beat_id in sessions:
+            sessions.pop(beat_id, None)
+
+        history = player_state.setdefault("choice_history", [])
+        history.append(snapshot)
+        player_state["last_choice"] = dict(snapshot)
+
+        level_id = snapshot.get("level_id")
+        self.graph.update_trajectory(player_id, level_id, "choice", snapshot)
+
     def _resolve_scene_patch(self, level: Level, beat: Any) -> Dict[str, Any]:
         scene_key = getattr(beat, "scene_patch", None)
         patches = getattr(level, "scene_patches", None)
@@ -1093,6 +1782,8 @@ class StoryEngine:
             candidate = patches.get(scene_key)
             if isinstance(candidate, dict):
                 return dict(candidate)
+        if scene_key and scene_key in CINEMATIC_LIBRARY:
+            return deepcopy(CINEMATIC_LIBRARY[scene_key])
         if scene_key:
             return {"mc": {"tell": f"{level.title} · 场景变化：{scene_key}"}}
         return {}
@@ -1141,6 +1832,15 @@ class StoryEngine:
         event_type = str(payload.get("event_type") or "").lower()
         quest_event = str(payload.get("payload", {}).get("quest_event") or "").lower()
 
+        if event_type.startswith("choice") or payload.get("choice_id") or payload.get("payload", {}).get("choice_id"):
+            choice_payload = dict(payload.get("payload") or {})
+            choice_payload.setdefault("choice_id", payload.get("choice_id"))
+            choice_payload.setdefault("choice_label", payload.get("choice_label"))
+            choice_payload.setdefault("beat_id", payload.get("beat_id"))
+            choice_payload.setdefault("level_id", payload.get("level_id"))
+            choice_payload.setdefault("rule_event", event_type)
+            self._record_story_choice(player_id, event_type, choice_payload)
+
         for beat_id, beat in (beat_state.get("by_id") or {}).items():
             if beat_id in (beat_state.get("completed") or set()):
                 continue
@@ -1169,7 +1869,7 @@ class StoryEngine:
         if p["level"] is None:
 
             class FreeLevel:
-                level_id = "heart_free"
+                level_id = "flagship_free"
                 tree = None
                 bootstrap_patch = {"mc": {"tell": "🌌 进入心悦自由宇宙模式。"}}
 

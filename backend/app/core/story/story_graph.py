@@ -4,7 +4,7 @@ from collections import Counter, deque
 import json
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 class StoryGraph:
@@ -19,46 +19,75 @@ class StoryGraph:
 
     def __init__(self, level_dir: str):
         """
-        level_dir: like backend/data/heart_levels
+        level_dir: like backend/data/flagship_levels
         """
         self.level_dir = level_dir
         self.levels: Dict[str, dict] = {}
         self.edges: Dict[str, List[str]] = {}   # 邻接表
         self.trajectory: Dict[str, List[Dict[str, Any]]] = {}
+        self.level_sources: Dict[str, str] = {}
+        self.alias_map: Dict[str, str] = {}
+        self.memory_snapshots: Dict[str, List[str]] = {}
         self._load_levels()
         self._build_linear_graph()
 
     # ================= 加载所有 level_X.json =================
     def _load_levels(self):
-        if not os.path.isdir(self.level_dir):
+        directories: List[Tuple[str, str]] = []
+
+        if self.level_dir and os.path.isdir(self.level_dir):
+            directories.append((self.level_dir, "flagship"))
+        else:
             print(f"[StoryGraph] level_dir not found: {self.level_dir}")
-            return
 
-        for fname in sorted(os.listdir(self.level_dir)):
-            if not fname.endswith(".json"):
-                continue
+        for directory, source in directories:
+            for fname in sorted(os.listdir(directory)):
+                if not fname.endswith(".json"):
+                    continue
 
-            path = os.path.join(self.level_dir, fname)
-            try:
-                with open(path, "r", encoding="utf8") as f:
-                    data = json.load(f)
+                path = os.path.join(directory, fname)
 
-                key = fname.replace(".json", "")  # e.g. "level_01"
+                try:
+                    with open(path, "r", encoding="utf8") as f:
+                        data = json.load(f)
+                except Exception as exc:
+                    print(f"[StoryGraph] Failed to load {fname}: {exc}")
+                    continue
+
+                key = fname.replace(".json", "")
+                if key in self.levels:
+                    # 旗舰目录优先；如果 legacy 与旗舰重名则跳过 legacy
+                    continue
+
                 self.levels[key] = data
+                self.level_sources[key] = source
+                self._register_alias(key, key)
 
-            except Exception as e:
-                print(f"[StoryGraph] Failed to load {fname}: {e}")
+                level_id = data.get("id")
+                if isinstance(level_id, str):
+                    self._register_alias(level_id, key)
+
+                self._register_numeric_aliases(key)
 
         print(f"[StoryGraph] Loaded {len(self.levels)} levels from {self.level_dir}")
 
     # ============== 线性主线：01→02→…→30 =============
     def _build_linear_graph(self):
-        keys = sorted(self.levels.keys())
-        for i, key in enumerate(keys):
-            if i < len(keys) - 1:
-                self.edges[key] = [keys[i + 1]]
+        self.edges.clear()
+
+        primary_sequence = self._sorted_flagship_levels()
+        if not primary_sequence:
+            primary_sequence = self._sort_levels(list(self.levels.keys()))
+
+        for i, key in enumerate(primary_sequence):
+            if i < len(primary_sequence) - 1:
+                self.edges[key] = [primary_sequence[i + 1]]
             else:
-                self.edges[key] = []  # 最后一关无后继
+                self.edges[key] = []
+
+        # Ensure every remaining level exists in adjacency map (even if isolated)
+        for key in self.levels.keys():
+            self.edges.setdefault(key, [])
         print(f"[StoryGraph] Graph edges = {self.edges}")
 
     # ================= 主线推进：下一关（bfs next） ===============
@@ -137,6 +166,34 @@ class StoryGraph:
         }
         self.trajectory.setdefault(player_id, []).append(entry)
 
+    def update_memory_flags(
+        self,
+        player_id: str,
+        flags: Iterable[str],
+        *,
+        level_id: Optional[str] = None,
+        source: Optional[str] = None,
+        ref: Optional[str] = None,
+    ) -> None:
+        normalized = []
+        for flag in flags:
+            if isinstance(flag, str):
+                token = flag.strip()
+            else:
+                token = str(flag).strip()
+            if token and token not in normalized:
+                normalized.append(token)
+
+        self.memory_snapshots[player_id] = normalized
+
+        meta: Dict[str, Any] = {"flags": list(normalized)}
+        if source:
+            meta["source"] = source
+        if ref:
+            meta["ref"] = ref
+
+        self.update_trajectory(player_id, level_id, "memory", meta)
+
     # ================= Phase 10: 智能推荐下一关 =================
     def recommend_next_levels(
         self,
@@ -164,6 +221,44 @@ class StoryGraph:
                 "meta": entry.get("meta", {}),
                 "ts": entry.get("ts"),
             })
+
+        memory_flags: List[str] = []
+        if player_id in self.memory_snapshots:
+            memory_flags = list(self.memory_snapshots[player_id])
+        else:
+            for entry in reversed(history):
+                if entry.get("action") != "memory":
+                    continue
+                meta = entry.get("meta") or {}
+                raw_flags = meta.get("flags")
+                if isinstance(raw_flags, list):
+                    memory_flags = [
+                        str(flag).strip()
+                        for flag in raw_flags
+                        if isinstance(flag, (str, int)) and str(flag).strip()
+                    ]
+                break
+            if memory_flags:
+                self.memory_snapshots[player_id] = list(memory_flags)
+
+        recent_choices = [item for item in normalized_history if item.get("action") == "choice"]
+        preferred_levels: List[str] = []
+        choice_level_weights: Dict[str, int] = {}
+        choice_tag_counter: Counter[str] = Counter()
+
+        for choice in recent_choices:
+            meta = choice.get("meta") or {}
+            preferred = meta.get("next_level")
+            canonical_pref = self._canonical_level_id(preferred) if preferred else None
+            if canonical_pref:
+                preferred_levels.append(canonical_pref)
+                choice_level_weights[canonical_pref] = choice_level_weights.get(canonical_pref, 0) + 1
+            tags = meta.get("tags") or []
+            if isinstance(tags, str):
+                tags = [token.strip() for token in tags.split(",") if token.strip()]
+            for tag in tags:
+                if isinstance(tag, str) and tag.strip():
+                    choice_tag_counter[tag.strip().lower()] += 1
 
         completed_levels = {
             item["canonical"]
@@ -196,6 +291,10 @@ class StoryGraph:
         avg_chapter = sum(chapter_values) / len(chapter_values) if chapter_values else None
 
         candidate_ids: List[str] = []
+
+        for preferred in preferred_levels:
+            if preferred and preferred not in candidate_ids:
+                candidate_ids.append(preferred)
 
         # 1) 当前关卡的邻居优先
         if canonical_current:
@@ -282,6 +381,27 @@ class StoryGraph:
                         if f"偏好：{tag}" not in reasons:
                             reasons.append(f"偏好：{tag}")
 
+            if memory_flags:
+                affinity_flags = self._collect_memory_list(level_data.get("memory_affinity"))
+                overlap = sorted(set(memory_flags).intersection(affinity_flags))
+                if overlap:
+                    entry["score"] += 12.0 * len(overlap)
+                    entry.setdefault("memory_match", [])
+                    for flag in overlap:
+                        if flag not in entry["memory_match"]:
+                            entry["memory_match"].append(flag)
+                    summary = "、".join(overlap[:2])
+                    reason = f"记忆共鸣：{summary}" if summary else "记忆共鸣"
+                    reasons.append(reason)
+
+                recovery_flags = self._collect_memory_list(
+                    level_data.get("memory_recovery") or level_data.get("memory_healing")
+                )
+                if recovery_flags and set(memory_flags).intersection(recovery_flags):
+                    entry["score"] += 6.0
+                    if "疗愈记忆" not in reasons:
+                        reasons.append("疗愈记忆")
+
             meta = level_data.get("meta") or {}
             chapter = meta.get("chapter")
             if isinstance(chapter, int) and avg_chapter is not None:
@@ -299,6 +419,20 @@ class StoryGraph:
             if canonical in seen_levels and canonical not in completed_levels:
                 entry["score"] += 5.0
                 reasons.append("正在进行中")
+
+            weight = choice_level_weights.get(canonical, 0)
+            if weight:
+                entry["score"] += 40.0 * weight
+                reasons.append("呼应最近的剧情选择")
+
+            if choice_tag_counter and tags:
+                overlap = 0
+                for tag in tags:
+                    key = tag.lower()
+                    overlap += choice_tag_counter.get(key, 0)
+                if overlap > 0:
+                    entry["score"] += 8.0 * overlap
+                    reasons.append("契合分支偏好")
 
         ranked = sorted(
             scored.values(),
@@ -321,6 +455,29 @@ class StoryGraph:
         return top_ranked
 
     # ================= 内部工具 =================
+    @staticmethod
+    def _collect_memory_list(raw: Any) -> List[str]:
+        if raw is None:
+            return []
+        if isinstance(raw, str):
+            tokens = [token.strip() for token in raw.split(",")]
+            return [token for token in tokens if token]
+        if isinstance(raw, (list, tuple, set)):
+            result: List[str] = []
+            for item in raw:
+                token = str(item).strip()
+                if token:
+                    result.append(token)
+            return result
+        if isinstance(raw, dict):
+            return [
+                str(value).strip()
+                for value in raw.values()
+                if isinstance(value, (str, int)) and str(value).strip()
+            ]
+        token = str(raw).strip()
+        return [token] if token else []
+
     def _canonical_level_id(self, level_id: Optional[str]) -> Optional[str]:
         if not level_id:
             return None
@@ -328,16 +485,86 @@ class StoryGraph:
         if level_id in self.levels:
             return level_id
 
-        if isinstance(level_id, str):
-            normalized = level_id.replace(".json", "")
-            if normalized in self.levels:
-                return normalized
+        if not isinstance(level_id, str):
+            return None
 
-            if normalized.startswith("level_"):
-                suffix = normalized.split("_", 1)[1]
-                if suffix.isdigit():
-                    padded = f"level_{int(suffix):02d}"
-                    if padded in self.levels:
-                        return padded
+        normalized = level_id.replace(".json", "")
+        if normalized in self.levels:
+            return normalized
 
-        return level_id if level_id in self.levels else None
+        lookup_key = normalized.lower()
+        if lookup_key in self.alias_map:
+            return self.alias_map[lookup_key]
+
+        if lookup_key.startswith("level_"):
+            suffix = lookup_key.split("_", 1)[1]
+            if suffix.isdigit():
+                padded = f"{int(suffix):02d}"
+                flag = f"flagship_{padded}"
+                if flag in self.levels:
+                    return flag
+
+        return normalized if normalized in self.levels else None
+
+    # ================= Helpers =================
+    def _register_alias(self, alias: Optional[str], canonical: str) -> None:
+        if not alias or not canonical:
+            return
+        key = alias.replace(".json", "").lower()
+        if not key:
+            return
+        self.alias_map.setdefault(key, canonical)
+
+    def _register_numeric_aliases(self, canonical: str) -> None:
+        if "_" not in canonical:
+            return
+        prefix, suffix = canonical.split("_", 1)
+        if not suffix:
+            return
+        numeric = None
+        if suffix.isdigit():
+            numeric = int(suffix)
+        else:
+            try:
+                numeric = int(suffix.rstrip("abcdefghijklmnopqrstuvwxyz"))
+            except ValueError:
+                numeric = None
+        if numeric is None:
+            return
+
+        padded = f"{numeric:02d}"
+        variants = {
+            f"{prefix}_{suffix}",
+            f"{prefix}_{padded}",
+            f"flagship_{suffix}",
+            f"flagship_{padded}",
+            f"flagship_{numeric}",
+            f"level_{suffix}",
+            f"level_{padded}",
+            f"level_{numeric}",
+        }
+        for variant in variants:
+            self._register_alias(variant, canonical)
+
+    def _sorted_flagship_levels(self) -> List[str]:
+        flagship_ids = [key for key, src in self.level_sources.items() if src == "flagship"]
+        return self._sort_levels(flagship_ids)
+
+    @staticmethod
+    def _sort_levels(level_ids: List[str]) -> List[str]:
+        def sort_key(level_id: str) -> Tuple[str, int, int, str]:
+            prefix, _, suffix = level_id.partition("_")
+            if suffix.isdigit():
+                return (prefix, 0, int(suffix), level_id)
+            return (prefix, 1, 0, level_id)
+
+        return sorted(level_ids, key=sort_key)
+
+    def get_start_level(self) -> Optional[str]:
+        flagship = self._sorted_flagship_levels()
+        if flagship:
+            return flagship[0]
+        if self.levels:
+            remaining = self._sort_levels(list(self.levels.keys()))
+            return remaining[0] if remaining else None
+        return None

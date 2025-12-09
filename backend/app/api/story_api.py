@@ -15,6 +15,38 @@ from app.core.story.story_engine import story_engine
 
 router = APIRouter(prefix="/story")
 
+
+def _normalize_injected_level_id(raw_level_id: str) -> str:
+    """Ensure injected level ids follow the flagship_* convention."""
+
+    sanitized = (raw_level_id or "").strip()
+    if not sanitized:
+        return "flagship_custom"
+
+    if sanitized.endswith(".json"):
+        sanitized = sanitized[:-5]
+
+    lowered = sanitized.lower()
+
+    if lowered.startswith("flagship_"):
+        return sanitized
+
+    if lowered.startswith("level_"):
+        suffix = sanitized.split("_", 1)[1]
+        if suffix:
+            try:
+                return f"flagship_{int(suffix):02d}"
+            except ValueError:
+                return f"flagship_{suffix}"
+
+    if lowered.startswith("custom_") or lowered.startswith("story_"):
+        return f"flagship_{sanitized}"
+
+    if lowered.isdigit():
+        return f"flagship_{int(lowered):02d}"
+
+    return sanitized
+
 # ============================================================
 # ✔ Pydantic 模型（用于 JSON 注入）
 # ============================================================
@@ -97,12 +129,14 @@ def api_story_inject(payload: InjectPayload):
     LEVEL_DIR = DATA_DIR                         # ⭐ 与 story_loader 使用相同目录
     os.makedirs(LEVEL_DIR, exist_ok=True)
 
-    file_path = os.path.join(LEVEL_DIR, f"{payload.level_id}.json")
+    level_id = _normalize_injected_level_id(payload.level_id)
+
+    file_path = os.path.join(LEVEL_DIR, f"{level_id}.json")
 
     if os.path.exists(file_path):
         raise HTTPException(
             status_code=400,
-            detail=f"Level {payload.level_id} already exists"
+            detail=f"Level {level_id} already exists"
         )
 
     # ⭐ 使用AI生成完整的世界内容（NPC、环境、建筑等）
@@ -191,7 +225,7 @@ def api_story_inject(payload: InjectPayload):
 
     # ⭐ 生成兼容 Level 类的结构（全部字段完整）
     data = {
-        "id": payload.level_id,
+        "id": level_id,
         "title": payload.title,
         "text": [payload.text],                 # ⭐ 必须为 list[str]
         "tags": [],
@@ -208,7 +242,7 @@ def api_story_inject(payload: InjectPayload):
 
     return {
         "status": "ok",
-        "msg": f"Level {payload.level_id} created with AI-generated world",
+        "msg": f"Level {level_id} created with AI-generated world",
         "file": file_path,
         "world_preview": bootstrap_patch.get("mc", {})
     }

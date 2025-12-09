@@ -98,7 +98,7 @@ def apply_action(inp: ApplyInput):
             
             # 生成唯一level_id
             raw_text = intent.get("raw_text", "story")
-            level_id = f"story_{hashlib.md5(f'{raw_text}{time.time()}'.encode()).hexdigest()[:8]}"
+            level_id = f"flagship_story_{hashlib.md5(f'{raw_text}{time.time()}'.encode()).hexdigest()[:8]}"
             
             # 调用story_api创建关卡（AI会生成完整世界）
             try:
@@ -136,7 +136,9 @@ def apply_action(inp: ApplyInput):
 
         # ---------- 跳关 ----------
         if t == "GOTO_LEVEL":
-            level = intent["level_id"]
+            level = intent.get("level_id")
+            canonical = story_engine.graph.canonicalize_level_id(level) if level else None
+            level = canonical or level
             patch = story_engine.load_level_for_player(player_id, level)
             new_state = world_engine.apply_patch(patch)
 
@@ -276,6 +278,31 @@ def story_enter(request: EnterStoryRequest):
     }
 
 
+@router.post("/story/start")
+def story_start(request: EnterStoryRequest):
+    preferred_level = request.level_id
+    if not preferred_level:
+        preferred_level = (
+            story_engine.graph.get_start_level()
+            or story_engine.DEFAULT_ENTRY_LEVEL
+        )
+
+    patch = None
+    if preferred_level:
+        patch = story_engine.load_level_for_player(request.player_id, preferred_level)
+
+    logger.info(
+        "story_start",
+        extra={"player_id": request.player_id, "level_id": preferred_level},
+    )
+
+    return {
+        "status": "ok",
+        "level_id": preferred_level,
+        "world_patch": patch,
+    }
+
+
 @router.post("/story/end")
 def story_end(request: EndStoryRequest):
     player_state = story_engine.players.get(request.player_id, {})
@@ -304,6 +331,7 @@ def story_rule_event(event: RuleTriggerEvent):
     )
     result = {"status": "ok", "result": response}
     if isinstance(response, dict):
+        story_engine.apply_quest_updates(event.player_id, response)
         if response.get("world_patch"):
             result["world_patch"] = response["world_patch"]
         if response.get("nodes"):
@@ -316,10 +344,22 @@ def story_rule_event(event: RuleTriggerEvent):
             result["commands"] = response["commands"]
         if response.get("active_tasks"):
             result["active_tasks"] = response["active_tasks"]
+        if response.get("memory_flags"):
+            result["memory_flags"] = response["memory_flags"]
         for key in ("task_titles", "milestone_names", "remaining_total", "active_count", "milestone_count"):
             if key in response:
                 result[key] = response[key]
     return result
+
+
+@router.get("/story/{player_id}/memory")
+def story_memory(player_id: str):
+    flags = story_engine.get_player_memory(player_id)
+    return {
+        "status": "ok",
+        "player_id": player_id,
+        "flags": flags,
+    }
 
 
 @router.get("/story/{player_id}/recommendations")
