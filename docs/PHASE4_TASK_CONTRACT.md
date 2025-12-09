@@ -157,6 +157,12 @@ When a binding matches an event, NPCBehaviorEngine emits:
 
 These payloads are merged into the `/world/story/rule-event` response.
 
+### 3.3 Visual identity hooks
+
+- Level authors can set `scene.npc_skins[]` in JSON to inform the plugin which cosmetic skin to load for a named NPC (identifier should match the spawn `name`).
+- `world_patch.mc._scene.featured_npc` highlights which character anchors the scene; Phase 7 NPC polish uses this so the plugin can pin portraits and cleanup logic to the active guide.
+- Behavior updates pushed through `metadata.update_behaviors` may introduce new entries (e.g., `particle`, `patrol`), so downstream consumers should tolerate additional keys without schema drift.
+
 ---
 
 ## 4. Plugin Responsibilities

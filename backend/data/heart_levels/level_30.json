@@ -79,13 +79,84 @@
         "color": "light_purple",
         "count": 10
       },
-      "tell": "✨ 欢迎来到【心悦殿堂】- 心悦文集 第30章"
+      "tell": "✨ 欢迎来到【心悦殿堂】- 心悦文集 第30章",
+      "_scene": {
+        "level_id": "level_30",
+        "title": "心悦文集 第30章",
+        "theme": "心悦殿堂",
+        "scene_world": "KunmingLakeStory",
+        "teleport": {
+          "x": 0.5,
+          "y": 70.0,
+          "z": 0.5,
+          "yaw": 0.0,
+          "pitch": 0.0
+        }
+      }
     },
     "variables": {
       "theme": "心悦殿堂",
       "biome": "end",
       "structure": "grand_hall",
       "unlocked": false
+    }
+  },
+  "narrative": {
+    "text": [
+      "款姐   不   妈妈。",
+      "完",
+      "⽆标题",
+      "29"
+    ],
+    "beats": [
+      {
+        "id": "level_30_intro",
+        "trigger": "on_enter",
+        "rule_refs": []
+      }
+    ]
+  },
+  "scene": {
+    "world": "KunmingLakeStory",
+    "teleport": {
+      "x": 0.5,
+      "y": 70.0,
+      "z": 0.5,
+      "yaw": 0.0,
+      "pitch": 0.0
+    },
+    "environment": {
+      "weather": "CLEAR",
+      "time": "DAY"
+    },
+    "structures": [],
+    "npc_skins": []
+  },
+  "rules": {
+    "listeners": []
+  },
+  "tasks": [
+    {
+      "id": "level_30_story",
+      "type": "story",
+      "conditions": [],
+      "milestones": [],
+      "rewards": []
+    }
+  ],
+  "exit": {
+    "phrase_aliases": [
+      "结束剧情",
+      "离开关卡",
+      "退出剧情"
+    ],
+    "return_spawn": "KunmingLakeHub",
+    "teleport": {
+      "x": 0.5,
+      "y": 70.0,
+      "z": 0.5,
+      "yaw": 0.0,
+      "pitch": 0.0
     }
   }
 }
