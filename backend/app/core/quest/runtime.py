@@ -17,6 +17,8 @@ class TaskMilestone:
     """Intermediate checkpoints for a task."""
 
     id: str
+    title: Optional[str] = None
+    hint: Optional[str] = None
     target: Optional[str] = None
     count: int = 1
     progress: int = 0
@@ -31,6 +33,8 @@ class TaskSession:
     id: str
     type: str
     target: Any
+    title: str = ""
+    hint: Optional[str] = None
     count: int = 1
     reward: Dict[str, Any] = field(default_factory=dict)
     dialogue: Dict[str, Any] = field(default_factory=dict)
@@ -69,12 +73,22 @@ class TaskSession:
                     "milestone_completed": True,
                     "milestone_id": milestone.id,
                     "task_id": self.id,
+                    "task_title": self.title,
+                    "task_hint": self.hint,
+                    "milestone_title": milestone.title,
+                    "milestone_hint": milestone.hint,
+                    "milestone_count": milestone.count,
+                    "milestone_progress": milestone.progress,
                 }
 
         if self.progress >= self.count:
             if not self.milestones or all(m.status == "completed" for m in self.milestones):
                 self.status = "completed"
                 return True, self._completion_payload()
+
+        if milestone_payload is not None:
+            milestone_payload.setdefault("task_progress", self.progress)
+            milestone_payload.setdefault("task_count", self.count)
 
         return True, milestone_payload
 
@@ -108,6 +122,10 @@ class TaskSession:
         return {
             "task_completed": True,
             "task_id": self.id,
+            "task_title": self.title,
+            "task_hint": self.hint,
+            "task_progress": self.progress,
+            "task_count": self.count,
             "reward": self.reward,
             "dialogue": self.dialogue,
         }
@@ -165,6 +183,10 @@ class QuestRuntime:
                     "matched": True,
                     "remaining": remaining,
                     "task_id": session.id,
+                    "task_title": session.title,
+                    "task_hint": session.hint,
+                    "task_progress": session.progress,
+                    "task_count": session.count,
                 })
 
         npc_payload = None
@@ -242,6 +264,10 @@ class QuestRuntime:
                         "matched": True,
                         "remaining": remaining,
                         "task_id": session.id,
+                        "task_title": session.title,
+                        "task_hint": session.hint,
+                        "task_progress": session.progress,
+                        "task_count": session.count,
                     })
 
         return self._aggregate_rule_responses(state, responses)
@@ -366,6 +392,8 @@ class QuestRuntime:
             "tasks": [
                 {
                     "id": session.id,
+                    "title": session.title,
+                    "hint": session.hint,
                     "status": session.status,
                     "progress": session.progress,
                     "count": session.count,
@@ -456,47 +484,187 @@ class QuestRuntime:
         seen_completed: Set[str] = set()
         seen_milestones: Set[str] = set()
 
+        session_lookup: Dict[str, TaskSession] = {
+            session.id: session for session in self._iter_sessions(state)
+        }
+        milestone_lookup: Dict[str, TaskMilestone] = {}
+        for session in session_lookup.values():
+            for milestone in session.milestones:
+                milestone_lookup[milestone.id] = milestone
+
         for resp in responses:
+            if not isinstance(resp, dict):
+                continue
+
             if resp.get("task_completed"):
                 task_id = resp.get("task_id")
                 if task_id and task_id not in seen_completed:
                     seen_completed.add(task_id)
                     completed.append(task_id)
+
+                    session = session_lookup.get(task_id)
+                    if session:
+                        state["last_completed_type"] = session.type
+
+                    reward = resp.get("reward") or {}
+                    world_patch = self._merge_patch(world_patch, reward.get("world_patch"))
+                    if reward.get("npc_dialogue"):
+                        world_patch = self._merge_patch(world_patch, {"npc_dialogue": reward["npc_dialogue"]})
+
                     dialogue = resp.get("dialogue") or {}
-                    nodes.append({
-                        "title": f"完成：{task_id}",
-                        "text": dialogue.get("on_complete") or "任务完成，奖励已发放。",
+                    text = dialogue.get("on_complete")
+                    if not text and session and session.dialogue:
+                        text = session.dialogue.get("on_complete")
+
+                    task_title = resp.get("task_title") or (
+                        session.title if session and session.title else f"任务 {task_id}"
+                    )
+                    task_hint = resp.get("task_hint") or (
+                        session.hint if session and session.hint else None
+                    )
+                    node_payload: Dict[str, Any] = {
                         "type": "task_complete",
                         "task_id": task_id,
-                    })
-                    for session in self._iter_sessions(state):
-                        if session.id == task_id:
-                            state["last_completed_type"] = session.type
-                            break
-                reward = resp.get("reward") or {}
-                world_patch = self._merge_patch(world_patch, reward.get("world_patch"))
-                if reward.get("npc_dialogue"):
-                    world_patch = self._merge_patch(world_patch, {"npc_dialogue": reward["npc_dialogue"]})
+                        "title": task_title,
+                        "task_title": task_title,
+                        "status": "complete",
+                    }
+                    if task_hint:
+                        node_payload["hint"] = task_hint
+                        node_payload["task_hint"] = task_hint
+                    if text:
+                        node_payload["text"] = text
+
+                    progress_val = resp.get("task_progress")
+                    if progress_val is None and session:
+                        progress_val = session.progress
+                    if progress_val is not None:
+                        node_payload["progress"] = progress_val
+
+                    count_val = resp.get("task_count")
+                    if count_val is None and session:
+                        count_val = session.count
+                    if count_val is not None:
+                        node_payload["count"] = count_val
+
+                    nodes.append(node_payload)
 
             if resp.get("milestone_completed"):
                 milestone_id = resp.get("milestone_id")
                 if milestone_id and milestone_id not in seen_milestones:
                     seen_milestones.add(milestone_id)
                     milestones.append(milestone_id)
-                    nodes.append({
-                        "title": f"阶段完成：{milestone_id}",
-                        "text": "继续保持，加油完成剩余目标！",
+
+                    session = session_lookup.get(resp.get("task_id"))
+                    milestone = milestone_lookup.get(milestone_id)
+
+                    milestone_title = resp.get("milestone_title")
+                    if not milestone_title:
+                        if milestone and milestone.title:
+                            milestone_title = milestone.title
+                        elif session and session.title:
+                            milestone_title = f"{session.title} · 阶段"
+                        else:
+                            milestone_title = f"阶段完成：{milestone_id}"
+
+                    milestone_hint = resp.get("milestone_hint")
+                    if not milestone_hint and milestone and milestone.hint:
+                        milestone_hint = milestone.hint
+                    if not milestone_hint and session and session.hint:
+                        milestone_hint = session.hint
+
+                    milestone_text = resp.get("milestone_text")
+                    if not milestone_text and milestone and milestone.title and milestone_title != milestone.title:
+                        milestone_text = milestone.title
+                    if not milestone_text:
+                        milestone_text = "继续保持，加油完成剩余目标！"
+
+                    node_payload: Dict[str, Any] = {
                         "type": "task_milestone",
                         "task_id": resp.get("task_id"),
-                    })
+                        "milestone_id": milestone_id,
+                        "title": milestone_title,
+                        "text": milestone_text,
+                        "status": "milestone",
+                    }
+                    if session and session.title:
+                        node_payload["task_title"] = session.title
+                    if milestone_hint:
+                        node_payload["hint"] = milestone_hint
+                        if session and not node_payload.get("task_hint"):
+                            node_payload["task_hint"] = session.hint or milestone_hint
+                    elif session and session.hint:
+                        node_payload["hint"] = session.hint
+                        node_payload.setdefault("task_hint", session.hint)
+
+                    progress_val = resp.get("task_progress")
+                    if progress_val is None and session:
+                        progress_val = session.progress
+                    if progress_val is not None:
+                        node_payload["progress"] = progress_val
+
+                    count_val = resp.get("task_count")
+                    if count_val is None:
+                        count_val = milestone.count if milestone else None
+                    if count_val is not None:
+                        node_payload["count"] = count_val
+
+                    milestone_count = resp.get("milestone_count")
+                    if milestone_count is not None:
+                        node_payload["milestone_count"] = milestone_count
+                    if milestone and milestone.count and "milestone_count" not in node_payload:
+                        node_payload["milestone_count"] = milestone.count
+
+                    nodes.append(node_payload)
 
             if resp.get("matched") and not resp.get("task_completed"):
-                nodes.append({
-                    "title": "任务进度更新",
-                    "text": f"任务 {resp.get('task_id')} 剩余 {resp.get('remaining', 0)} 项。",
+                task_id = resp.get("task_id")
+                if not task_id:
+                    continue
+
+                session = session_lookup.get(task_id)
+                remaining_raw = resp.get("remaining")
+                try:
+                    remaining_val = max(0, int(remaining_raw))
+                except (TypeError, ValueError):
+                    remaining_val = 0
+                if remaining_val <= 0:
+                    continue
+
+                task_title = resp.get("task_title") or (
+                    session.title if session and session.title else f"任务：{task_id}"
+                )
+                task_hint = resp.get("task_hint") or (
+                    session.hint if session and session.hint else None
+                )
+
+                node_payload = {
                     "type": "task_progress",
-                    "task_id": resp.get("task_id"),
-                })
+                    "task_id": task_id,
+                    "title": task_title,
+                    "task_title": task_title,
+                    "status": "progress",
+                    "remaining": remaining_val,
+                    "text": f"剩余 {remaining_val} 项。",
+                }
+
+                if task_hint:
+                    node_payload["hint"] = task_hint
+                    node_payload["task_hint"] = task_hint
+
+                progress_val = resp.get("task_progress")
+                if progress_val is None and session:
+                    progress_val = session.progress
+                if progress_val is not None:
+                    node_payload["progress"] = progress_val
+
+                count_val = resp.get("task_count")
+                if count_val is None and session:
+                    count_val = session.count
+                if count_val is not None:
+                    node_payload["count"] = count_val
+
+                nodes.append(node_payload)
 
         if not nodes and not world_patch and not completed and not milestones:
             return None
@@ -518,6 +686,12 @@ class QuestRuntime:
                 task = dict(getattr(task, "__dict__", {}))
         if not isinstance(task, dict):
             task = {}
+        def _clean_str(value: Any) -> Optional[str]:
+            if value is None:
+                return None
+            text = str(value).strip()
+            return text or None
+
         task_id = str(task.get("id") or f"task_{index:02d}")
         task_type = str(task.get("type") or "custom").lower()
         target = task.get("target") or {}
@@ -539,27 +713,68 @@ class QuestRuntime:
             dialogue = {}
         rule_refs = list(task.get("rule_refs", []) or [])
 
+        task_title = _clean_str(task.get("title")) or _clean_str(task.get("name")) or _clean_str(task.get("label"))
+        task_hint = (
+            _clean_str(task.get("hint"))
+            or _clean_str(task.get("summary"))
+            or _clean_str(task.get("description"))
+        )
+
+        issue_node_raw = task.get("issue_node")
+        issue_node = issue_node_raw if isinstance(issue_node_raw, dict) else None
+        if issue_node:
+            task_title = task_title or _clean_str(issue_node.get("title"))
+            task_hint = task_hint or _clean_str(issue_node.get("hint")) or _clean_str(issue_node.get("text"))
+
         milestone_configs = task.get("milestones") or []
         milestones: List[TaskMilestone] = []
         for idx, raw in enumerate(milestone_configs):
-            if not isinstance(raw, dict):
-                if is_dataclass(raw):
-                    raw = {key: getattr(raw, key) for key in getattr(raw, "__dataclass_fields__", {})}
-                else:
-                    raw = dict(getattr(raw, "__dict__", {}))
-            if not isinstance(raw, dict):
+            milestone_data: Optional[Dict[str, Any]] = None
+            if isinstance(raw, dict):
+                milestone_data = dict(raw)
+            elif is_dataclass(raw):
+                milestone_data = {key: getattr(raw, key) for key in getattr(raw, "__dataclass_fields__", {})}
+            elif isinstance(raw, str):
+                milestone_data = {"id": raw, "title": raw}
+            else:
+                attrs = getattr(raw, "__dict__", None)
+                if isinstance(attrs, dict):
+                    milestone_data = dict(attrs)
+            if not milestone_data:
                 continue
-            milestone_id = str(raw.get("id") or f"{task_id}_milestone_{idx:02d}")
+
+            milestone_id = _clean_str(milestone_data.get("id")) or _clean_str(milestone_data.get("name"))
+            milestone_id = milestone_id or f"{task_id}_milestone_{idx:02d}"
+            milestone_title = _clean_str(milestone_data.get("title")) or _clean_str(milestone_data.get("name"))
+            milestone_hint = (
+                _clean_str(milestone_data.get("hint"))
+                or _clean_str(milestone_data.get("summary"))
+                or _clean_str(milestone_data.get("description"))
+            )
+            milestone_target = (
+                _clean_str(milestone_data.get("target"))
+                or _clean_str(milestone_data.get("entity"))
+                or _clean_str(milestone_data.get("location"))
+            )
+            try:
+                milestone_count = max(1, int(milestone_data.get("count") or milestone_data.get("required") or 1))
+            except (TypeError, ValueError):
+                milestone_count = 1
+
             milestones.append(TaskMilestone(
                 id=milestone_id,
-                target=raw.get("target"),
-                count=max(1, int(raw.get("count") or 1)),
+                title=milestone_title,
+                hint=milestone_hint,
+                target=milestone_target,
+                count=milestone_count,
             ))
 
         session = TaskSession(
             id=task_id,
             type=task_type,
             target=target,
+            title=task_title or "",
+            hint=task_hint,
             count=count,
             reward=reward,
             dialogue=dialogue,
@@ -567,8 +782,19 @@ class QuestRuntime:
             rule_refs=rule_refs,
         )
 
-        issue_node = task.get("issue_node")
-        if isinstance(issue_node, dict):
+        if not session.title:
+            if isinstance(target, dict):
+                fallback = _clean_str(target.get("name") or target.get("type"))
+            elif isinstance(target, str):
+                fallback = _clean_str(target)
+            else:
+                fallback = None
+            session.title = fallback or f"任务：{session.id}"
+
+        if not session.hint:
+            session.hint = self._default_issue_text(session)
+
+        if issue_node:
             setattr(session, "issue_node", issue_node)
 
         return session
@@ -664,29 +890,40 @@ class QuestRuntime:
 
     def _build_issue_node(self, level: Level, session: TaskSession) -> Dict[str, Any]:
         node = getattr(session, "issue_node", {}) or {}
-        title = node.get("title") or f"任务：{session.id}"
-        text = node.get("text") or self._default_issue_text(session)
-        return {
+        title = node.get("title") or session.title or f"任务：{session.id}"
+        hint = node.get("hint") or session.hint
+        text = node.get("text") or hint or self._default_issue_text(session)
+        payload = {
             "title": title,
             "text": text,
             "type": "task",
             "task_id": session.id,
+            "status": "issued",
         }
+        if hint:
+            payload["hint"] = hint
+        return payload
 
     def _build_reward_node(self, level: Level, session: TaskSession) -> Dict[str, Any]:
         text = session.dialogue.get("on_complete") or "任务完成，奖励已发放。"
-        return {
-            "title": f"完成：{session.id}",
+        payload = {
+            "title": session.title or f"任务：{session.id}",
             "text": text,
             "type": "task_complete",
             "task_id": session.id,
+            "status": "complete",
         }
+        if session.hint:
+            payload["hint"] = session.hint
+        return payload
 
     def _build_summary_node(self, level: Level, state: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "title": f"{level.title} · 任务总结",
             "text": "全部任务已完成，你可以随时返回昆明湖。",
+            "hint": "输入 /advance 或使用出口回到中心。",
             "type": "task_summary",
+            "status": "summary",
         }
 
     def _default_issue_text(self, session: TaskSession) -> str:
@@ -694,10 +931,11 @@ class QuestRuntime:
         target = session.target
         count = session.count
         if isinstance(target, dict):
-            name = target.get("name") or target.get("type")
+            name = target.get("name") or target.get("type") or target.get("id")
         else:
-            name = str(target)
-        return f"请完成目标（{task_type}:{name}） x{count}."
+            name = str(target) if target not in ({}, None, "") else None
+        name = name or "任务目标"
+        return f"完成 {task_type} ×{count}（目标：{name}）"
     def _iter_sessions(self, state: Dict[str, Any]) -> Iterable[TaskSession]:
         return state.get("tasks", [])
 

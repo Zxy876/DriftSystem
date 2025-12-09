@@ -1,7 +1,7 @@
 # Shared World State Authority (STATE.md)
 
 ## 1. Current Phase
-CURRENT_PHASE = 8
+CURRENT_PHASE = 10
 PHASE_1_COMPLETE = true
 PHASE_1_5_COMPLETE = true
 PHASE_2_COMPLETE = true
@@ -10,6 +10,8 @@ PHASE_4_COMPLETE = true
 PHASE_5_COMPLETE = true
 PHASE_6_COMPLETE = true
 PHASE_7_COMPLETE = true
+PHASE_8_COMPLETE = true
+PHASE_9_COMPLETE = true
 
 ## 2. Current Goal
 - Prepare launch checklist and polish pass now that the mainline exit system is live.
@@ -24,6 +26,8 @@ PHASE_7_COMPLETE = true
 	- `RuleEventBridge` now forwards near-NPC events back to `/world/story/rule-event`, closing the basic rule trigger loop.
 	- Scene metadata is now emitted via world patches, enabling plugin-side SceneAwareWorldPatchExecutor to track and clean scene sessions.
 	- QuestRuntime TaskSessions normalize task definitions, track milestones/rewards, and respond to rule-event callbacks with aggregated nodes/world patches.
+	- QuestRuntime now returns task titles/hints and RuleEventBridge renders progress/milestones with streamlined quest log chat formatting.
+	- Cinematic beats now trigger for level_01’s checkpoint/finish, level_03’s summit climb, and the tutorial launch portal with coordinated titles, particles, and environment shifts.
 	- NPCBehaviorEngine records rulegraph bindings and emits dialogue/command/world patch updates when rule events fire.
 	- `/world/story/rule-event` exposes task/NPC deltas directly for the plugin transport to consume.
 	- Plugin bridge now applies rule-event `world_patch` payloads, emits quest/milestone chat beats, and dispatches backend `commands` to the server console.
@@ -32,6 +36,7 @@ PHASE_7_COMPLETE = true
 	- StoryEngine now records enter/exit trajectories, exposes exit profiles in `get_public_state`, and returns hub teleport summaries.
 	- Heart level content migrated to schema v2.0: every chapter carries beats/scene/rules/tasks/exit scaffolding and emits `_scene` metadata for the plugin cleanup loop.
 	- Key NPC hubs (level_01, level_03, tutorial_level) now expose polished behaviors, rule listeners, and `npc_skins` metadata to make roles visually distinct.
+	- StoryGraph now canonicalizes numeric level ids, records player trajectories, and produces weighted next-level recommendations consumed by StoryEngine.
 
 ## 4. Progress – In Progress
 - Capabilities under active review:
@@ -44,6 +49,9 @@ PHASE_7_COMPLETE = true
 ```
 - QuestRuntime now deduplicates task completion/milestone notifications when aggregating rule-trigger responses, preventing duplicate chat spam.
 - StoryEngine, SceneAwareWorldPatchExecutor, and RuleEventBridge retain Phase 4 integration for rule-driven quest feedback.
+	- Quest log UX refreshed: QuestRuntime surfaces task titles/hints/remaining counts, and RuleEventBridge delivers them with concise bullet formatting.
+	- Cinematic world patches highlight chapter beats: racer checkpoint/finish, summit ascent finale, and tutorial portal now emit titles, particles, sounds, and sky transitions.
+	- StoryGraph exposes weighted recommendations, StoryEngine routes `/world/story/{player_id}/recommendations`, and new unit tests cover canonicalization heuristics.
 ```
 
 ## 6. File Map (summaries of project folder structures)
@@ -61,6 +69,7 @@ PHASE_7_COMPLETE = true
 - [ ] Document exit summary UX in `docs/TUTORIAL_SYSTEM.md`.
 - [ ] Conduct dev-server smoke test for polished NPC behaviors (level_01, level_03, tutorial_level).
 - [ ] Aggregate player transcripts to decide which mid-game chapters receive the next cosmetic pass.
+- [ ] Wire recommendation endpoint into plugin HUD for playtest feedback.
 
 ## 8. Risks
 - Hub teleport assumes KunmingLakeHub world is loaded; server ops should validate availability after restarts.

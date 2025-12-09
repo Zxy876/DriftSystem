@@ -2,12 +2,14 @@ package com.driftmc.scene;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
@@ -26,6 +28,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
 
 import okhttp3.Call;
@@ -41,6 +44,14 @@ public final class RuleEventBridge {
     private static final long DEFAULT_COOLDOWN_MS = 1_500L;
 
     private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {}.getType();
+
+    private static final QuestMessageStyle STORY_STYLE = new QuestMessageStyle(ChatColor.YELLOW, "【剧情】", false);
+    private static final QuestMessageStyle TASK_STYLE = new QuestMessageStyle(ChatColor.GOLD, "【任务】", true);
+    private static final QuestMessageStyle PROGRESS_STYLE = new QuestMessageStyle(ChatColor.AQUA, "【进度】", true);
+    private static final QuestMessageStyle COMPLETE_STYLE = new QuestMessageStyle(ChatColor.GREEN, "【完成】", true);
+    private static final QuestMessageStyle MILESTONE_STYLE = new QuestMessageStyle(ChatColor.LIGHT_PURPLE, "【阶段】", true);
+    private static final QuestMessageStyle SUMMARY_STYLE = new QuestMessageStyle(ChatColor.GOLD, "【总结】", true);
+    private static final QuestMessageStyle NPC_STYLE = new QuestMessageStyle(ChatColor.LIGHT_PURPLE, "【NPC】", false);
 
     private final JavaPlugin plugin;
     private final BackendClient backend;
@@ -310,58 +321,62 @@ public final class RuleEventBridge {
         }
 
         String type = safeString(node.get("type"));
+        QuestMessageStyle style = resolveStyle(type);
+
         String title = safeString(node.get("title"));
         String text = safeString(node.get("text"));
+        String hint = safeString(node.get("hint"));
+        int remaining = safeInt(node.get("remaining"), -1);
+        int progress = safeInt(node.get("progress"), -1);
+        int count = safeInt(node.get("count"), -1);
 
-        title = (title == null) ? "" : title;
-        text = (text == null) ? "" : text;
+        if (style.quest) {
+            String headline = !isBlank(title) ? title : (!isBlank(text) ? text : "任务更新");
+            player.sendMessage(style.color + style.prefix + ChatColor.WHITE + " " + headline);
 
-        ChatColor prefixColor = ChatColor.YELLOW;
-        String prefix = "【剧情】";
+            List<String> details = new ArrayList<>();
+            appendDetail(details, hint);
 
-        if (type != null) {
-            switch (type) {
-                case "task" -> {
-                    prefixColor = ChatColor.GOLD;
-                    prefix = "【任务】";
+            if (remaining >= 0) {
+                StringBuilder progressLine = new StringBuilder("剩余 ").append(remaining).append(" 项");
+                if (progress >= 0 && count > 0) {
+                    progressLine.append(" (")
+                            .append(Math.min(progress, count))
+                            .append("/")
+                            .append(count)
+                            .append(")");
                 }
-                case "task_progress" -> {
-                    prefixColor = ChatColor.AQUA;
-                    prefix = "【进度】";
+                appendDetail(details, progressLine.toString());
+            }
+
+            if (!isBlank(text) && !text.equals(headline)) {
+                for (String fragment : text.split("\\r?\\n")) {
+                    appendDetail(details, fragment);
                 }
-                case "task_complete" -> {
-                    prefixColor = ChatColor.GREEN;
-                    prefix = "【完成】";
-                }
-                case "task_milestone" -> {
-                    prefixColor = ChatColor.LIGHT_PURPLE;
-                    prefix = "【阶段】";
-                }
-                case "npc_dialogue" -> {
-                    prefixColor = ChatColor.LIGHT_PURPLE;
-                    prefix = "【NPC】";
-                }
-                case "task_summary" -> {
-                    prefixColor = ChatColor.GOLD;
-                    prefix = "【总结】";
-                }
-                default -> {
-                    // 默认样式
-                }
+            }
+
+            if (!details.isEmpty()) {
+                sendDetailLines(player, details);
+            }
+            return;
+        }
+
+        String headline = !isBlank(title) ? title : text;
+        if (!isBlank(headline)) {
+            player.sendMessage(style.color + style.prefix + ChatColor.WHITE + " " + headline);
+        }
+
+        List<String> details = new ArrayList<>();
+        appendDetail(details, hint);
+
+        if (!isBlank(text) && !text.equals(headline)) {
+            for (String fragment : text.split("\\r?\\n")) {
+                appendDetail(details, fragment);
             }
         }
 
-        String headline = !title.isBlank() ? title : text;
-        if (!headline.isBlank()) {
-            player.sendMessage(prefixColor + prefix + ChatColor.WHITE + " " + headline);
-        }
-
-        if (!text.isBlank() && !text.equals(headline)) {
-            for (String line : text.split("\\r?\\n")) {
-                if (!line.isBlank()) {
-                    player.sendMessage(ChatColor.GRAY + line);
-                }
-            }
+        if (!details.isEmpty()) {
+            sendDetailLines(player, details);
         }
     }
 
@@ -412,6 +427,71 @@ public final class RuleEventBridge {
         return false;
     }
 
+    private QuestMessageStyle resolveStyle(String type) {
+        if (type == null) {
+            return STORY_STYLE;
+        }
+        switch (type) {
+            case "task":
+                return TASK_STYLE;
+            case "task_progress":
+                return PROGRESS_STYLE;
+            case "task_complete":
+                return COMPLETE_STYLE;
+            case "task_milestone":
+                return MILESTONE_STYLE;
+            case "task_summary":
+                return SUMMARY_STYLE;
+            case "npc_dialogue":
+                return NPC_STYLE;
+            default:
+                return STORY_STYLE;
+        }
+    }
+
+    private int safeInt(JsonElement element, int defaultValue) {
+        if (element == null || element.isJsonNull()) {
+            return defaultValue;
+        }
+        if (element.isJsonPrimitive()) {
+            JsonPrimitive primitive = element.getAsJsonPrimitive();
+            if (primitive.isNumber()) {
+                return primitive.getAsInt();
+            }
+            if (primitive.isString()) {
+                try {
+                    return Integer.parseInt(primitive.getAsString());
+                } catch (NumberFormatException ignored) {
+                    return defaultValue;
+                }
+            }
+        }
+        return defaultValue;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private void appendDetail(List<String> details, String value) {
+        if (value == null) {
+            return;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+        if (!details.contains(trimmed)) {
+            details.add(trimmed);
+        }
+    }
+
+    private void sendDetailLines(Player player, List<String> lines) {
+        for (String detail : lines) {
+            player.sendMessage(ChatColor.GRAY + "› " + ChatColor.WHITE + detail);
+        }
+    }
+
     private String safeString(JsonElement element) {
         if (element == null || element.isJsonNull()) {
             return null;
@@ -438,6 +518,18 @@ public final class RuleEventBridge {
     private static final class PlayerRuleState {
         final Set<String> completedTasks = ConcurrentHashMap.newKeySet();
         final Set<String> milestones = ConcurrentHashMap.newKeySet();
+    }
+
+    private static final class QuestMessageStyle {
+        final ChatColor color;
+        final String prefix;
+        final boolean quest;
+
+        QuestMessageStyle(ChatColor color, String prefix, boolean quest) {
+            this.color = color;
+            this.prefix = prefix;
+            this.quest = quest;
+        }
     }
 
     private Map<String, Object> extractLocation(Location location, Player fallback) {

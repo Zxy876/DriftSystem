@@ -83,6 +83,9 @@ class QuestRuntimeTests(unittest.TestCase):
         )
         self.assertIsNotNone(progress_node, "Progress node should appear after first kill")
         self.assertEqual(progress_node.get("task_id"), "kill_goat")
+        self.assertEqual(progress_node.get("task_title"), "击败山羊")
+        self.assertEqual(progress_node.get("hint"), "消灭两只山羊来稳住你的情绪。")
+        self.assertEqual(progress_node.get("remaining"), 1)
 
         completed = self.runtime.record_event(
             self.player,
@@ -94,6 +97,13 @@ class QuestRuntimeTests(unittest.TestCase):
             completed.get("completed_tasks", []),
             "Completion payload should list kill task",
         )
+        completion_node = next(
+            (node for node in completed.get("nodes", []) if node.get("type") == "task_complete"),
+            None,
+        )
+        self.assertIsNotNone(completion_node, "Completion node should be emitted for finished task")
+        self.assertEqual(completion_node.get("title"), "击败山羊")
+        self.assertEqual(completion_node.get("hint"), "消灭两只山羊来稳住你的情绪。")
 
         issued_second = self.runtime.issue_tasks_on_beat(self.level, self.player, {"id": "beat_2"})
         self.assertIsNotNone(issued_second, "Second task should issue after kill task")
@@ -191,6 +201,7 @@ class QuestRuntimeRuleEventTests(unittest.TestCase):
             None,
         )
         self.assertIsNotNone(milestone_node, "Milestone node should be emitted for milestone completion")
+        self.assertTrue(milestone_node.get("hint"), "Milestone node should include a hint for players")
 
         second_response = self.runtime.handle_rule_trigger(
             self.player,

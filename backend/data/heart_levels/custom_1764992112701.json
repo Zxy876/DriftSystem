@@ -134,5 +134,14 @@
       ]
     }
   },
-  "tree": null
+  "tree": null,
+  "tasks": [
+    {
+      "id": "custom_1764992112701_story",
+      "type": "story",
+      "conditions": [],
+      "milestones": [],
+      "rewards": []
+    }
+  ]
 }

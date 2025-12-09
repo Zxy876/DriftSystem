@@ -93,7 +93,15 @@
     ]
   },
   "scene": {},
-  "tasks": [],
+  "tasks": [
+    {
+      "id": "custom_1765015369222_story",
+      "type": "story",
+      "conditions": [],
+      "milestones": [],
+      "rewards": []
+    }
+  ],
   "world_patch": {
     "mc": {},
     "variables": {}

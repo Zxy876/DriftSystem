@@ -223,21 +223,33 @@ class StoryEngine:
     # ============================================================
     # 关卡跳转逻辑（下一关）
     # ============================================================
-    def get_next_level_id(self, current_level_id: Optional[str]):
-        if not current_level_id or not current_level_id.startswith("level_"):
+    def get_next_level_id(self, current_level_id: Optional[str], player_id: Optional[str] = None):
+        if player_id:
+            recommendations = self.graph.recommend_next_levels(player_id, current_level_id, limit=1)
+            if recommendations:
+                return recommendations[0]["level_id"]
+
+        canonical_current = self.graph.canonicalize_level_id(current_level_id)
+        if not canonical_current:
             all_levels = sorted(self.graph.all_levels())
-            return "level_01" if "level_01" in all_levels else all_levels[0]
-        return self.graph.bfs_next(current_level_id)
+            return "level_01" if "level_01" in all_levels else (all_levels[0] if all_levels else None)
+
+        return self.graph.bfs_next(canonical_current)
 
     def load_next_level_for_player(self, player_id: str) -> Dict[str, Any]:
         self._ensure_player(player_id)
         p = self.players[player_id]
         current_level = getattr(p["level"], "level_id", None)
-        next_id = self.get_next_level_id(current_level)
+        next_id = self.get_next_level_id(current_level, player_id=player_id)
         if not next_id:
             p["ended"] = True
             return {"mc": {"tell": "🎉 已经是最后一关了。"}}
         return self.load_level_for_player(player_id, next_id)
+
+    def get_level_recommendations(self, player_id: str, current_level_id: Optional[str] = None, limit: int = 3):
+        """Expose StoryGraph recommendations to API callers."""
+
+        return self.graph.recommend_next_levels(player_id, current_level_id, limit=limit)
 
     # ============================================================
     # ⭐ 剧情舞台渲染器 v2
