@@ -7,6 +7,7 @@ import java.util.logging.Level;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import com.driftmc.npc.NPCManager;
 import com.driftmc.world.WorldPatchExecutor;
 
 /**
@@ -16,10 +17,12 @@ public final class SceneLoader implements SceneLifecycleBridge {
 
     private final JavaPlugin plugin;
     private final SceneCleanupService cleanup;
+    private final NPCManager npcManager;
 
-    public SceneLoader(JavaPlugin plugin, WorldPatchExecutor world) {
+    public SceneLoader(JavaPlugin plugin, WorldPatchExecutor world, NPCManager npcManager) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.cleanup = new SceneCleanupService(plugin, Objects.requireNonNull(world, "world"));
+        this.npcManager = Objects.requireNonNull(npcManager, "npcManager");
     }
 
     @Override
@@ -28,6 +31,7 @@ public final class SceneLoader implements SceneLifecycleBridge {
             return;
         }
         cleanup.beginSession(player, metadata, operations);
+        npcManager.onScenePatch(player, metadata, operations);
         plugin.getLogger().log(Level.FINE, "[SceneLoader] Scene applied for player {0}", player.getName());
     }
 
@@ -37,6 +41,7 @@ public final class SceneLoader implements SceneLifecycleBridge {
             return;
         }
         cleanup.cleanup(player, metadata);
+        npcManager.onSceneCleanup(player, metadata);
     }
 
     public void shutdown() {

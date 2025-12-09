@@ -1,7 +1,7 @@
 # Shared World State Authority (STATE.md)
 
 ## 1. Current Phase
-CURRENT_PHASE = 13
+CURRENT_PHASE = 14
 PHASE_1_COMPLETE = true
 PHASE_1_5_COMPLETE = true
 PHASE_2_COMPLETE = true
@@ -15,9 +15,10 @@ PHASE_9_COMPLETE = true
 PHASE_10_COMPLETE = true
 PHASE_11_COMPLETE = true
 PHASE_12_COMPLETE = true
+PHASE_13_COMPLETE = true
 
 ## 2. Current Goal
-- Gather StoryGraph HUD feedback to guide the next narrative polish pass.
+- Capture feedback from the new NPC dialogue panel to guide the next narrative polish pass.
 
 ## 3. Progress – Done
 - Capabilities already achieved:
@@ -55,6 +56,7 @@ PHASE_12_COMPLETE = true
 - QuestRuntime now exposes `active_tasks` snapshots with remaining counts, task titles, and milestone names for HUD rendering.
 - New `/world/story/{player_id}/quest-log` endpoint delivers quest log payloads and accompanying summary metadata.
 - QuestLogHud surfaces structured quest details via `/questlog`, auto-refreshes on level entry, and fires action-bar notifications on milestones/completions.
+	- NPC dialogue HUD renders cinematic conversations with typing cadence, right-click activation, and nameplate styling; skin metadata now flows from scenes into the plugin.
 - RuleEventBridge forwards quest snapshots to the HUD and relays milestone events without duplicating chat spam.
 ```
 

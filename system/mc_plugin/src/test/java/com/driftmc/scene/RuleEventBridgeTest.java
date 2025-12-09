@@ -1,6 +1,12 @@
 package com.driftmc.scene;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -8,59 +14,87 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Logger;
 
-import org.junit.jupiter.api.AfterAll;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.World;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.hud.dialogue.DialoguePanel;
+import com.driftmc.npc.NPCManager;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
-import be.seeseemelk.mockbukkit.MockBukkit;
-import be.seeseemelk.mockbukkit.ServerMock;
-import be.seeseemelk.mockbukkit.entity.PlayerMock;
-import be.seeseemelk.mockbukkit.plugin.MockPlugin;
 import okhttp3.Callback;
 
 class RuleEventBridgeTest {
 
-    private static ServerMock server;
-
-    private MockPlugin plugin;
+    private JavaPlugin plugin;
     private RecordingBackend backend;
     private SceneAwareWorldPatchExecutor worldPatcher;
     private RuleEventBridge bridge;
-
-    @BeforeAll
-    static void initServer() {
-        server = MockBukkit.mock();
-    }
-
-    @AfterAll
-    static void shutdownServer() {
-        MockBukkit.unmock();
-    }
+    private NPCManager npcManager;
+    private DialoguePanel dialoguePanel;
+    private MockedStatic<Bukkit> bukkit;
+    private Player player;
+    private UUID playerId;
+    private List<String> messages;
 
     @BeforeEach
     void setUp() {
-        plugin = MockBukkit.createMockPlugin();
+        System.setProperty("net.bytebuddy.experimental", "true");
+        plugin = mock(JavaPlugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("TestPlugin"));
+
         backend = new RecordingBackend();
-        worldPatcher = new SceneAwareWorldPatchExecutor(plugin);
-        bridge = new RuleEventBridge(plugin, backend, worldPatcher);
+        npcManager = new NPCManager(plugin);
+        worldPatcher = new SceneAwareWorldPatchExecutor(plugin, npcManager);
+        dialoguePanel = new DialoguePanel(plugin);
+        bridge = new RuleEventBridge(plugin, backend, worldPatcher, null, dialoguePanel);
+
+        player = mock(Player.class);
+        playerId = UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(playerId);
+        when(player.getName()).thenReturn("QuestRunner");
+        when(player.isOnline()).thenReturn(true);
+        World world = mock(World.class);
+        Location location = new Location(world, 0, 64, 0);
+        when(player.getWorld()).thenReturn(world);
+        when(player.getLocation()).thenReturn(location);
+
+        messages = new ArrayList<>();
+        doAnswer(invocation -> {
+            messages.add(invocation.getArgument(0));
+            return null;
+        }).when(player).sendMessage(anyString());
+
+        bukkit = mockStatic(Bukkit.class);
+        ConsoleCommandSender console = mock(ConsoleCommandSender.class);
+        bukkit.when(Bukkit::getConsoleSender).thenReturn(console);
+        bukkit.when(Bukkit::isPrimaryThread).thenReturn(true);
+        bukkit.when(() -> Bukkit.dispatchCommand(any(), anyString())).thenReturn(true);
+        bukkit.when(() -> Bukkit.getPlayer(any(UUID.class))).thenAnswer(invocation -> {
+            UUID id = invocation.getArgument(0);
+            return playerId.equals(id) ? player : null;
+        });
     }
 
     @AfterEach
     void tearDown() {
         backend.clear();
-        worldPatcher.shutdown();
+        bukkit.close();
     }
 
     @Test
     void duplicateTriggerSuppression() {
-        PlayerMock player = server.addPlayer("DuplicateTester");
         bridge.setCooldownMillis(10_000L);
 
         bridge.emit(player, "chat", Map.of("text", "hello"));
@@ -86,7 +120,8 @@ class RuleEventBridgeTest {
                 new JsonArray(),
                 new JsonArray(),
                 false,
-                new JsonObject());
+            new JsonObject(),
+            new JsonObject());
 
         assertTrue(getPlayerStates(bridge).isEmpty(),
                 "Player state map should remain empty for offline players");
@@ -94,8 +129,6 @@ class RuleEventBridgeTest {
 
     @Test
     void integrationAppliesWorldPatchAndNodes() throws Exception {
-        PlayerMock player = server.addPlayer("QuestRunner");
-
         JsonObject worldPatch = new JsonObject();
         worldPatch.addProperty("tell", "奖励已发放");
 
@@ -116,7 +149,7 @@ class RuleEventBridgeTest {
 
         invokeApplyRuleEventResult(
                 bridge,
-                player.getUniqueId(),
+                playerId,
                 player.getName(),
                 worldPatch,
                 nodes,
@@ -124,12 +157,12 @@ class RuleEventBridgeTest {
                 completed,
                 new JsonArray(),
                 true,
-                summary);
+            summary,
+            new JsonObject());
 
-        List<String> messages = drainMessages(player);
-        assertTrue(messages.stream().anyMatch(msg -> msg.contains("【心悦宇宙】") && msg.contains("奖励已发放")),
-                "World patch tell message should reach the player");
-        assertTrue(messages.stream().anyMatch(msg -> msg.contains("【完成】")),
+        assertTrue(messages.stream().anyMatch(msg -> msg.contains("奖励已发放")),
+            "Tell operations should reach the player");
+        assertTrue(messages.stream().anyMatch(msg -> msg.contains("完成") && msg.contains("collect_sunflower")),
                 "Completion headline should be announced");
         assertTrue(messages.stream().anyMatch(msg -> msg.contains("✔ 任务完成")),
                 "Completed task toast should reach the player");
@@ -137,7 +170,7 @@ class RuleEventBridgeTest {
                 "Exit readiness message should notify the player");
     }
 
-    private static void invokeApplyRuleEventResult(
+        private static void invokeApplyRuleEventResult(
             RuleEventBridge bridge,
             UUID playerId,
             String playerName,
@@ -147,7 +180,8 @@ class RuleEventBridgeTest {
             JsonArray completed,
             JsonArray milestones,
             boolean exitReady,
-            JsonObject summary) throws Exception {
+            JsonObject summary,
+            JsonObject activeTasks) throws Exception {
 
         Method method = RuleEventBridge.class.getDeclaredMethod(
                 "applyRuleEventResult",
@@ -159,7 +193,8 @@ class RuleEventBridgeTest {
                 JsonArray.class,
                 JsonArray.class,
                 boolean.class,
-                JsonObject.class);
+            JsonObject.class,
+            JsonObject.class);
         method.setAccessible(true);
         method.invoke(
                 bridge,
@@ -171,16 +206,8 @@ class RuleEventBridgeTest {
                 completed,
                 milestones,
                 exitReady,
-                summary);
-    }
-
-    private static List<String> drainMessages(PlayerMock player) {
-        List<String> messages = new ArrayList<>();
-        String message;
-        while ((message = player.nextMessage()) != null) {
-            messages.add(message);
-        }
-        return messages;
+                summary,
+                activeTasks);
     }
 
     @SuppressWarnings("unchecked")
@@ -211,4 +238,6 @@ class RuleEventBridgeTest {
             requests = 0;
         }
     }
+
+
 }

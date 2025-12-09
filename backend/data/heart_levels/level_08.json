@@ -122,6 +122,8 @@
         "title": "心悦文集 第8章",
         "theme": "花园",
         "scene_world": "KunmingLakeStory",
+        "featured_npc": "园丁",
+        "focus": "garden_bed",
         "teleport": {
           "x": 0.5,
           "y": 70.0,
@@ -199,10 +201,67 @@
       "time": "DAY"
     },
     "structures": [],
-    "npc_skins": []
+    "npc_skins": [
+      {
+        "id": "园丁",
+        "skin": "skins/gardener.png"
+      }
+    ]
   },
   "rules": {
-    "listeners": []
+    "listeners": [
+      {
+        "id": "gardener_dialogue_intro",
+        "type": "interact_entity",
+        "targets": [
+          "gardener"
+        ],
+        "quest_event": "interact_entity_villager",
+        "metadata": {
+          "dialogue": {
+            "title": "花园守护者",
+            "script": [
+              {
+                "op": "npc_say",
+                "npc": "园丁",
+                "text": "这里的花儿需要静心聆听风声。你愿意陪我守护片刻吗？"
+              },
+              {
+                "op": "narrate",
+                "text": "细雨落在花瓣上，留下银亮的弧线。"
+              },
+              {
+                "op": "npc_say",
+                "npc": "园丁",
+                "text": "如果你想学习修整花圃，只要告诉我。"
+              }
+            ],
+            "choices": [
+              {
+                "label": "我想帮忙整理花圃",
+                "command": "/sayc 我想帮忙整理花圃"
+              },
+              {
+                "label": "我只是路过，想听听你的故事"
+              }
+            ]
+          },
+          "dialogue_hint": "可以询问园丁如何照顾刚萌芽的花朵。",
+          "world_patch": {
+            "particle": {
+              "type": "happy_villager",
+              "count": 15,
+              "radius": 2.0
+            },
+            "sound": {
+              "type": "BLOCK_GRASS_STEP",
+              "volume": 0.8,
+              "pitch": 1.0
+            }
+          }
+        }
+      }
+    ]
   },
   "tasks": [
     {
