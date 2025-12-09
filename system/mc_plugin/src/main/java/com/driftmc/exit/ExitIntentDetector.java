@@ -20,6 +20,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.hud.RecommendationHud;
 import com.driftmc.world.WorldPatchExecutor;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -51,6 +52,7 @@ public final class ExitIntentDetector {
     private final JavaPlugin plugin;
     private final BackendClient backend;
     private final WorldPatchExecutor worldPatcher;
+    private final RecommendationHud recommendationHud;
     private final Gson gson = new Gson();
     private final Type mapType = new TypeToken<Map<String, Object>>() {
     }.getType();
@@ -59,10 +61,12 @@ public final class ExitIntentDetector {
     private final Set<String> profileRequests = ConcurrentHashMap.newKeySet();
     private final Set<String> exitRequests = ConcurrentHashMap.newKeySet();
 
-    public ExitIntentDetector(JavaPlugin plugin, BackendClient backend, WorldPatchExecutor worldPatcher) {
+    public ExitIntentDetector(JavaPlugin plugin, BackendClient backend, WorldPatchExecutor worldPatcher,
+            RecommendationHud recommendationHud) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.backend = Objects.requireNonNull(backend, "backend");
         this.worldPatcher = Objects.requireNonNull(worldPatcher, "worldPatcher");
+        this.recommendationHud = recommendationHud;
     }
 
     /**
@@ -281,6 +285,10 @@ public final class ExitIntentDetector {
                 deliverExitSummary(target, worldPatchObj);
             } else {
                 target.sendMessage(ChatColor.YELLOW + "剧情已结束，但没有返回场景清理数据。");
+            }
+
+            if (recommendationHud != null) {
+                recommendationHud.showRecommendations(target, RecommendationHud.Trigger.AUTO_EXIT);
             }
 
             profileCache.remove(playerName);

@@ -62,3 +62,7 @@ commands:
   sayc:
     description: "以心悦风格广播一句话"
     usage: "/sayc <message>"
+
+  recommend:
+    description: "显示 StoryGraph 推荐章节"
+    usage: "/recommend"

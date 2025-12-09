@@ -266,6 +266,14 @@ class StoryGraph:
 
             level_data = self.get_level(canonical) or {}
             tags = [t for t in (level_data.get("tags") or []) if isinstance(t, str)]
+            if tags and "tags" not in entry:
+                entry["tags"] = list(tags)
+
+            title = level_data.get("title") if isinstance(level_data, dict) else None
+            if isinstance(title, str) and title:
+                entry.setdefault("title", title)
+            else:
+                entry.setdefault("title", canonical)
             for tag in tags:
                 if tag_total:
                     weight = tag_counter.get(tag, 0) / tag_total
@@ -285,6 +293,8 @@ class StoryGraph:
                     entry["score"] += 2.0
                 else:
                     entry["score"] -= 2.5
+            if isinstance(chapter, int):
+                entry.setdefault("chapter", chapter)
 
             if canonical in seen_levels and canonical not in completed_levels:
                 entry["score"] += 5.0
@@ -295,7 +305,20 @@ class StoryGraph:
             key=lambda item: (-item["score"], item["level_id"]),
         )
 
-        return ranked[:limit]
+        top_ranked = ranked[:limit]
+
+        for item in top_ranked:
+            reasons_list = item.get("reasons") or []
+            if reasons_list:
+                deduped = list(dict.fromkeys(reasons_list))
+                item["reasons"] = deduped
+                summary = "、".join(deduped[:3])
+                if summary:
+                    item["reason_summary"] = summary
+            if "title" not in item:
+                item["title"] = item.get("level_id")
+
+        return top_ranked
 
     # ================= 内部工具 =================
     def _canonical_level_id(self, level_id: Optional[str]) -> Optional[str]:
