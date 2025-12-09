@@ -146,6 +146,43 @@
         ],
         "ai_hints": "心悦向导会根据玩家的回答动态调整教学节奏，并在关键关键词出现时 触发指引粒子，引导玩家完成所有教程步骤。"
       },
+      "spawn_multi": [
+        {
+          "type": "villager",
+          "name": "心悦前导",
+          "offset": {
+            "dx": -3,
+            "dy": 0,
+            "dz": -3
+          },
+          "behaviors": [
+            {
+              "type": "stand",
+              "location": {
+                "dx": -3,
+                "dz": -3
+              },
+              "look_at": "nearest_player",
+              "description": "守在旗舰主线传送门旁等待勇士"
+            },
+            {
+              "type": "interact",
+              "trigger": "right_click",
+              "trigger_keywords": [
+                "主线",
+                "旗舰"
+              ],
+              "action": "dialogue",
+              "messages": [
+                "§d[心悦前导]§r 要踏入旗舰主线，只需在聊天框输入：§f踏入心悦主线",
+                "§d[心悦前导]§r 教程完成后，这句话会带你直达旗舰旅程的起点。"
+              ],
+              "description": "教授旗舰主线开启指令"
+            }
+          ],
+          "ai_hints": "主线前导会在玩家靠近旗舰传送门时提醒他们使用'踏入心悦主线'关键词。"
+        }
+      ],
       "build": {
         "shape": "platform",
         "size": 12,
@@ -204,6 +241,10 @@
     "npc_skins": [
       {
         "id": "心悦向导",
+        "skin": "skins/tutorial_guide.png"
+      },
+      {
+        "id": "心悦前导",
         "skin": "skins/tutorial_guide.png"
       }
     ]
@@ -331,6 +372,39 @@
               },
               "weather": "dream_sky",
               "time": "sunset"
+            }
+          }
+        }
+      },
+      {
+        "id": "tutorial_campaign_start",
+        "type": "chat_keyword",
+        "targets": [
+          "踏入心悦主线"
+        ],
+        "quest_event": "tutorial_campaign_start",
+        "metadata": {
+          "dialogue": [
+            "§d✨[心悦前导]§r 太好了！旗舰主线即将开启。",
+            "§7(向导们共同打开前往旗舰关卡的星光走廊)"
+          ],
+          "commands": [
+            "title @p title {\"text\":\"旗舰主线已解锁\",\"color\":\"light_purple\"}",
+            "title @p subtitle {\"text\":\"按照提示踏入心悦主线吧！\",\"color\":\"white\"}"
+          ],
+          "world_patch": {
+            "mc": {
+              "particle": {
+                "type": "portal",
+                "count": 120,
+                "radius": 3.5,
+                "speed": 0.15
+              },
+              "sound": {
+                "type": "MUSIC_DISC_FAR",
+                "volume": 0.8,
+                "pitch": 1.05
+              }
             }
           }
         }

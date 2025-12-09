@@ -28,6 +28,13 @@ class MiniMap:
         # 螺旋排布
         self._auto_layout_spiral()
 
+    def refresh(self) -> None:
+        """Recompute layout when the story graph reloads levels."""
+
+        self.mainline = self.graph.all_levels()
+        self.positions.clear()
+        self._auto_layout_spiral()
+
     # -----------------------------------------------------
     # 螺旋漂移布局（中心 = 512,512）
     # -----------------------------------------------------

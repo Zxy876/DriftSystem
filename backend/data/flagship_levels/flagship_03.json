@@ -12,6 +12,75 @@
 
   "memory_affinity": ["xinyue.admitted_pain", "xinyue.masked_pain"],
 
+  "storyline_theme": "flagship_resilience",
+  "continuity": {
+    "previous": "flagship_tutorial",
+    "next": "flagship_08",
+    "next_major_level": "flagship_08",
+    "emotional_vector": "resolve_in_storm",
+    "arc_step": 2
+  },
+
+  "emotional_world_patch": {
+    "default": {
+      "label": "山地守势",
+      "tone": "steady",
+      "patch": {
+        "mc": {
+          "lighting_shift": "dusk_to_hearth",
+          "music": { "record": "pigstep", "volume": 0.6 },
+          "npc_emotion": {
+            "tone": "steady",
+            "targets": ["登山者"],
+            "lines": ["登山者整理风绳：风声很大，我们慢慢来。"]
+          }
+        }
+      }
+    },
+    "profiles": [
+      {
+        "id": "face_path",
+        "label": "迎风上攀",
+        "tone": "encouraging",
+        "requires": ["xinyue.face_once"],
+        "priority": 10,
+        "patch": {
+          "mc": {
+            "weather_transition": { "to": "CLEARING_SKY" },
+            "lighting_shift": "ember_warmth",
+            "music": { "record": "chirp", "volume": 0.8 },
+            "npc_emotion": {
+              "tone": "encouraging",
+              "targets": ["登山者"],
+              "lines": ["登山者笑着喊：看到顶峰了吗？风借着你往上推。"],
+              "actionbar": "山势回暖 · 面对"
+            }
+          }
+        }
+      },
+      {
+        "id": "escape_loop",
+        "label": "寒风回声",
+        "tone": "concerned",
+        "requires": ["xinyue.escape_once"],
+        "priority": 5,
+        "patch": {
+          "mc": {
+            "weather_transition": { "to": "SNOW" },
+            "lighting_shift": "storm_blue",
+            "music": { "record": "ward", "volume": 0.7 },
+            "npc_emotion": {
+              "tone": "concerned",
+              "targets": ["登山者"],
+              "lines": ["登山者把手套递给你：冷得厉害就先退一步，别让自己失温。"],
+              "actionbar": "寒意逼近 · 退却"
+            }
+          }
+        }
+      }
+    ]
+  },
+
   "scene": {
     "world": "KunmingLakeStory",
     "teleport": { "x": 12.5, "y": 68, "z": -34.5, "yaw": -10, "pitch": 12 },
@@ -62,12 +131,15 @@
         "theme": "mountain_storm",
         "scene_world": "KunmingLakeStory",
         "teleport": { "x": 12.5, "y": 68, "z": -34.5, "yaw": -10, "pitch": 12 }
-      }
+      },
+      "weather_transition": { "from": "SNOW", "to": "CLEARING_SKY" },
+      "lighting_shift": "dusk_to_hearth"
     },
     "variables": {
       "fear": 0.2,
       "breath": 1.0,
-      "unlocked": true
+      "unlocked": true,
+      "arc_position": "rising_action"
     }
   },
 
@@ -82,8 +154,10 @@
         "id": "flag_03_intro_comfort",
         "trigger": "on_enter",
         "scene_patch": "scene_base_camp_cinematic",
+        "cinematic_alias": "flagship_03.supported_entry",
         "rule_refs": ["intro_calm"],
         "memory_required": ["xinyue.admitted_pain"],
+        "branch_hint": "flagship_resilience.support_path",
         "world_patch": {
           "mc": {
             "tell": "§b[登山者]§r 今天风不算狠，我们可以慢慢走。",
@@ -96,13 +170,16 @@
             "id": "intro_ready_gentle",
             "text": "深呼吸：我想试着往上。",
             "rule_event": "ready_to_climb",
-            "tags": ["supported", "brave"]
+            "tags": ["supported", "brave"],
+            "continuity_tags": ["courage_reinforced"],
+            "next_major_level": "flagship_08"
           },
           {
             "id": "intro_share_weight",
             "text": "先和你说说心里的重物。",
             "rule_event": "hesitation",
-            "tags": ["processing", "hesitant"]
+            "tags": ["processing", "hesitant"],
+            "continuity_tags": ["weight_shared"]
           }
         ]
       },
@@ -112,6 +189,8 @@
         "rule_refs": ["intro_calm"],
         "memory_required": ["xinyue.masked_pain"],
         "scene_patch": "scene_base_camp_cinematic",
+        "cinematic_alias": "flagship_03.storm_entry",
+        "branch_hint": "flagship_resilience.guard_up",
         "world_patch": {
           "mc": {
             "tell": "§6[登山者]§r 山不会给我们太多休息，先试着跟上我的节奏。",
@@ -124,13 +203,16 @@
             "id": "intro_ready",
             "text": "我准备好了。",
             "rule_event": "ready_to_climb",
-            "tags": ["brave"]
+            "tags": ["brave"],
+            "continuity_tags": ["courage_reinforced"],
+            "next_major_level": "flagship_08"
           },
           {
             "id": "intro_hesitate",
             "text": "我……还不确定。",
             "rule_event": "hesitation",
-            "tags": ["hesitant"]
+            "tags": ["hesitant"],
+            "continuity_tags": ["doubt_swell"]
           }
         ]
       },
@@ -140,18 +222,22 @@
         "trigger": "rule_event:ready_to_climb",
         "scene_patch": "scene_mid_camp_fog",
         "rule_refs": ["fear_pulse"],
+        "branch_hint": "flagship_resilience.mid_climb",
         "choices": [
           {
             "id": "push_fog",
             "text": "继续前进（抵抗迷雾）",
             "rule_event": "push_forward",
-            "tags": ["brave"]
+            "tags": ["brave"],
+            "continuity_tags": ["courage_reinforced"],
+            "next_major_level": "flagship_08"
           },
           {
             "id": "fall_back",
             "text": "退后一步（心跳加速）",
             "rule_event": "fear_gain",
-            "tags": ["fear"]
+            "tags": ["fear"],
+            "continuity_tags": ["doubt_swell"]
           }
         ]
       },
@@ -161,7 +247,9 @@
         "trigger": ["rule_event:push_forward", "rule_event:overcome_fear"],
         "scene_patch": "scene_summit_arrival",
         "rule_refs": ["summit_view"],
-        "memory_set": ["xinyue.reached_summit"]
+        "memory_set": ["xinyue.reached_summit"],
+        "next_major_level": "flagship_08",
+        "branch_hint": "flagship_resilience.arc_handoff"
       }
     ]
   },

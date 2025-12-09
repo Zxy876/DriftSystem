@@ -362,6 +362,16 @@ def story_memory(player_id: str):
     }
 
 
+@router.get("/story/{player_id}/emotional-weather")
+def story_emotional_weather(player_id: str):
+    summary = story_engine.get_emotional_profile(player_id)
+    return {
+        "status": "ok",
+        "player_id": player_id,
+        "emotional_state": summary or None,
+    }
+
+
 @router.get("/story/{player_id}/recommendations")
 def story_recommendations(player_id: str, current_level: Optional[str] = None, limit: int = 3):
     recs = story_engine.get_level_recommendations(player_id, current_level_id=current_level, limit=limit)

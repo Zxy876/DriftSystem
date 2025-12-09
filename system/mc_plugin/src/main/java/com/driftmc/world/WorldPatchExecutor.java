@@ -2,6 +2,7 @@ package com.driftmc.world;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.bukkit.Bukkit;
@@ -10,6 +11,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Entity;
@@ -94,9 +96,26 @@ public class WorldPatchExecutor {
             handleWeather(player, string(operations.get("weather"), "clear"));
         }
 
+        if (operations.containsKey("weather_transition")) {
+            Object transitionObj = operations.get("weather_transition");
+            if (transitionObj instanceof Map<?, ?> map) {
+                handleWeatherTransition(player, (Map<String, Object>) map);
+            } else {
+                handleWeather(player, string(transitionObj, "clear"));
+            }
+        }
+
         // time
         if (operations.containsKey("time")) {
             handleTime(player, string(operations.get("time"), "day"));
+        }
+
+        if (operations.containsKey("lighting_shift")) {
+            handleLightingShift(player, operations.get("lighting_shift"));
+        }
+
+        if (operations.containsKey("music")) {
+            handleMusic(player, operations.get("music"));
         }
 
         Map<String, Object> teleportConfig = null;
@@ -257,6 +276,23 @@ public class WorldPatchExecutor {
         }
     }
 
+    private void handleWeatherTransition(Player player, Map<String, Object> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return;
+        }
+        String fromState = string(payload.get("from"), "");
+        String toState = string(payload.get("to"), string(payload.get("state"), ""));
+        String message = string(payload.get("message"), "");
+        if (!toState.isBlank()) {
+            handleWeather(player, toState);
+        }
+        if (!message.isBlank()) {
+            player.sendMessage(ChatColor.BLUE + "✧ " + message);
+        } else if (!fromState.isBlank() || !toState.isBlank()) {
+            player.sendMessage(ChatColor.BLUE + "✧ 天气转场：" + humanize(fromState) + " → " + humanize(toState));
+        }
+    }
+
     // =============================== time ===============================
     private void handleTime(Player player, String time) {
         World world = player.getWorld();
@@ -274,6 +310,71 @@ public class WorldPatchExecutor {
 
         world.setTime(ticks);
         player.sendMessage(ChatColor.GOLD + "✧ 时间被轻轻拨动，场景也随之改变。");
+    }
+
+    private void handleLightingShift(Player player, Object payload) {
+        if (payload == null) {
+            return;
+        }
+
+        String shiftName = "";
+        String suggestedTime = "";
+
+        if (payload instanceof String shift) {
+            shiftName = shift;
+        } else if (payload instanceof Map<?, ?> map) {
+            shiftName = string(map.get("label"), string(map.get("id"), string(map.get("name"), "")));
+            suggestedTime = string(map.get("time"), "");
+        }
+
+        if (!shiftName.isBlank()) {
+            player.sendMessage(ChatColor.GOLD + "✧ 光线变化：" + humanize(shiftName));
+        }
+
+        String normalized = shiftName.toLowerCase(Locale.ROOT);
+        if (!suggestedTime.isBlank()) {
+            handleTime(player, suggestedTime);
+        } else if (!normalized.isBlank()) {
+            if (normalized.contains("sunrise") || normalized.contains("dawn")) {
+                handleTime(player, "sunrise");
+            } else if (normalized.contains("dusk") || normalized.contains("sunset")) {
+                handleTime(player, "sunset");
+            } else if (normalized.contains("night") || normalized.contains("neon")) {
+                handleTime(player, "night");
+            }
+        }
+    }
+
+    private void handleMusic(Player player, Object payload) {
+        if (payload == null) {
+            return;
+        }
+
+        String record = null;
+        double volume = 0.8;
+        double pitch = 1.0;
+
+        if (payload instanceof String direct) {
+            record = direct;
+        } else if (payload instanceof Map<?, ?> map) {
+            record = string(map.get("record"), string(map.get("id"), ""));
+            volume = number(map.get("volume"), 0.8).doubleValue();
+            pitch = number(map.get("pitch"), 1.0).doubleValue();
+        }
+
+        if (record == null || record.isBlank()) {
+            return;
+        }
+
+        Sound sound = resolveRecord(record);
+        if (sound == null) {
+            return;
+        }
+
+        float vol = (float) volume;
+        float pit = (float) pitch;
+        player.playSound(player.getLocation(), sound, SoundCategory.RECORDS, Math.max(0.0f, vol), Math.max(0.1f, pit));
+        player.sendMessage(ChatColor.LIGHT_PURPLE + "♪ 音轨切换：" + humanize(record));
     }
 
     // =============================== teleport ★ SafeTeleport v3
@@ -676,5 +777,39 @@ public class WorldPatchExecutor {
             }
         }
         return converted;
+    }
+
+    private Sound resolveRecord(String recordName) {
+        if (recordName == null) {
+            return null;
+        }
+        String token = recordName.trim();
+        if (token.isEmpty()) {
+            return null;
+        }
+        token = token.replace("minecraft:", "");
+        token = token.replace("record_", "");
+        token = token.replace('-', '_');
+        String enumName = token.toUpperCase(Locale.ROOT);
+        if (!enumName.startsWith("MUSIC_DISC_")) {
+            enumName = "MUSIC_DISC_" + enumName;
+        }
+        try {
+            return Sound.valueOf(enumName);
+        } catch (IllegalArgumentException ex) {
+            plugin.getLogger().fine("[WorldPatchExecutor] Unknown record: " + recordName);
+            return null;
+        }
+    }
+
+    private String humanize(String token) {
+        if (token == null || token.isBlank()) {
+            return "平缓";
+        }
+        String cleaned = token.replace("minecraft:", "").replace('_', ' ').trim();
+        if (cleaned.isEmpty()) {
+            return token;
+        }
+        return cleaned.substring(0, 1).toUpperCase(Locale.ROOT) + cleaned.substring(1);
     }
 }

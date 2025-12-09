@@ -11,6 +11,75 @@
   "memory_affinity": ["xinyue.face_once"],
   "memory_recovery": ["xinyue.escape_once"],
 
+  "storyline_theme": "flagship_resilience",
+  "continuity": {
+    "previous": "flagship_03",
+    "next": "flagship_12",
+    "next_major_level": "flagship_12",
+    "emotional_vector": "reckoning_in_rain",
+    "arc_step": 3
+  },
+
+  "emotional_world_patch": {
+    "default": {
+      "label": "雨夜悬念",
+      "tone": "brooding",
+      "patch": {
+        "mc": {
+          "lighting_shift": "night_to_neon_glow",
+          "music": { "record": "ward", "volume": 0.7 },
+          "npc_emotion": {
+            "tone": "brooding",
+            "targets": ["grandma_memory", "heart_demon"],
+            "lines": ["雨声像问句一样敲着迷宫的墙。"]
+          }
+        }
+      }
+    },
+    "profiles": [
+      {
+        "id": "face_maze",
+        "label": "雨停一隙",
+        "tone": "encouraging",
+        "requires": ["xinyue.face_once"],
+        "priority": 10,
+        "patch": {
+          "mc": {
+            "weather_transition": { "to": "CLEAR" },
+            "lighting_shift": "lantern_warm",
+            "music": { "record": "otherside", "volume": 0.75 },
+            "npc_emotion": {
+              "tone": "encouraging",
+              "targets": ["grandma_memory"],
+              "lines": ["奶奶的影子笑了：你敢转身，雨势就替你散开。"],
+              "actionbar": "雨线稀疏 · 面对"
+            }
+          }
+        }
+      },
+      {
+        "id": "escape_maze",
+        "label": "暗涌加剧",
+        "tone": "solemn",
+        "requires": ["xinyue.escape_once"],
+        "priority": 5,
+        "patch": {
+          "mc": {
+            "weather_transition": { "to": "STORM" },
+            "lighting_shift": "storm_echo",
+            "music": { "record": "mellohi", "volume": 0.65 },
+            "npc_emotion": {
+              "tone": "solemn",
+              "targets": ["heart_demon"],
+              "lines": ["心魔低语：你越快逃开，阴影就越亮。"],
+              "actionbar": "雨幕压顶 · 退却"
+            }
+          }
+        }
+      }
+    ]
+  },
+
   "scene": {
     "world": "KunmingLakeStory",
     "teleport": { "x": 0.5, "y": 70, "z": 0.5, "yaw": 0, "pitch": 0 },
@@ -47,8 +116,13 @@
   },
 
   "world_patch": {
-    "mc": {},
-    "variables": {}
+    "mc": {
+      "lighting_shift": "night_to_neon_glow",
+      "weather_transition": {"from": "STORM_BUILD", "to": "SOFT_RAIN"}
+    },
+    "variables": {
+      "arc_position": "midpoint"
+    }
   },
 
   "narrative": {
@@ -64,16 +138,22 @@
         "id": "intro",
         "trigger": "on_enter",
         "rule_refs": [],
+        "cinematic": "rain_intro",
+        "cinematic_alias": "flagship_08.rain_entry",
+        "branch_hint": "flagship_resilience.fork",
         "choices": [
           {
             "id": "face_memory",
             "text": "走向奶奶的幻影",
-            "rule_event": "approach_grandma"
+            "rule_event": "approach_grandma",
+            "continuity_tags": ["face_memory"],
+            "next_major_level": "flagship_12"
           },
           {
             "id": "follow_crack",
             "text": "追随地面裂开的黑暗",
-            "rule_event": "approach_heart_demon"
+            "rule_event": "approach_heart_demon",
+            "continuity_tags": ["shadow_pursuit"]
           }
         ],
         "world_patch": {
@@ -82,8 +162,7 @@
             "music": { "record": "ward" },
             "particle": { "type": "ash", "count": 50 }
           }
-        },
-        "cinematic": "rain_intro"
+        }
       },
 
       {
@@ -91,6 +170,7 @@
         "trigger": ["rule_event:comfort_path", "rule_event:fight_path"],
         "memory_set": ["xinyue.face_once"],
         "memory_clear": ["xinyue.escape_once"],
+        "branch_hint": "flagship_resilience.face_memory",
         "world_patch": {
           "mc": {
             "tell": "§a 雨声渐弱，你踩在泥水里的脚步慢慢稳了下来。",
@@ -105,6 +185,7 @@
         "trigger": ["rule_event:deny_path", "rule_event:escape_path"],
         "memory_set": ["xinyue.escape_once"],
         "memory_clear": ["xinyue.face_once"],
+        "branch_hint": "flagship_resilience.escape_loop",
         "world_patch": {
           "mc": {
             "tell": "§7 泥水溅起，你转身离开的背影被夜色吞没。",
@@ -118,6 +199,7 @@
         "id": "flagship_08_reconcile",
         "trigger": "story:continue",
         "memory_required": ["xinyue.face_once"],
+        "branch_hint": "flagship_resilience.face_recap",
         "world_patch": {
           "mc": {
             "tell": "✨ 你回头望向迷宫，光束像线索一样指向更深处。",
@@ -132,6 +214,7 @@
         "id": "flagship_08_linger",
         "trigger": "story:continue",
         "memory_required": ["xinyue.escape_once"],
+        "branch_hint": "flagship_resilience.escape_recap",
         "world_patch": {
           "mc": {
             "tell": "☔ 雨更密了，迷宫墙面映出你匆忙的倒影。",
@@ -191,24 +274,28 @@
           {
             "id": "confront_demon",
             "text": "直面心魔",
-            "rule_event": "fight_path"
+            "rule_event": "fight_path",
+            "next_major_level": "flagship_12"
           },
           {
             "id": "escape_demon",
             "text": "逃离它",
-            "rule_event": "escape_path"
+            "rule_event": "escape_path",
+            "next_major_level": "flagship_03"
           }
         ],
         "world_patch": {
           "mc": { "particle": { "type": "smoke", "count": 35 } }
         },
-        "cinematic": "heart_demon_rise"
+        "cinematic": "heart_demon_rise",
+        "cinematic_alias": "flagship_08.shadow_rise"
       },
 
       {
         "id": "ending",
         "trigger": "story:continue",
         "rule_refs": [],
+        "next_major_level": "flagship_12",
         "world_patch": {
           "mc": {
             "tell": "✨ 雨停了。你穿过迷宫，迈向下一个阶段。",

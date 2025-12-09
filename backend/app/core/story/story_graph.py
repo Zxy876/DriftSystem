@@ -28,64 +28,63 @@ class StoryGraph:
         self.level_sources: Dict[str, str] = {}
         self.alias_map: Dict[str, str] = {}
         self.memory_snapshots: Dict[str, List[str]] = {}
+        self.reload_levels()
+
+    def reload_levels(self) -> None:
+        """Reload flagship and generated levels from disk, preserving runtime state."""
+
+        self.levels.clear()
+        self.level_sources.clear()
+        self.alias_map.clear()
+        self.edges.clear()
         self._load_levels()
         self._build_linear_graph()
 
     # ================= 加载所有 level_X.json =================
     def _load_levels(self):
-        directories: List[Tuple[str, str]] = []
-
-        if self.level_dir and os.path.isdir(self.level_dir):
-            directories.append((self.level_dir, "flagship"))
-        else:
+        if not self.level_dir or not os.path.isdir(self.level_dir):
             print(f"[StoryGraph] level_dir not found: {self.level_dir}")
+            return
 
-        for directory, source in directories:
-            for fname in sorted(os.listdir(directory)):
+        entries: List[Tuple[str, str, str]] = []
+
+        for dirpath, _, filenames in os.walk(self.level_dir):
+            rel_dir = os.path.relpath(dirpath, self.level_dir)
+            head = rel_dir.split(os.sep)[0] if rel_dir != "." else ""
+            source = "generated" if head == "generated" else "flagship"
+
+            for fname in filenames:
                 if not fname.endswith(".json"):
                     continue
+                entries.append((dirpath, fname, source))
 
-                path = os.path.join(directory, fname)
+        entries.sort(key=lambda item: (0 if os.path.relpath(item[0], self.level_dir) == "." else 1, item[0], item[1]))
 
-                try:
-                    with open(path, "r", encoding="utf8") as f:
-                        data = json.load(f)
-                except Exception as exc:
-                    print(f"[StoryGraph] Failed to load {fname}: {exc}")
-                    continue
+        for directory, fname, source in entries:
+            path = os.path.join(directory, fname)
 
-                key = fname.replace(".json", "")
-                if key in self.levels:
-                    # 旗舰目录优先；如果 legacy 与旗舰重名则跳过 legacy
-                    continue
+            try:
+                with open(path, "r", encoding="utf8") as f:
+                    data = json.load(f)
+            except Exception as exc:
+                print(f"[StoryGraph] Failed to load {fname}: {exc}")
+                continue
 
-                self.levels[key] = data
-                self.level_sources[key] = source
-                self._register_alias(key, key)
+            key = fname.replace(".json", "")
+            if key in self.levels:
+                continue
 
-                level_id = data.get("id")
-                if isinstance(level_id, str):
-                    self._register_alias(level_id, key)
+            self.levels[key] = data
+            self.level_sources[key] = source
+            self._register_alias(key, key)
 
-                self._register_numeric_aliases(key)
+            level_id = data.get("id")
+            if isinstance(level_id, str):
+                self._register_alias(level_id, key)
+
+            self._register_numeric_aliases(key)
 
         print(f"[StoryGraph] Loaded {len(self.levels)} levels from {self.level_dir}")
-
-    # ============== 线性主线：01→02→…→30 =============
-    def _build_linear_graph(self):
-        self.edges.clear()
-
-        primary_sequence = self._sorted_flagship_levels()
-        if not primary_sequence:
-            primary_sequence = self._sort_levels(list(self.levels.keys()))
-
-        for i, key in enumerate(primary_sequence):
-            if i < len(primary_sequence) - 1:
-                self.edges[key] = [primary_sequence[i + 1]]
-            else:
-                self.edges[key] = []
-
-        # Ensure every remaining level exists in adjacency map (even if isolated)
         for key in self.levels.keys():
             self.edges.setdefault(key, [])
         print(f"[StoryGraph] Graph edges = {self.edges}")
@@ -274,19 +273,32 @@ class StoryGraph:
                 break
 
         tag_counter: Counter[str] = Counter()
+        theme_counter: Counter[str] = Counter()
         chapter_values: List[int] = []
+        generated_interest: Counter[str] = Counter()
+        last_exit_theme: Optional[str] = None
+        last_generated_level: Optional[str] = None
         for item in normalized_history:
             canonical = item["canonical"]
             if not canonical or item["action"] != "exit":
                 continue
             level_data = self.get_level(canonical) or {}
+            level_source = self.level_sources.get(canonical)
             for tag in level_data.get("tags", []) or []:
                 if isinstance(tag, str):
                     tag_counter[tag] += 1
+                    if level_source == "generated":
+                        generated_interest[tag.lower()] += 1
             meta = level_data.get("meta") or {}
             chapter = meta.get("chapter")
             if isinstance(chapter, int):
                 chapter_values.append(chapter)
+            theme = level_data.get("storyline_theme")
+            if isinstance(theme, str) and theme:
+                theme_counter[theme] += 1
+                last_exit_theme = theme
+            if level_source == "generated":
+                last_generated_level = canonical
 
         avg_chapter = sum(chapter_values) / len(chapter_values) if chapter_values else None
 
@@ -319,6 +331,13 @@ class StoryGraph:
         # 4) 最后兜底：全部关卡（保持顺序）
         if not candidate_ids:
             candidate_ids.extend(sorted(self.levels.keys()))
+
+        if (
+            "flagship_12" in completed_levels
+            and "flagship_final" in self.levels
+            and "flagship_final" not in candidate_ids
+        ):
+            candidate_ids.append("flagship_final")
 
         scored: Dict[str, Dict[str, Any]] = {}
         primary_mainline = None
@@ -381,6 +400,42 @@ class StoryGraph:
                         if f"偏好：{tag}" not in reasons:
                             reasons.append(f"偏好：{tag}")
 
+            theme = level_data.get("storyline_theme")
+            if isinstance(theme, str) and theme:
+                entry.setdefault("storyline_theme", theme)
+                if last_exit_theme and theme == last_exit_theme:
+                    entry["score"] += 18.0
+                    if "延续旗舰叙事主题" not in reasons:
+                        reasons.append("延续旗舰叙事主题")
+                else:
+                    total_theme = sum(theme_counter.values())
+                    if total_theme:
+                        affinity = theme_counter.get(theme, 0) / total_theme
+                        if affinity > 0:
+                            entry["score"] += 6.0 * affinity
+                            if "契合常见主题" not in reasons:
+                                reasons.append("契合常见主题")
+
+            level_source = self.level_sources.get(canonical)
+            if generated_interest and tags:
+                overlap = sum(generated_interest.get(tag.lower(), 0) for tag in tags)
+                if overlap > 0:
+                    entry["score"] += 10.0 * overlap
+                    cue = "契合玩家自创主题" if level_source == "generated" else "呼应玩家兴趣标签"
+                    if cue not in reasons:
+                        reasons.append(cue)
+
+            if level_source == "generated":
+                entry.setdefault("origin", "generated")
+                if canonical not in completed_levels:
+                    entry["score"] += 5.0
+                    if "新鲜的玩家创作" not in reasons:
+                        reasons.append("新鲜的玩家创作")
+                if canonical and canonical == last_generated_level:
+                    entry["score"] += 12.0
+                    if "延续近期玩家创作" not in reasons:
+                        reasons.append("延续近期玩家创作")
+
             if memory_flags:
                 affinity_flags = self._collect_memory_list(level_data.get("memory_affinity"))
                 overlap = sorted(set(memory_flags).intersection(affinity_flags))
@@ -424,6 +479,15 @@ class StoryGraph:
             if weight:
                 entry["score"] += 40.0 * weight
                 reasons.append("呼应最近的剧情选择")
+
+            if (
+                canonical == "flagship_final"
+                and "flagship_12" in completed_levels
+                and canonical not in completed_levels
+            ):
+                entry["score"] += 1.0
+                if "旗舰终章邀请" not in reasons:
+                    reasons.append("旗舰终章邀请")
 
             if choice_tag_counter and tags:
                 overlap = 0
