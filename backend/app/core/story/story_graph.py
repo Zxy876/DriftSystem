@@ -4,7 +4,7 @@ from collections import Counter, deque
 import json
 import os
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 
 class StoryGraph:
@@ -85,8 +85,50 @@ class StoryGraph:
             self._register_numeric_aliases(key)
 
         print(f"[StoryGraph] Loaded {len(self.levels)} levels from {self.level_dir}")
-        for key in self.levels.keys():
-            self.edges.setdefault(key, [])
+
+    def _build_linear_graph(self) -> None:
+        """Populate ``self.edges`` using continuity metadata and sensible fallbacks."""
+
+        self.edges = {key: [] for key in self.levels.keys()}
+
+        continuity_links: Dict[str, Set[str]] = {key: set() for key in self.levels.keys()}
+
+        for key, payload in self.levels.items():
+            continuity = payload.get("continuity") or {}
+            if isinstance(continuity, dict):
+                for field in ("next", "next_major_level"):
+                    target = continuity.get(field)
+                    if not target:
+                        continue
+                    canonical = self._canonical_level_id(target)
+                    if canonical and canonical in self.levels:
+                        continuity_links[key].add(canonical)
+
+        # Apply continuity edges first to preserve authored sequencing.
+        for key, targets in continuity_links.items():
+            if not targets:
+                continue
+            self.edges[key].extend(sorted(targets))
+
+        # Fallback: ensure a linear traversal ordered by chapter/index.
+        ordering: List[Tuple[int, str]] = []
+        for key, payload in self.levels.items():
+            meta = payload.get("meta") or {}
+            chapter = meta.get("chapter")
+            order = int(chapter) if isinstance(chapter, int) else 10_000
+            ordering.append((order, key))
+
+        sorted_order = sorted(ordering)
+        for idx, (_, key) in enumerate(sorted_order):
+            if idx + 1 >= len(sorted_order):
+                continue
+            next_key = sorted_order[idx + 1][1]
+            if next_key == key:
+                continue
+            if next_key not in self.edges[key]:
+                self.edges[key].append(next_key)
+
+        # Final fallback: if a node has no outgoing edges, leave list empty.
         print(f"[StoryGraph] Graph edges = {self.edges}")
 
     # ================= 主线推进：下一关（bfs next） ===============
@@ -625,6 +667,20 @@ class StoryGraph:
         return sorted(level_ids, key=sort_key)
 
     def get_start_level(self) -> Optional[str]:
+        continuity_roots: List[str] = []
+        for key, payload in self.levels.items():
+            continuity = payload.get("continuity") or {}
+            previous = continuity.get("previous")
+            if previous in (None, "", "null"):
+                continuity_roots.append(key)
+
+        if "flagship_tutorial" in continuity_roots:
+            return "flagship_tutorial"
+        if continuity_roots:
+            ordered_roots = self._sort_levels(continuity_roots)
+            if ordered_roots:
+                return ordered_roots[0]
+
         flagship = self._sorted_flagship_levels()
         if flagship:
             return flagship[0]
