@@ -105,7 +105,10 @@ if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ 插件编译成功${NC}"
     
     # 复制到服务器
-    JAR_FILE=$(find target -name "*.jar" ! -name "*-original.jar" | head -1)
+    JAR_FILE=$(find target -type f -name "*.jar" \
+        ! -name "original-*.jar" \
+        ! -name "*-sources.jar" \
+        ! -name "*-javadoc.jar" | head -1)
     if [ -n "$JAR_FILE" ]; then
         cp "$JAR_FILE" "$SCRIPT_DIR/backend/server/plugins/DriftSystem.jar"
         echo -e "${GREEN}✓ 插件已复制到服务器${NC}"

@@ -1,13 +1,5 @@
 package com.driftmc.scene;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.when;
-
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -18,16 +10,25 @@ import java.util.logging.Logger;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.World;
 import org.junit.jupiter.api.AfterEach;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.MockedStatic;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.hud.dialogue.DialoguePanel;
 import com.driftmc.npc.NPCManager;
 import com.google.gson.JsonArray;
@@ -42,6 +43,7 @@ class RuleEventBridgeTest {
     private SceneAwareWorldPatchExecutor worldPatcher;
     private RuleEventBridge bridge;
     private NPCManager npcManager;
+    private ChoicePanel choicePanel;
     private DialoguePanel dialoguePanel;
     private MockedStatic<Bukkit> bukkit;
     private Player player;
@@ -57,8 +59,10 @@ class RuleEventBridgeTest {
         backend = new RecordingBackend();
         npcManager = new NPCManager(plugin);
         worldPatcher = new SceneAwareWorldPatchExecutor(plugin, npcManager);
-        dialoguePanel = new DialoguePanel(plugin);
-        bridge = new RuleEventBridge(plugin, backend, worldPatcher, null, dialoguePanel);
+        choicePanel = new ChoicePanel(plugin);
+        dialoguePanel = new DialoguePanel(plugin, choicePanel);
+        bridge = new RuleEventBridge(plugin, backend, worldPatcher, null, dialoguePanel, choicePanel);
+        choicePanel.setRuleEventBridge(bridge);
 
         player = mock(Player.class);
         playerId = UUID.randomUUID();

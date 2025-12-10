@@ -95,18 +95,17 @@ def _candidate_filenames(level_id: str) -> List[str]:
 
     if base.startswith("flagship_"):
         candidates.append(f"{base}.json")
+    elif base.startswith("level_"):
+        suffix = base.split("_", 1)[1]
+        if suffix:
+            normalized = suffix
+            if suffix.isdigit():
+                normalized = f"{int(suffix):02d}"
+            remapped = f"flagship_{normalized}"
+            candidates.append(f"{remapped}.json")
     else:
-        # Always try the literal value first (preserves custom player ids).
+        # For custom content (玩家生成关卡等) 仍允许按原名加载。
         candidates.append(f"{base}.json")
-
-        if base.startswith("level_"):
-            suffix = base.split("_", 1)[1]
-            if suffix:
-                normalized = suffix
-                if suffix.isdigit():
-                    normalized = f"{int(suffix):02d}"
-                remapped = f"flagship_{normalized}"
-                candidates.insert(0, f"{remapped}.json")
 
     # Deduplicate while preserving order.
     seen: Set[str] = set()

@@ -94,7 +94,7 @@ def apply_action(inp: ApplyInput):
         if t == "CREATE_STORY":
             import hashlib
             import time
-            from backend.app.api.story_api import InjectPayload, api_story_inject
+            from app.api.story_api import InjectPayload, api_story_inject
             
             # 生成唯一level_id
             raw_text = intent.get("raw_text", "story")
@@ -257,6 +257,25 @@ def apply_action(inp: ApplyInput):
         status="ok",
         world_state=new_state
     )
+
+
+@router.get("/state/{player_id}")
+def world_state(player_id: str):
+    """Return a combined snapshot of the simulated world and story engine."""
+
+    story_snapshot = story_engine.get_public_state(player_id)
+    state = world_engine.get_state() or {}
+    world_snapshot = {
+        "variables": dict(state.get("variables", {})),
+        "entities": dict(state.get("entities", {})),
+    }
+
+    return {
+        "status": "ok",
+        "player_id": player_id,
+        "world": world_snapshot,
+        "story": story_snapshot,
+    }
 
 
 # ============================================================
