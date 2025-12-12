@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field, is_dataclass
 from enum import Enum
@@ -12,6 +13,40 @@ from app.core.story.level_schema import RuleListener
 from app.core.npc import npc_engine
 
 
+logger = logging.getLogger(__name__)
+
+
+TUTORIAL_CANONICAL_EVENTS: Set[str] = {
+    "tutorial_intro_started",
+    "tutorial_meet_guide",
+    "tutorial_reach_checkpoint",
+    "tutorial_task_complete",
+}
+
+TUTORIAL_EVENT_ALIASES: Dict[str, str] = {
+    "tutorial_begin": "tutorial_intro_started",
+    "tutorial_intro": "tutorial_intro_started",
+    "tutorial_start": "tutorial_intro_started",
+    "tutorial_question": "tutorial_meet_guide",
+    "tutorial_progress": "tutorial_reach_checkpoint",
+    "tutorial_checkpoint": "tutorial_reach_checkpoint",
+    "tutorial_complete": "tutorial_task_complete",
+    "tutorial_finish": "tutorial_task_complete",
+}
+
+
+def _canonicalize_tutorial_event(name: Any) -> Optional[str]:
+    if name is None:
+        return None
+    token = str(name).strip().lower()
+    if not token:
+        return None
+    canonical = TUTORIAL_EVENT_ALIASES.get(token, token)
+    if canonical in TUTORIAL_CANONICAL_EVENTS:
+        return canonical
+    return None
+
+
 @dataclass
 class TaskMilestone:
     """Intermediate checkpoints for a task."""
@@ -20,6 +55,8 @@ class TaskMilestone:
     title: Optional[str] = None
     hint: Optional[str] = None
     target: Optional[str] = None
+    event: Optional[str] = None
+    alternates: List[str] = field(default_factory=list)
     count: int = 1
     progress: int = 0
     status: str = "pending"
@@ -56,16 +93,22 @@ class TaskSession:
         if self.status != "issued":
             return False, None
 
-        matched, milestone = self._match_event(event)
+        matched, milestone, matched_token = self._match_event(event)
         if not matched:
             return False, None
 
         self.progress += 1
-        self.history.append({"event": event, "ts": time.time()})
+        history_entry = {"event": event, "ts": time.time()}
+        if matched_token:
+            history_entry["matched_event"] = matched_token
+        self.history.append(history_entry)
 
         milestone_payload: Optional[Dict[str, Any]] = None
         if milestone:
-            milestone.history.append({"event": event, "ts": time.time()})
+            milestone_entry = {"event": event, "ts": time.time()}
+            if matched_token:
+                milestone_entry["matched_event"] = matched_token
+            milestone.history.append(milestone_entry)
             milestone.progress += 1
             if milestone.progress >= milestone.count:
                 milestone.status = "completed"
@@ -80,6 +123,10 @@ class TaskSession:
                     "milestone_count": milestone.count,
                     "milestone_progress": milestone.progress,
                 }
+                if milestone.event:
+                    milestone_payload.setdefault("milestone_event", milestone.event)
+                if matched_token:
+                    milestone_payload.setdefault("matched_event", matched_token)
 
         if self.progress >= self.count:
             if not self.milestones or all(m.status == "completed" for m in self.milestones):
@@ -92,31 +139,93 @@ class TaskSession:
 
         return True, milestone_payload
 
-    def _match_event(self, event: Dict[str, Any]) -> Tuple[bool, Optional[TaskMilestone]]:
+    def _match_event(self, event: Dict[str, Any]) -> Tuple[bool, Optional[TaskMilestone], Optional[str]]:
         if not event:
-            return False, None
+            return False, None, None
         if event.get("event_type") != self.type:
-            return False, None
+            return False, None, None
 
         target = event.get("target")
-        if self.target and target:
-            if isinstance(self.target, str):
-                if str(target).lower() != self.target.lower():
-                    return False, None
-            elif isinstance(self.target, dict):
-                expected = str(self.target.get("name") or self.target.get("type") or "").lower()
-                if expected and str(target).lower() != expected:
-                    return False, None
+        quest_event = event.get("quest_event")
+        if target is None and quest_event is not None:
+            target = quest_event
 
+        target_token = str(target).lower() if isinstance(target, str) else None
+        quest_token = str(quest_event).lower() if isinstance(quest_event, str) else None
+
+        allowed_targets: Set[str] = set()
+        if isinstance(self.rule_refs, list):
+            for ref in self.rule_refs:
+                if isinstance(ref, str) and ref:
+                    allowed_targets.add(ref.lower())
+        for milestone in self.milestones:
+            if milestone.target and isinstance(milestone.target, str):
+                allowed_targets.add(milestone.target.lower())
+            if milestone.event and isinstance(milestone.event, str):
+                allowed_targets.add(milestone.event.lower())
+            for alternate in getattr(milestone, "alternates", []) or []:
+                if isinstance(alternate, str) and alternate:
+                    allowed_targets.add(alternate.lower())
+        if isinstance(self.target, dict):
+            primary_target = str(self.target.get("name") or self.target.get("type") or "").lower()
+            if primary_target:
+                allowed_targets.add(primary_target)
+        elif isinstance(self.target, str):
+            allowed_targets.add(self.target.lower())
+
+        def _matches_expected(expected: Optional[str]) -> bool:
+            if not expected:
+                return True
+            if target_token and target_token == expected:
+                return True
+            if quest_token and quest_token == expected:
+                return True
+            return False
+
+        expected_target = None
+        if isinstance(self.target, str):
+            expected_target = self.target.lower()
+        elif isinstance(self.target, dict):
+            expected_target = str(self.target.get("name") or self.target.get("type") or "").lower()
+
+        if expected_target and not _matches_expected(expected_target):
+            if allowed_targets:
+                token_candidates = [token for token in (target_token, quest_token) if token]
+                if not any(candidate in allowed_targets for candidate in token_candidates):
+                    return False, None, None
+            else:
+                return False, None, None
+
+        matched_token = next((token for token in (target_token, quest_token) if token), None)
         for milestone in self.milestones:
             if milestone.status == "completed":
                 continue
-            if milestone.target and target:
-                if str(target).lower() != str(milestone.target).lower():
-                    continue
-            return True, milestone
+            milestone_expected = str(milestone.target).lower() if milestone.target else None
+            alternates = [
+                str(alt).lower()
+                for alt in (milestone.alternates or [])
+                if isinstance(alt, str) and alt
+            ]
 
-        return True, None
+            candidate_tokens: List[str] = []
+            if milestone_expected:
+                candidate_tokens.append(milestone_expected)
+            if milestone.event and isinstance(milestone.event, str):
+                candidate_tokens.append(str(milestone.event).lower())
+            candidate_tokens.extend(alternates)
+
+            if candidate_tokens:
+                incoming_tokens = [token for token in (target_token, quest_token) if token]
+                matched = next((token for token in incoming_tokens if token in candidate_tokens), None)
+                if matched:
+                    return True, milestone, matched
+                continue
+
+            if milestone_expected and not _matches_expected(milestone_expected):
+                continue
+            return True, milestone, matched_token
+
+        return True, None, matched_token
 
     def _completion_payload(self) -> Dict[str, Any]:
         return {
@@ -139,6 +248,9 @@ class QuestRuntime:
         self._phase3_announced = False
         self._rule_listeners: List[Tuple[str, RuleListener]] = []
         self._rule_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None
+        self._orphan_callback: Optional[
+            Callable[[str, Dict[str, Any], Dict[str, Any]], Optional[Dict[str, Any]]]
+        ] = None
 
     # ------------------------------------------------------------------
     # Phase 1.5 scaffolding
@@ -157,6 +269,14 @@ class QuestRuntime:
 
         self._rule_callback = callback
 
+    def set_orphan_callback(
+        self,
+        callback: Optional[Callable[[str, Dict[str, Any], Dict[str, Any]], Optional[Dict[str, Any]]]],
+    ) -> None:
+        """Register a handler invoked when rule events fail to match any task."""
+
+        self._orphan_callback = callback
+
     def handle_rule_trigger(self, player_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Handle an incoming rule trigger and advance relevant tasks."""
 
@@ -168,18 +288,44 @@ class QuestRuntime:
         if not normalized:
             return None
 
-        state.setdefault("rule_events", []).append(normalized)
+        events_history = state.setdefault("rule_events", [])
+        events_history.append(normalized)
+        if len(events_history) > 20:
+            del events_history[:-20]
 
         responses: List[Dict[str, Any]] = []
+        matched_any = False
+        matched_details: List[Dict[str, Any]] = []
         for session in self._iter_active_sessions(state):
             matched, result = session.record_event(normalized)
             if not matched:
                 continue
+            matched_any = True
+
+            detail: Dict[str, Any] = {
+                "task_id": session.id,
+                "task_title": session.title,
+                "status": session.status,
+                "progress": session.progress,
+                "count": session.count,
+            }
+
             if result:
+                detail.update({
+                    key: result[key]
+                    for key in (
+                        "milestone_completed",
+                        "milestone_id",
+                        "milestone_title",
+                        "task_completed",
+                    )
+                    if key in result
+                })
                 responses.append(result)
+
             remaining = max(0, session.count - session.progress)
             if remaining and session.status == "issued":
-                responses.append({
+                remaining_payload = {
                     "matched": True,
                     "remaining": remaining,
                     "task_id": session.id,
@@ -187,12 +333,43 @@ class QuestRuntime:
                     "task_hint": session.hint,
                     "task_progress": session.progress,
                     "task_count": session.count,
-                })
+                }
+                responses.append(remaining_payload)
+                detail["remaining"] = remaining
+
+            rule_refs = getattr(session, "rule_refs", None)
+            if rule_refs:
+                detail["rule_refs"] = list(rule_refs)
+
+            matched_details.append(detail)
+
+        suggestion: Optional[Dict[str, Any]] = None
+        if not matched_any:
+            suggestion = self._register_orphan_event(player_id, state, normalized, payload)
+
+        last_rule_event = {
+            "timestamp": time.time(),
+            "event": normalized,
+            "matched": matched_any,
+            "matched_tasks": matched_details,
+            "raw_payload": payload,
+        }
+        if suggestion:
+            last_rule_event["auto_heal_suggestion"] = suggestion
+        state["last_rule_event"] = last_rule_event
+        recent_events = state.setdefault("recent_rule_events", [])
+        recent_events.append(last_rule_event)
+        if len(recent_events) > 10:
+            del recent_events[:-10]
 
         npc_payload = None
         level_id = state.get("level_id")
         if level_id:
-            npc_payload = npc_engine.apply_rule_trigger(level_id, normalized, state.get("active_rule_refs", set()))
+            npc_payload = npc_engine.apply_rule_trigger(
+                level_id,
+                normalized,
+                state.get("active_rule_refs", set()),
+            )
 
         combined = self._aggregate_rule_responses(state, responses)
         combined = self._merge_response_payload(combined, npc_payload)
@@ -204,15 +381,88 @@ class QuestRuntime:
             combined["active_tasks"] = active_snapshot
             self._inject_snapshot_summary(combined, active_snapshot)
 
-        if self._rule_callback:
+        if combined is not None and self._rule_callback:
             try:
                 self._rule_callback(player_id, payload)
             except Exception:
                 pass
 
-        return combined or None
+        return combined
 
-    def evaluate_exit_conditions(self, player_id: str) -> Optional[Dict[str, Any]]:
+    def _register_orphan_event(
+        self,
+        player_id: str,
+        state: Dict[str, Any],
+        normalized: Dict[str, Any],
+        raw_payload: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Record unmatched rule events and delegate auto-heal suggestions."""
+
+        level = state.get("level")
+        if not level:
+            return None
+
+        # Require an active scene to reduce noise from lobby/world chatter.
+        has_scene = bool(getattr(level, "scene", None))
+        if not has_scene:
+            return None
+
+        active_sessions = list(self._iter_active_sessions(state))
+        if not active_sessions:
+            return None
+
+        orphan_record: Dict[str, Any] = {
+            "timestamp": time.time(),
+            "player_id": player_id,
+            "level_id": getattr(level, "level_id", None),
+            "event": dict(normalized),
+            "raw_payload": dict(raw_payload),
+            "scene_active": True,
+        }
+
+        orphans = state.setdefault("orphan_events", [])
+        orphans.append(orphan_record)
+        if len(orphans) > 10:
+            del orphans[:-10]
+
+        logger.warning(
+            "QuestRuntime orphan rule_event",
+            extra={
+                "player_id": player_id,
+                "level_id": orphan_record["level_id"],
+                "event": orphan_record["event"],
+            },
+        )
+
+        suggestion: Optional[Dict[str, Any]] = None
+        if self._orphan_callback:
+            try:
+                suggestion = self._orphan_callback(player_id, dict(orphan_record), state)
+            except Exception:  # pragma: no cover - diagnostics only
+                logger.exception("QuestRuntime orphan callback failed")
+
+        if suggestion:
+            # Ensure numeric confidence when present.
+            confidence = suggestion.get("confidence")
+            if confidence is not None:
+                try:
+                    suggestion["confidence"] = float(confidence)
+                except (TypeError, ValueError):
+                    suggestion.pop("confidence", None)
+
+            orphan_record["auto_heal"] = dict(suggestion)
+            history = state.setdefault("auto_heal_suggestions", [])
+            history.append({
+                "timestamp": orphan_record["timestamp"],
+                "event": orphan_record["event"],
+                "suggestion": dict(suggestion),
+            })
+            if len(history) > 10:
+                del history[:-10]
+
+        return suggestion
+
+    def get_exit_readiness(self, player_id: str) -> Optional[Dict[str, Any]]:
         """Return exit readiness snapshot for the player (stub)."""
 
         state = self._players.get(player_id)
@@ -241,6 +491,8 @@ class QuestRuntime:
             "summary_emitted": False,
             "last_completed_type": None,
             "active_rule_refs": set(),
+            "last_rule_event": None,
+            "recent_rule_events": [],
         }
         self._players[player_id] = state
 
@@ -430,6 +682,7 @@ class QuestRuntime:
             return level
 
         return None
+
     def _ensure_state(self, player_id: str, level: Optional[Level] = None) -> Optional[Dict[str, Any]]:
         state = self._players.get(player_id)
         if level is None:
@@ -445,9 +698,44 @@ class QuestRuntime:
         if not isinstance(event, dict):
             return None
 
-        event_type = event.get("event_type") or event.get("type")
+        raw_type = event.get("event_type") or event.get("type")
+        event_type = str(raw_type).strip().lower() if isinstance(raw_type, str) else ""
         payload_meta = event.get("meta") if isinstance(event.get("meta"), dict) else {}
         payload_body = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+
+        quest_event_payload = (
+            event.get("quest_event")
+            or payload_body.get("quest_event")
+            or payload_meta.get("quest_event")
+        )
+
+        canonical_event = _canonicalize_tutorial_event(quest_event_payload)
+        alias_from_type = _canonicalize_tutorial_event(event_type)
+        fallback_event = None
+        if isinstance(quest_event_payload, str):
+            token = quest_event_payload.strip().lower()
+            if token:
+                fallback_event = token
+
+        if alias_from_type:
+            canonical_event = alias_from_type
+            event_type = "quest_event"
+            payload_body["quest_event"] = canonical_event
+        elif event_type == "quest_event":
+            if canonical_event:
+                payload_body["quest_event"] = canonical_event
+            elif fallback_event:
+                canonical_event = fallback_event
+                payload_body["quest_event"] = canonical_event
+        elif not event_type:
+            return None
+
+        if not canonical_event:
+            canonical_event = _canonicalize_tutorial_event(payload_body.get("quest_event")) or fallback_event
+
+        if canonical_event:
+            payload_body["quest_event"] = canonical_event
+            event_type = "quest_event"
 
         target = (
             event.get("target")
@@ -458,13 +746,16 @@ class QuestRuntime:
             or payload_body.get("block_type")
         )
 
+        if canonical_event:
+            target = canonical_event
+
         meta = payload_meta or payload_body
 
-        if not isinstance(event_type, str) or not event_type:
+        if not event_type:
             return None
 
         normalized = {
-            "event_type": event_type.lower(),
+            "event_type": event_type,
             "target": target,
             "meta": meta,
         }
@@ -472,8 +763,8 @@ class QuestRuntime:
         if event.get("count") is not None:
             normalized["count"] = event.get("count")
 
-        if payload_body.get("quest_event"):
-            normalized["quest_event"] = payload_body.get("quest_event")
+        if canonical_event:
+            normalized["quest_event"] = canonical_event
 
         return normalized
 
@@ -597,6 +888,14 @@ class QuestRuntime:
                     }
                     if session and session.title:
                         node_payload["task_title"] = session.title
+                    milestone_event = resp.get("milestone_event")
+                    if not milestone_event and milestone and milestone.event:
+                        milestone_event = milestone.event
+                    if milestone_event:
+                        node_payload["milestone_event"] = milestone_event
+                    matched_event = resp.get("matched_event")
+                    if matched_event:
+                        node_payload["matched_event"] = matched_event
                     if milestone_hint:
                         node_payload["hint"] = milestone_hint
                         if session and not node_payload.get("task_hint"):
@@ -659,6 +958,10 @@ class QuestRuntime:
                 if task_hint:
                     node_payload["hint"] = task_hint
                     node_payload["task_hint"] = task_hint
+
+                matched_event = resp.get("matched_event")
+                if matched_event:
+                    node_payload["matched_event"] = matched_event
 
                 progress_val = resp.get("task_progress")
                 if progress_val is None and session:
@@ -753,6 +1056,10 @@ class QuestRuntime:
                     "count": milestone.count,
                     "remaining": milestone_remaining,
                 }
+                if milestone.event:
+                    milestone_entry["milestone_event"] = milestone.event
+                if getattr(milestone, "alternates", None):
+                    milestone_entry["alternates"] = list(milestone.alternates)
                 milestone_entries.append(milestone_entry)
 
                 if milestone.title and milestone.title not in milestone_names:
@@ -802,6 +1109,104 @@ class QuestRuntime:
         result["player_id"] = player_id
         return result
 
+    def get_debug_snapshot(self, player_id: str) -> Optional[Dict[str, Any]]:
+        state = self._players.get(player_id)
+        if not state:
+            return None
+
+        active = self._build_active_tasks_snapshot(state)
+        completed = self._collect_completed_milestones(state)
+        pending = self._collect_pending_conditions(state)
+        last_event = state.get("last_rule_event")
+
+        snapshot: Dict[str, Any] = {
+            "player_id": state.get("player_id", player_id),
+            "level_id": state.get("level_id"),
+            "level_title": state.get("level_title"),
+            "active_tasks": active,
+            "completed_milestones": completed,
+            "pending_conditions": pending,
+            "last_rule_event": last_event,
+        }
+
+        if state.get("recent_rule_events"):
+            snapshot["recent_rule_events"] = list(state["recent_rule_events"])
+
+        if state.get("orphan_events"):
+            snapshot["orphan_events"] = list(state["orphan_events"])
+
+        if state.get("auto_heal_suggestions"):
+            snapshot["auto_heal_suggestions"] = list(state["auto_heal_suggestions"])
+
+        return snapshot
+
+    def _collect_completed_milestones(self, state: Dict[str, Any]) -> List[Dict[str, Any]]:
+        completed: List[Dict[str, Any]] = []
+        for session in self._iter_sessions(state):
+            for milestone in getattr(session, "milestones", []) or []:
+                if getattr(milestone, "status", None) != "completed":
+                    continue
+                entry: Dict[str, Any] = {
+                    "task_id": session.id,
+                    "task_title": session.title,
+                    "milestone_id": milestone.id,
+                    "milestone_title": milestone.title,
+                    "count": milestone.count,
+                    "progress": milestone.progress,
+                }
+                if milestone.hint:
+                    entry["milestone_hint"] = milestone.hint
+                if milestone.event:
+                    entry["milestone_event"] = milestone.event
+                if milestone.history:
+                    ts = milestone.history[-1].get("ts")
+                    if ts is not None:
+                        entry["completed_at"] = ts
+                completed.append(entry)
+        return completed
+
+    def _collect_pending_conditions(self, state: Dict[str, Any]) -> List[Dict[str, Any]]:
+        pending: List[Dict[str, Any]] = []
+        for session in self._iter_sessions(state):
+            if getattr(session, "status", None) == "completed":
+                continue
+
+            milestones = getattr(session, "milestones", []) or []
+            if not milestones:
+                entry = {
+                    "task_id": session.id,
+                    "task_title": session.title,
+                    "status": session.status,
+                    "remaining": max(0, session.count - session.progress),
+                }
+                if session.rule_refs:
+                    entry["expected_events"] = list(session.rule_refs)
+                pending.append(entry)
+                continue
+
+            for milestone in milestones:
+                if getattr(milestone, "status", None) == "completed":
+                    continue
+                entry = {
+                    "task_id": session.id,
+                    "task_title": session.title,
+                    "milestone_id": milestone.id,
+                    "milestone_title": milestone.title,
+                    "status": milestone.status,
+                    "remaining": max(0, milestone.count - milestone.progress),
+                }
+                if milestone.hint:
+                    entry["hint"] = milestone.hint
+                if milestone.event:
+                    entry["expected_event"] = milestone.event
+                elif milestone.target:
+                    entry["expected_event"] = milestone.target
+                if milestone.alternates:
+                    entry["alternates"] = list(milestone.alternates)
+                pending.append(entry)
+
+        return pending
+
     def _create_session(self, task: Dict[str, Any], index: int) -> TaskSession:
         if not isinstance(task, dict):
             if is_dataclass(task):
@@ -816,10 +1221,103 @@ class QuestRuntime:
             text = str(value).strip()
             return text or None
 
+        def _safe_count(value: Any) -> int:
+            try:
+                return max(1, int(value or 1))
+            except (TypeError, ValueError):
+                return 1
+
+        conditions_raw = task.get("conditions") or []
+        normalized_conditions: List[Dict[str, Any]] = []
+        for cond in conditions_raw:
+            cond_map: Optional[Dict[str, Any]] = None
+            if isinstance(cond, dict):
+                cond_map = dict(cond)
+            elif is_dataclass(cond):
+                cond_map = {key: getattr(cond, key) for key in getattr(cond, "__dataclass_fields__", {})}
+            else:
+                attrs = getattr(cond, "__dict__", None)
+                if isinstance(attrs, dict):
+                    cond_map = dict(attrs)
+            if cond_map:
+                normalized_conditions.append(cond_map)
+        task["conditions"] = normalized_conditions
+
+        def _resolve_condition(condition: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], int, Optional[str]]:
+            if not isinstance(condition, dict):
+                return None, None, 0, None
+            quest_event = condition.get("quest_event") or condition.get("rule_event")
+            if quest_event:
+                canonical = _canonicalize_tutorial_event(quest_event) or (_clean_str(quest_event) or "")
+                if not canonical:
+                    return None, None, 0, None
+                return "quest_event", canonical, _safe_count(condition.get("count")), condition.get("hint")
+            location = _clean_str(condition.get("location"))
+            if location:
+                return "location", location, _safe_count(condition.get("count")), condition.get("hint")
+            item = _clean_str(condition.get("item"))
+            if item:
+                return "item", item, _safe_count(condition.get("count")), condition.get("hint")
+            entity = _clean_str(condition.get("entity"))
+            if entity:
+                return "entity", entity, _safe_count(condition.get("count")), condition.get("hint")
+            return None, None, _safe_count(condition.get("count")), condition.get("hint")
+
         task_id = str(task.get("id") or f"task_{index:02d}")
-        task_type = str(task.get("type") or "custom").lower()
-        target = task.get("target") or {}
-        count = max(1, int(task.get("count") or 1))
+        raw_type = _clean_str(task.get("type")) or "custom"
+        task_type = raw_type.lower()
+        base_target = task.get("target")
+        count = _safe_count(task.get("count"))
+
+        condition_milestones: List[Dict[str, Any]] = []
+        derived_type: Optional[str] = None
+        derived_target: Optional[str] = None
+        derived_total = 0
+
+        for idx, condition in enumerate(normalized_conditions):
+            cond_type, cond_target, cond_count, cond_hint = _resolve_condition(condition)
+            if not cond_type or not cond_target:
+                continue
+            if derived_type is None:
+                derived_type = cond_type
+                derived_target = cond_target
+            cond_id = (
+                _clean_str(condition.get("id"))
+                or _clean_str(condition.get("name"))
+                or f"{task_id}_condition_{idx:02d}"
+            )
+            cond_title = (
+                _clean_str(condition.get("title"))
+                or _clean_str(condition.get("label"))
+                or cond_target
+            )
+            cond_hint_clean = _clean_str(cond_hint) or _clean_str(condition.get("hint"))
+            condition_milestones.append({
+                "id": cond_id,
+                "title": cond_title,
+                "hint": cond_hint_clean,
+                "target": cond_target,
+                "milestone_event": cond_target,
+                "count": cond_count,
+            })
+            derived_total += cond_count
+
+        if derived_type and task_type in {"custom", "story", ""}:
+            task_type = derived_type
+
+        if derived_target and (base_target is None or task_type == "quest_event"):
+            base_target = derived_target
+
+        if derived_total:
+            count = max(count, derived_total)
+
+        target = base_target if base_target is not None else derived_target
+        if isinstance(target, str):
+            target = _clean_str(target)
+        if task_type == "quest_event" and isinstance(target, str) and target:
+            target = _canonicalize_tutorial_event(target) or target.lower()
+        if target is None:
+            target = {}
         reward_raw = task.get("reward") or task.get("rewards")
         if isinstance(reward_raw, list):
             reward = next((item for item in reward_raw if isinstance(item, dict)), {})
@@ -837,6 +1335,20 @@ class QuestRuntime:
             dialogue = {}
         rule_refs = list(task.get("rule_refs", []) or [])
 
+        task_rule_event = _clean_str(task.get("rule_event"))
+        if task_rule_event:
+            canonical_rule_event = _canonicalize_tutorial_event(task_rule_event) or task_rule_event.lower()
+            task["rule_event"] = canonical_rule_event
+            if canonical_rule_event not in rule_refs:
+                rule_refs.append(canonical_rule_event)
+
+        if task_type == "quest_event" and isinstance(target, str) and target and target not in rule_refs:
+            rule_refs.append(target)
+        for milestone_def in condition_milestones:
+            milestone_target = milestone_def.get("target")
+            if milestone_target and milestone_target not in rule_refs:
+                rule_refs.append(milestone_target)
+
         task_title = _clean_str(task.get("title")) or _clean_str(task.get("name")) or _clean_str(task.get("label"))
         task_hint = (
             _clean_str(task.get("hint"))
@@ -850,7 +1362,9 @@ class QuestRuntime:
             task_title = task_title or _clean_str(issue_node.get("title"))
             task_hint = task_hint or _clean_str(issue_node.get("hint")) or _clean_str(issue_node.get("text"))
 
-        milestone_configs = task.get("milestones") or []
+        milestone_configs = list(task.get("milestones") or [])
+        if condition_milestones:
+            milestone_configs.extend(condition_milestones)
         milestones: List[TaskMilestone] = []
         for idx, raw in enumerate(milestone_configs):
             milestone_data: Optional[Dict[str, Any]] = None
@@ -875,11 +1389,27 @@ class QuestRuntime:
                 or _clean_str(milestone_data.get("summary"))
                 or _clean_str(milestone_data.get("description"))
             )
+            milestone_event = (
+                _clean_str(milestone_data.get("milestone_event"))
+                or _clean_str(milestone_data.get("event"))
+                or _clean_str(milestone_data.get("rule_event"))
+            )
             milestone_target = (
                 _clean_str(milestone_data.get("target"))
                 or _clean_str(milestone_data.get("entity"))
                 or _clean_str(milestone_data.get("location"))
             )
+            if not milestone_target and milestone_event:
+                milestone_target = milestone_event
+
+            alternates_raw = milestone_data.get("alternates") or milestone_data.get("alternate_targets")
+            milestone_alternates: List[str] = []
+            if isinstance(alternates_raw, (list, tuple, set)):
+                for alt in alternates_raw:
+                    alt_clean = _clean_str(alt)
+                    if alt_clean:
+                        milestone_alternates.append(alt_clean)
+
             try:
                 milestone_count = max(1, int(milestone_data.get("count") or milestone_data.get("required") or 1))
             except (TypeError, ValueError):
@@ -890,8 +1420,16 @@ class QuestRuntime:
                 title=milestone_title,
                 hint=milestone_hint,
                 target=milestone_target,
+                event=milestone_event,
+                alternates=milestone_alternates,
                 count=milestone_count,
             ))
+
+            if milestone_event and milestone_event not in rule_refs:
+                rule_refs.append(milestone_event)
+            for alternate in milestone_alternates:
+                if alternate and alternate not in rule_refs:
+                    rule_refs.append(alternate)
 
         session = TaskSession(
             id=task_id,

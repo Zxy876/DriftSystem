@@ -15,6 +15,22 @@ BACKEND_DIR = os.path.abspath(
 PRIMARY_DIR_NAME = "flagship_levels"
 DATA_DIR = os.path.join(BACKEND_DIR, "data", PRIMARY_DIR_NAME)
 
+TUTORIAL_CANONICAL_ID = "flagship_tutorial"
+TUTORIAL_ALIASES = {
+    "level_01",
+    "level_1",
+    "level1",
+    "level-01",
+    "level01",
+    "tutorial",
+    "tutorial_level",
+    "level_tutorial",
+    "kunminglaketutorial",
+    "kunminglake_tutorial",
+    "tutorial_spawn",
+    "tutorial_level_v1",
+}
+
 
 @dataclass
 class Level:
@@ -92,6 +108,12 @@ def _candidate_filenames(level_id: str) -> List[str]:
 
     base = level_id[:-5] if level_id.endswith(".json") else level_id
     candidates: List[str] = []
+
+    lowered = base.lower()
+
+
+    if lowered in TUTORIAL_ALIASES:
+        candidates.append(f"{TUTORIAL_CANONICAL_ID}.json")
 
     if base.startswith("flagship_"):
         candidates.append(f"{base}.json")
@@ -198,6 +220,10 @@ def _load_level_file(path: str, file_id: str, requested_id: str) -> Level:
 
     # Preserve the raw payload so extension parsers can access structured metadata.
     setattr(level, "_raw_payload", data)
+
+    if level.level_id == TUTORIAL_CANONICAL_ID:
+        setattr(level, "legacy_ids", sorted(TUTORIAL_ALIASES))
+
     return level
 
 

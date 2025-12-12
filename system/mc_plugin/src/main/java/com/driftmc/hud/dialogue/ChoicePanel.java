@@ -14,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.scene.RuleEventBridge;
+import com.driftmc.story.LevelIds;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -181,6 +182,7 @@ public final class ChoicePanel {
             if (nextLevel.isEmpty()) {
                 nextLevel = safeText(obj.get("next"));
             }
+            nextLevel = LevelIds.canonicalizeLevelId(nextLevel);
 
             List<String> tags = new ArrayList<>();
             JsonElement tagNode = obj.get("tags");
@@ -222,7 +224,7 @@ public final class ChoicePanel {
         ChoiceSession(List<ChoiceOption> options, JsonObject node) {
             this.options = options;
             this.beatId = safeText(node.get("beat_id"));
-            this.levelId = safeText(node.get("level_id"));
+            this.levelId = LevelIds.canonicalizeLevelId(safeText(node.get("level_id")));
             indexTokens();
         }
 

@@ -47,7 +47,7 @@ public class LevelsCommand implements CommandExecutor {
         }
 
         player.sendMessage(ChatColor.LIGHT_PURPLE + "====== 心悦宇宙 · Levels ======");
-        player.sendMessage(ChatColor.AQUA + "/level level_01 " + ChatColor.GRAY + "→ 心悦文集 · 第 1 章");
+        player.sendMessage(ChatColor.AQUA + "/level flagship_tutorial " + ChatColor.GRAY + "→ 心悦文集 · 第 1 章");
         player.sendMessage(ChatColor.AQUA + "/storynext " + ChatColor.GRAY + "→ 让故事向前推进一步");
         player.sendMessage(ChatColor.AQUA + "直接在聊天里说话 " + ChatColor.GRAY + "→ 让世界根据你的自然语言变化");
         player.sendMessage(ChatColor.LIGHT_PURPLE + "================================");

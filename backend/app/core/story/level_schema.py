@@ -288,6 +288,8 @@ class TaskCondition:
     entity: Optional[str] = None
     location: Optional[str] = None
     count: Optional[int] = None
+    quest_event: Optional[str] = None
+    rule_event: Optional[str] = None
 
     @staticmethod
     def from_dict(data: Optional[Dict[str, Any]]) -> "TaskCondition":
@@ -298,6 +300,8 @@ class TaskCondition:
             entity=_coerce_str(data.get("entity")),
             location=_coerce_str(data.get("location")),
             count=_coerce_int(data.get("count")),
+            quest_event=_coerce_str(data.get("quest_event")),
+            rule_event=_coerce_str(data.get("rule_event")),
         )
 
 
@@ -326,7 +330,10 @@ class TaskConfig:
 
     id: str = ""
     type: Optional[str] = None
+    rule_event: Optional[str] = None
+    quest_event: Optional[str] = None
     conditions: List[TaskCondition] = field(default_factory=list)
+    memory_set: List[str] = field(default_factory=list)
     milestones: List[str] = field(default_factory=list)
     rewards: List[TaskReward] = field(default_factory=list)
     milestone_memory: Dict[str, MemoryMutation] = field(default_factory=dict)
@@ -339,6 +346,9 @@ class TaskConfig:
         conditions = [
             TaskCondition.from_dict(item) for item in _coerce_list(data.get("conditions"))
         ]
+        rule_event = _coerce_str(data.get("rule_event"))
+        quest_event = _coerce_str(data.get("quest_event"))
+        memory_set = _coerce_str_list(data.get("memory_set"))
         rewards = [TaskReward.from_dict(item) for item in _coerce_list(data.get("rewards"))]
         milestone_memory = _parse_milestone_memory(data.get("milestone_memory"))
         completion_memory = MemoryMutation.from_parts(
@@ -350,7 +360,10 @@ class TaskConfig:
         return TaskConfig(
             id=_coerce_str(data.get("id")) or "",
             type=_coerce_str(data.get("type")),
+            rule_event=rule_event,
+            quest_event=quest_event,
             conditions=conditions,
+            memory_set=memory_set,
             milestones=_coerce_str_list(data.get("milestones")),
             rewards=rewards,
             milestone_memory=milestone_memory,

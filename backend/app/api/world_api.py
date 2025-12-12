@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+import os
+
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import logging
@@ -398,6 +400,23 @@ def story_recommendations(player_id: str, current_level: Optional[str] = None, l
         "status": "ok",
         "recommendations": recs,
     }
+
+
+@router.get("/story/{player_id}/debug/tasks")
+def story_debug_tasks(player_id: str, request: Request, token: Optional[str] = None):
+    expected_token = os.environ.get("DRIFT_TASK_DEBUG_TOKEN")
+    if expected_token:
+        provided = token or request.headers.get("X-Debug-Token")
+        if provided != expected_token:
+            raise HTTPException(status_code=403, detail="Task debug access denied.")
+
+    snapshot = quest_runtime.get_debug_snapshot(player_id)
+    if not snapshot:
+        return {"status": "error", "msg": "No active task state for player."}
+
+    payload: Dict[str, Any] = {"status": "ok"}
+    payload.update(snapshot)
+    return payload
 
 
 @router.get("/story/{player_id}/quest-log")

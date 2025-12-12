@@ -2,8 +2,7 @@ package com.driftmc.backend;
 
 import java.io.IOException;
 import java.time.Duration;
-
-import com.google.gson.Gson;
+import java.util.Map;
 
 import okhttp3.Callback;
 import okhttp3.MediaType;
@@ -17,7 +16,6 @@ public class BackendClient {
 
     private final String baseUrl;
     private final OkHttpClient client;
-    private final Gson gson;
 
     public BackendClient(String baseUrl) {
 
@@ -36,8 +34,6 @@ public class BackendClient {
                 .retryOnConnectionFailure(true) // 避免偶发超时
                 .followRedirects(true)
                 .build();
-
-        this.gson = new Gson();
     }
 
     private String buildUrl(String path) {
@@ -93,6 +89,24 @@ public class BackendClient {
                 .url(buildUrl(path))
                 .get()
                 .build();
+
+        client.newCall(request).enqueue(callback);
+    }
+
+    public void getAsync(String path, Map<String, String> headers, Callback callback) {
+        Request.Builder builder = new Request.Builder()
+                .url(buildUrl(path))
+                .get();
+
+        if (headers != null) {
+            headers.forEach((key, value) -> {
+                if (key != null && value != null) {
+                    builder.addHeader(key, value);
+                }
+            });
+        }
+
+        Request request = builder.build();
 
         client.newCall(request).enqueue(callback);
     }

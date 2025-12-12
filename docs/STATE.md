@@ -1,7 +1,7 @@
 # Shared World State Authority (STATE.md)
 
 ## 1. Current Phase
- CURRENT_PHASE = 20
+CURRENT_PHASE = 27
 PHASE_1_COMPLETE = true
 PHASE_1_5_COMPLETE = true
 PHASE_2_COMPLETE = true
@@ -22,12 +22,23 @@ PHASE_16_COMPLETE = true
 PHASE_17_COMPLETE = true
 PHASE_18_COMPLETE = true
 PHASE_19_COMPLETE = true
+PHASE_20_COMPLETE = true
+PHASE_21_COMPLETE = true
+PHASE_22_COMPLETE = true
+PHASE_23_COMPLETE = true
+PHASE_24_COMPLETE = true
+PHASE_25_COMPLETE = true
+PHASE_26_COMPLETE = true
 
 ## 2. Current Goal
-- Ship the flagship campaign loop (tutorial → 03 → 08 → 12 → finale) and verify memory-driven endings.
+- Monitor the restored NPC interaction and quest_event trigger loop from Phase 26 while awaiting the Phase 27 charter to continue campaign polish.
 
 ## 3. Progress – Done
 - Capabilities already achieved:
+	- Phase 26 restored plugin-side NPC interaction listeners so right-clicking featured NPCs emits canonical quest_events with cooldown feedback, unblocking tutorial and flagship beats end-to-end.
+	- Phase 25 self-healing diagnostics log orphan rule_events with context-aware suggestions; QuestRuntime exposes orphan history and StoryEngine stores SequenceMatcher-ranked auto-heal hints, documented in `docs/TASK_AUTOFIX.md` and covered by `backend/test_task_autofix.py`.
+	- Natural-language level generation now infers quest tasks, listeners, trigger zones, and milestones automatically (Phase 23), with verification covering quest log HUD integration and rule-event progression.
+	- Task debugging stack delivered in Phase 24: QuestRuntime captures rule snapshots, `/world/story/{player}/debug/tasks` exposes live state, and `/taskdebug` overlays reveal pending milestones under operator-only permissions.
 	- Structured level extensions plus automated stage setup (scene generator, safe teleports, minimap integration).
 	- Beat progression engine: StoryEngine registers level beats with `EventManager`, reacts to chat/near/interact triggers, and emits beat-scoped world patches.
 	- QuestRuntime synchronizes beat-issued tasks, tracks rule references, and exposes `/world/story/rule-event` for bridge catalysts.
@@ -37,6 +48,7 @@ PHASE_19_COMPLETE = true
 	- Scene metadata is now emitted via world patches, enabling plugin-side SceneAwareWorldPatchExecutor to track and clean scene sessions.
 	- QuestRuntime TaskSessions normalize task definitions, track milestones/rewards, and respond to rule-event callbacks with aggregated nodes/world patches.
 	- QuestRuntime now returns task titles/hints and RuleEventBridge renders progress/milestones with streamlined quest log chat formatting.
+	- Flagship tutorial trigger pipeline canonicalized: quest events, tutorial JSON, RuleEventBridge, NPCManager, and WorldPatchExecutor now agree on canonical identifiers so milestones and task completions fire deterministically.
 	- Cinematic beats now trigger for level_01’s checkpoint/finish, level_03’s summit climb, and the tutorial launch portal with coordinated titles, particles, and environment shifts.
 	- NPCBehaviorEngine records rulegraph bindings and emits dialogue/command/world patch updates when rule events fire.
 	- `/world/story/rule-event` exposes task/NPC deltas directly for the plugin transport to consume.
@@ -51,16 +63,23 @@ PHASE_19_COMPLETE = true
 	- Quest log HUD renders active tasks/milestones via `/questlog`, auto-refreshing on level entry, rule events, and exits with milestone action-bar cues.
 	- Story choices UI powers beat-defined branches: ChoicePanel renders options, RuleEventBridge forwards selections, and StoryGraph biases recommendations based on recorded decisions.
 	- Flagship arc chapters now share continuity metadata (`storyline_theme`, `next_major_level`, lighting/weather cues) and StoryGraph applies a theme-weighted bias to keep players on the flagship spine.
+	- Phase 22 verification completed: FastAPI TestClient replayed flagship_03/08/12/final Level 3 & 4 flows, confirmed quest_event milestones, and documented the milestone-deduplication workaround needed for `flagship_final`.
 
 ## 4. Progress – In Progress
 - Capabilities under active review:
-	- QA `flagship_final` cinematics and ensure camera control remains stable across both endings.
-	- Observe 玩家对“踏入心悦主线”指令的使用率，调整提示时机。
-	- Define analytics hooks for `xinyue.campaign_complete` ahead of Phase 21 instrumentation.
+	- Observe live NPC interaction telemetry to ensure cooldowns and quest_event forwarding remain responsive across scene resets.
+	- Monitor orphan detection confidence scores across flagship/tutorial chapters and tune thresholds if false positives surface.
+	- Prototype plugin-side consumption flows that surface auto-heal hints to operators without mutating live task data.
+	- Plan follow-up telemetry to correlate orphan logs with StoryEngine memory updates for live-ops dashboards.
 
 ## 5. Latest Code Updates (to be auto-updated from git diff or manual input)
 ```
+- Minecraft plugin's `NearbyNPCListener` now listens for `PlayerInteractAtEntityEvent`, surfaces action-bar feedback, and emits canonical quest_event payloads with per-NPC throttling to close the action trigger loop (Phase 26).
+- QuestRuntime now records orphan rule_events with auto-heal suggestions, StoryEngine stores SequenceMatcher-ranked hints, and debug snapshots expose diagnostics for operator tooling (Phase 25).
+- `docs/TASK_AUTOFIX.md` documents the detection pipeline and `backend/test_task_autofix.py` verifies orphan hints and StoryEngine state propagation.
 - Emotional weather system maps `xinyue.face_once` / `xinyue.escape_once` into level-defined patches and merges weather, lighting, and music in real time.
+- Task debugging endpoint `/world/story/{player}/debug/tasks` and `/taskdebug` overlay expose live QuestRuntime state for operators with token-gated access.
+- Flagship tutorial task, milestone, and plugin trigger pipeline now uses canonical quest_event names end-to-end, with QuestRuntime milestone matching and `/world/story/rule-event` payloads verified via automated backend tests.
 - SceneAwareWorldPatchExecutor now consumes `npc_emotion` payloads so hub NPC nameplates and dialogue tone react to emotional profiles.
 - `GET /world/story/{player_id}/emotional-weather` returns the active profile, tone, and last applied patch for debugging.
 - QuestRuntime now exposes `active_tasks` snapshots with remaining counts, task titles, and milestone names for HUD rendering.
@@ -80,6 +99,7 @@ PHASE_19_COMPLETE = true
 - `/world/story/generate-level` synthesizes flagship-format user chapters, saves them under `generated/`, and hot-reloads StoryGraph + MiniMap layouts.
 - Recommendation weights now track player-authored tag interest and highlight the latest generated chapter for seamless follow-up.
 - First flagship campaign loop assembled: tutorial guidance updated, `flagship_final` delivers memory-dependent endings, continuity `next_major_level` links flagship chapters, and StoryGraph bias surfaces 终章推荐 entry points。
+	- `flagship_final.json` now binds face/escape branches into distinct cinematics, records `xinyue.campaign_complete`, and syncs emotional weather/Scene metadata for the plugin cleanup loop.
 ```
 
 ## 6. File Map (summaries of project folder structures)
@@ -93,17 +113,18 @@ PHASE_19_COMPLETE = true
 - Root-level shell scripts (e.g., `build_and_deploy.sh`, `test_all.sh`) for building, testing, and deployment workflows
 
 ## 7. Next Actions (task-based, GPT readable)
-- [ ] Face-path 主线试玩：Tutorial → 03 → 08 → 12 → finale，核对记忆旗标与终章晨光演出。
-- [ ] Escape-path 主线试玩：确保夜行循环结局触发正确的情绪补丁与标题。
-- [ ] 监测 `/recommend` 输出，确认 StoryGraph 在完成 `flagship_12` 后优先推荐 `flagship_final`。
-- [ ] 收集玩家对“踏入心悦主线”提示的反馈，必要时加入自动提示节奏。
-- [ ] 草拟 Phase 20 发布说明，记录终章分支与教程更新。
-- [ ] 规划 `xinyue.campaign_complete` 分析维度，并与 Phase 21 指标对齐。
-- [ ] 回收 QA 数据，评估是否需要为主线新增分支回放指令或日志。
+- [ ] QA NPC interaction loop: tutorial → flagship checkpoints, confirming quest_event progression without relying on free-text chat fallbacks.
+- [x] QA Face-path 主线：Tutorial → 03 → 08 → 12 → finale，验证晨光结局的摄像机与情绪补丁平滑衔接。
+- [ ] Review orphan rule_event telemetry on staging and adjust SequenceMatcher thresholds if confidence skews low/high.
+- [ ] Pair with plugin team on presenting auto-heal hints to operators without mutating live milestone state.
+- [ ] Capture orphan frequency vs milestone completion metrics for upcoming live-ops dashboards.
+- [ ] QA Escape-path 主线：确认夜行循环结局保持灯光/音乐同步，并正确记录 `xinyue.campaign_complete`。
 
 ## 8. Risks
 - Hub teleport assumes KunmingLakeHub world is loaded; server ops should validate availability after restarts.
 - Exit aliases are aggressive; future tuning may add per-level cooldowns to avoid accidental triggers.
+- Task debug endpoint hinges on a shared token; leaked credentials would expose live quest state, so per-environment rotation and secret management remain critical.
+- Action-bar feedback for NPC interactions depends on Adventure API support; legacy server builds may require fallback chat messaging.
 
 ## 9. Notes (high-level intent)
 - This document is the central source of truth for shared world state; update collaboratively as plans evolve

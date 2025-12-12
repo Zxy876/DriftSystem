@@ -1,9 +1,14 @@
 package com.driftmc.world;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -21,6 +26,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scheduler.BukkitTask;
+
+import com.driftmc.scene.QuestEventCanonicalizer;
+import com.driftmc.scene.RuleEventBridge;
 
 /**
  * WorldPatchExecutor
@@ -37,6 +46,9 @@ public class WorldPatchExecutor {
 
     private final JavaPlugin plugin;
     private AdvancedWorldBuilder advancedBuilder;
+    private RuleEventBridge ruleEventBridge;
+    private final Map<UUID, CopyOnWriteArrayList<LocationTrigger>> triggerRegistry = new ConcurrentHashMap<>();
+    private BukkitTask triggerPoller;
 
     public WorldPatchExecutor(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -45,6 +57,30 @@ public class WorldPatchExecutor {
 
     public JavaPlugin getPlugin() {
         return this.plugin;
+    }
+
+    public void setRuleEventBridge(RuleEventBridge bridge) {
+        this.ruleEventBridge = bridge;
+    }
+
+    public RuleEventBridge getRuleEventBridge() {
+        return this.ruleEventBridge;
+    }
+
+    /**
+     * Hook for subclasses to inject featured NPC behavior during scene patches.
+     * Default implementation is a no-op.
+     */
+    public void ensureFeaturedNpc(Player player, Map<String, Object> metadata, Map<String, Object> operations) {
+        // intentionally empty
+    }
+
+    public void shutdown() {
+        if (triggerPoller != null) {
+            triggerPoller.cancel();
+            triggerPoller = null;
+        }
+        triggerRegistry.clear();
     }
 
     // =============================== 核心入口 ===============================
@@ -131,6 +167,14 @@ public class WorldPatchExecutor {
         Location anchorLocation = teleportTarget != null
                 ? teleportTarget.clone()
                 : player.getLocation().clone();
+
+        if (operations.containsKey("trigger_zones")) {
+            handleTriggerZones(player, operations.get("trigger_zones"), anchorLocation);
+        }
+
+        if (operations.containsKey("_scene_cleanup") && player != null) {
+            clearPlayerTriggers(player.getUniqueId());
+        }
 
         // build
         if (operations.containsKey("build")) {
@@ -747,6 +791,180 @@ public class WorldPatchExecutor {
         player.sendActionBar(ChatColor.AQUA + text);
     }
 
+    // =============================== triggers ===============================
+    private void handleTriggerZones(Player player, Object spec, Location anchor) {
+        if (player == null || spec == null) {
+            return;
+        }
+
+        List<Map<String, Object>> entries = new ArrayList<>();
+        if (spec instanceof Map<?, ?> map) {
+            entries.add(asStringObjectMap(map));
+        } else if (spec instanceof List<?> list) {
+            for (Object entry : list) {
+                if (entry instanceof Map<?, ?> entryMap) {
+                    entries.add(asStringObjectMap(entryMap));
+                }
+            }
+        }
+
+        if (entries.isEmpty()) {
+            return;
+        }
+
+        clearPlayerTriggers(player.getUniqueId());
+
+        Location reference = anchor != null ? anchor.clone() : player.getLocation().clone();
+        CopyOnWriteArrayList<LocationTrigger> triggers = new CopyOnWriteArrayList<>();
+
+        for (Map<String, Object> entry : entries) {
+            String questEvent = string(entry.get("quest_event"), "").toLowerCase(Locale.ROOT);
+            questEvent = QuestEventCanonicalizer.canonicalize(questEvent);
+            if (questEvent.isBlank()) {
+                continue;
+            }
+            double radius = number(entry.get("radius"), 3.0D).doubleValue();
+            boolean repeat = Boolean.TRUE.equals(entry.get("repeat"));
+            boolean once = !repeat;
+            Location center = resolveTriggerCenter(reference, entry, player);
+            String triggerId = string(entry.get("id"), questEvent);
+            triggers.add(new LocationTrigger(triggerId, center, radius, questEvent, once));
+        }
+
+        if (triggers.isEmpty()) {
+            return;
+        }
+
+        triggerRegistry.put(player.getUniqueId(), triggers);
+        ensureTriggerTask();
+    }
+
+    private void ensureTriggerTask() {
+        if (triggerPoller != null) {
+            return;
+        }
+        triggerPoller = Bukkit.getScheduler().runTaskTimer(plugin, this::pollTriggerZones, 40L, 20L);
+    }
+
+    private void pollTriggerZones() {
+        if (triggerRegistry.isEmpty()) {
+            return;
+        }
+
+        List<UUID> removals = new ArrayList<>();
+
+        for (Map.Entry<UUID, CopyOnWriteArrayList<LocationTrigger>> entry : triggerRegistry.entrySet()) {
+            UUID playerId = entry.getKey();
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null || !player.isOnline()) {
+                removals.add(playerId);
+                continue;
+            }
+
+            CopyOnWriteArrayList<LocationTrigger> triggers = entry.getValue();
+            if (triggers == null || triggers.isEmpty()) {
+                removals.add(playerId);
+                continue;
+            }
+
+            Location playerLoc = player.getLocation();
+            if (playerLoc.getWorld() == null) {
+                continue;
+            }
+
+            for (LocationTrigger trigger : triggers) {
+                if (trigger.once && trigger.triggered) {
+                    continue;
+                }
+                if (trigger.center.getWorld() == null || !playerLoc.getWorld().equals(trigger.center.getWorld())) {
+                    continue;
+                }
+                if (playerLoc.distanceSquared(trigger.center) <= trigger.radiusSq) {
+                    trigger.triggered = true;
+                    if (ruleEventBridge != null) {
+                        Map<String, Object> payload = new LinkedHashMap<>();
+                        payload.put("trigger_id", trigger.id);
+                        payload.put("radius", trigger.radius);
+                        payload.put("source", "trigger_zone");
+                        ruleEventBridge.emitQuestEvent(player, trigger.questEvent, trigger.center, payload);
+                    }
+                }
+            }
+
+            triggers.removeIf(LocationTrigger::shouldRemove);
+            if (triggers.isEmpty()) {
+                removals.add(playerId);
+            }
+        }
+
+        for (UUID playerId : removals) {
+            triggerRegistry.remove(playerId);
+        }
+
+        if (triggerRegistry.isEmpty() && triggerPoller != null) {
+            triggerPoller.cancel();
+            triggerPoller = null;
+        }
+    }
+
+    private void clearPlayerTriggers(UUID playerId) {
+        triggerRegistry.remove(playerId);
+        if (triggerRegistry.isEmpty() && triggerPoller != null) {
+            triggerPoller.cancel();
+            triggerPoller = null;
+        }
+    }
+
+    private Location resolveTriggerCenter(Location anchor, Map<String, Object> spec, Player fallback) {
+        Location base;
+        if (anchor != null) {
+            base = anchor.clone();
+        } else if (fallback != null) {
+            base = fallback.getLocation().clone();
+        } else if (!Bukkit.getWorlds().isEmpty()) {
+            base = Bukkit.getWorlds().get(0).getSpawnLocation().clone();
+        } else {
+            return new Location(null, 0, 0, 0);
+        }
+
+        String worldName = string(spec.get("world"), "");
+        if (!worldName.isBlank()) {
+            var world = Bukkit.getWorld(worldName);
+            if (world != null) {
+                base.setWorld(world);
+            }
+        }
+
+        double x = base.getX();
+        double y = base.getY();
+        double z = base.getZ();
+
+        if (spec.get("x") != null) {
+            x = number(spec.get("x"), x).doubleValue();
+        }
+        if (spec.get("y") != null) {
+            y = number(spec.get("y"), y).doubleValue();
+        }
+        if (spec.get("z") != null) {
+            z = number(spec.get("z"), z).doubleValue();
+        }
+
+        Map<String, Object> offset = asStringObjectMap(spec.get("offset"));
+        if (!offset.isEmpty()) {
+            x += number(offset.get("dx"), 0).doubleValue();
+            y += number(offset.get("dy"), 0).doubleValue();
+            z += number(offset.get("dz"), 0).doubleValue();
+        }
+
+        if (spec.get("dx") != null || spec.get("dy") != null || spec.get("dz") != null) {
+            x += number(spec.get("dx"), 0).doubleValue();
+            y += number(spec.get("dy"), 0).doubleValue();
+            z += number(spec.get("dz"), 0).doubleValue();
+        }
+
+        return new Location(base.getWorld(), x, y, z);
+    }
+
     // =============================== 工具 ===============================
     private String string(Object o, String def) {
         return o == null ? def : o.toString();
@@ -766,7 +984,7 @@ public class WorldPatchExecutor {
 
     private Map<String, Object> asStringObjectMap(Object value) {
         if (!(value instanceof Map<?, ?> raw)) {
-            return Map.of();
+            return Collections.emptyMap();
         }
 
         Map<String, Object> converted = new LinkedHashMap<>();
@@ -811,5 +1029,29 @@ public class WorldPatchExecutor {
             return token;
         }
         return cleaned.substring(0, 1).toUpperCase(Locale.ROOT) + cleaned.substring(1);
+    }
+
+    private static final class LocationTrigger {
+        final String id;
+        final Location center;
+        final double radius;
+        final double radiusSq;
+        final String questEvent;
+        final boolean once;
+        boolean triggered;
+
+        LocationTrigger(String id, Location center, double radius, String questEvent, boolean once) {
+            this.id = id;
+            this.center = center;
+            this.radius = radius;
+            this.radiusSq = radius * radius;
+            this.questEvent = questEvent;
+            this.once = once;
+            this.triggered = false;
+        }
+
+        boolean shouldRemove() {
+            return once && triggered;
+        }
     }
 }

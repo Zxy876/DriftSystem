@@ -1,5 +1,6 @@
 package com.driftmc.intent2;
 
+import com.driftmc.story.LevelIds;
 import com.google.gson.JsonObject;
 
 public class IntentResponse2 {
@@ -29,6 +30,7 @@ public class IntentResponse2 {
         IntentType2 type = IntentType2.fromString(typeStr);
 
         String levelId = intent.has("level_id") ? intent.get("level_id").getAsString() : null;
+        levelId = LevelIds.canonicalizeLevelId(levelId);
 
         JsonObject minimap = intent.has("minimap") && intent.get("minimap").isJsonObject()
                 ? intent.getAsJsonObject("minimap")

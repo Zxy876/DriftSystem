@@ -174,7 +174,21 @@
         "scene_world": "KunmingLakeStory",
         "teleport": { "x": -6.5, "y": 67.5, "z": 24.0, "yaw": 140.0, "pitch": 8.0 },
         "featured_npc": "河畔回声"
-      }
+      },
+      "trigger_zones": [
+        {
+          "id": "flagship_final_arrival",
+          "label": "终章河岸",
+          "quest_event": "finale_arrival",
+          "radius": 4.5,
+          "offset": { "dx": 0.0, "dy": 0.0, "dz": 0.0 }
+        }
+      ],
+      "npc_trigger_events": [
+        { "npc": "河畔回声", "quest_event": "final_face_step" },
+        { "npc": "影子少女", "quest_event": "final_face_listen" },
+        { "npc": "夜行者", "quest_event": "final_escape_loop" }
+      ]
     },
     "variables": {
       "theme": "dawn_finale",
@@ -198,6 +212,7 @@
         "trigger": "on_enter",
         "scene_patch": "scene_dawn_river",
         "rule_refs": ["finale_arrival"],
+        "milestone_event": "finale_arrival",
         "world_patch": {
           "mc": {
             "tell": "§e晨光泛起。河畔回声等待你说出今晚的答案。",
@@ -212,6 +227,7 @@
         "memory_required": ["xinyue.face_once"],
         "scene_patch": "scene_face_dawn",
         "branch_hint": "flagship_resilience.face_finale",
+        "milestone_event": "final_face_branch",
         "world_patch": {
           "mc": {
             "tell": "§b你选择了迎向晨光，水面亮起通往新旅程的路径。",
@@ -240,6 +256,7 @@
         "memory_required": ["xinyue.escape_once"],
         "scene_patch": "scene_escape_twilight",
         "branch_hint": "flagship_resilience.escape_finale",
+        "milestone_event": "final_escape_branch",
         "world_patch": {
           "mc": {
             "tell": "§7夜行的脚步还没停下，河面映出尚未完成的轨迹。",
@@ -267,6 +284,7 @@
         "trigger": ["rule_event:final_face_step", "rule_event:final_face_listen"],
         "memory_set": ["xinyue.campaign_complete"],
         "branch_hint": "flagship_resilience.face_resolution",
+        "milestone_event": "final_face_resolution",
         "world_patch": {
           "mc": {
             "title": {
@@ -287,6 +305,7 @@
         "trigger": ["rule_event:final_escape_loop", "rule_event:final_escape_pause"],
         "memory_set": ["xinyue.campaign_complete"],
         "branch_hint": "flagship_resilience.escape_resolution",
+        "milestone_event": "final_escape_resolution",
         "world_patch": {
           "mc": {
             "title": {
@@ -310,7 +329,8 @@
             "tell": "§d终章已记入河流。无论晨光或夜行，你都把故事交给了自己。",
             "music": { "record": "otherside", "volume": 0.45 }
           }
-        }
+        },
+        "milestone_event": "final_closure"
       }
     ]
   },
@@ -331,13 +351,45 @@
   },
   "tasks": [
     {
-      "id": "final_memory_reflection",
-      "type": "story",
+      "id": "flagship_final_reflection",
+      "type": "quest_event",
       "title": "倾听终章",
-      "conditions": [],
+      "hint": "河畔回声等待你的回答，无论晨光或夜行，都要完成你的故事。",
+      "rule_event": "finale_arrival",
+      "conditions": [
+        {
+          "quest_event": "finale_arrival",
+          "count": 1,
+          "title": "抵达黎明河畔"
+        }
+      ],
       "milestones": [
-        { "id": "speak_to_echo", "title": "与河畔回声交谈" },
-        { "id": "choose_path", "title": "作出终章的抉择" }
+        {
+          "id": "flagship_final_arrival",
+          "title": "与河畔回声交谈",
+          "hint": "靠近河畔回声，诉说你的心声。",
+          "milestone_event": "finale_arrival",
+          "target": "finale_arrival"
+        },
+        {
+          "id": "flagship_final_choice",
+          "title": "作出终章抉择",
+          "hint": "在晨光或夜行之间做出决定，完成心悦主线。",
+          "milestone_event": "finale_resolution",
+          "target": "final_face_step",
+          "alternates": [
+            "final_face_listen",
+            "final_escape_loop",
+            "final_escape_pause"
+          ]
+        }
+      ],
+      "rule_refs": [
+        "finale_arrival",
+        "final_face_step",
+        "final_face_listen",
+        "final_escape_loop",
+        "final_escape_pause"
       ],
       "rewards": [
         { "type": "xp", "amount": 320 },

@@ -14,12 +14,13 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.story.LevelIds;
 import com.driftmc.story.StoryManager;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -198,7 +199,7 @@ public final class RecommendationHud {
                     continue;
                 }
                 Recommendation rec = new Recommendation();
-                rec.levelId = levelId;
+                rec.levelId = LevelIds.canonicalizeLevelId(levelId);
                 rec.title = getAsString(obj, "title");
                 rec.score = getAsDouble(obj, "score");
                 rec.reasonSummary = getAsString(obj, "reason_summary");

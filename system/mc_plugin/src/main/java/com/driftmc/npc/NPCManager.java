@@ -33,6 +33,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
+import com.driftmc.scene.QuestEventCanonicalizer;
+
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -67,6 +69,7 @@ public class NPCManager implements Listener {
     private final Map<String, NpcSkin> activeSkins = new ConcurrentHashMap<>();
     private final Map<String, Long> pendingSpawns = new ConcurrentHashMap<>();
     private final Map<String, EmotionProfile> emotionProfiles = new ConcurrentHashMap<>();
+    private final Map<String, String> npcQuestTriggers = new ConcurrentHashMap<>();
 
     public NPCManager(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -106,6 +109,7 @@ public class NPCManager implements Listener {
 
     public void onScenePatch(Player player, Map<String, Object> metadata, Map<String, Object> operations) {
         registerSceneSkins(metadata);
+        registerNpcQuestEvents(metadata, operations);
         collectPendingNames(operations);
         Bukkit.getScheduler().runTask(plugin, this::refreshNpcAppearances);
     }
@@ -113,6 +117,7 @@ public class NPCManager implements Listener {
     public void onSceneCleanup(Player player, Map<String, Object> metadata) {
         activeSkins.clear();
         pendingSpawns.clear();
+        npcQuestTriggers.clear();
         refreshNpcAppearances();
     }
 
@@ -324,6 +329,10 @@ public class NPCManager implements Listener {
             if (spawnMulti != null) {
                 registerSpawnNames(spawnMulti);
             }
+            Object questEvents = cast.get("npc_trigger_events");
+            if (questEvents != null) {
+                collectNpcQuestEvents(questEvents);
+            }
             for (Object value : cast.values()) {
                 if (value instanceof Map<?, ?> || value instanceof List<?>) {
                     walkOperations(value);
@@ -364,6 +373,62 @@ public class NPCManager implements Listener {
             }
         }
         return result;
+    }
+
+    private void registerNpcQuestEvents(Map<String, Object> metadata, Map<String, Object> operations) {
+        npcQuestTriggers.clear();
+        if (metadata != null) {
+            Object metaSpec = metadata.get("npc_triggers");
+            if (metaSpec != null) {
+                collectNpcQuestEvents(metaSpec);
+            }
+        }
+        if (operations != null) {
+            Object opSpec = operations.get("npc_trigger_events");
+            if (opSpec != null) {
+                collectNpcQuestEvents(opSpec);
+            }
+        }
+    }
+
+    private void collectNpcQuestEvents(Object candidate) {
+        if (candidate instanceof Map<?, ?> map) {
+            recordNpcQuestEvent(castToStringMap(map));
+        } else if (candidate instanceof List<?> list) {
+            for (Object entry : list) {
+                collectNpcQuestEvents(entry);
+            }
+        }
+    }
+
+    private void recordNpcQuestEvent(Map<String, Object> spec) {
+        if (spec == null || spec.isEmpty()) {
+            return;
+        }
+        String npc = asString(spec.getOrDefault("npc", spec.get("id"))).trim();
+        String questEvent = asString(spec.get("quest_event")).trim();
+        if (npc.isBlank() || questEvent.isBlank()) {
+            return;
+        }
+        String canonicalEvent = QuestEventCanonicalizer.canonicalize(questEvent);
+        if (canonicalEvent.isEmpty()) {
+            return;
+        }
+        npcQuestTriggers.put(normalize(npc), canonicalEvent);
+    }
+
+    public String lookupQuestEvent(Entity entity) {
+        if (entity == null) {
+            return "";
+        }
+        return lookupQuestEvent(resolveName(entity));
+    }
+
+    public String lookupQuestEvent(String npcName) {
+        if (npcName == null) {
+            return "";
+        }
+        return npcQuestTriggers.getOrDefault(normalize(npcName), "");
     }
 
     private Map<String, Object> castToStringMap(Map<?, ?> source) {

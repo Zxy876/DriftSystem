@@ -70,3 +70,33 @@ java.io.IOException: Input/output error
 [15:18:24 INFO]: Running delayed init tasks
 [15:18:24 INFO]: Done (4665.565s)! For help, type "help"
 [15:18:24 INFO]: Timings Reset
+[20:06:57 INFO]: Stopping server
+[20:06:57 INFO]: [DriftSystem] Disabling DriftSystem v2.0
+[20:06:57 INFO]: [DriftSystem] ======================================
+[20:06:57 INFO]: [DriftSystem]    DriftSystem 已关闭
+[20:06:57 INFO]: [DriftSystem] ======================================
+[20:06:57 INFO]: Saving players
+[20:06:57 INFO]: Saving worlds
+[20:06:57 INFO]: Saving chunks for level 'ServerLevel[world]'/minecraft:overworld
+[20:06:57 INFO]: [ChunkHolderManager] Waiting 60s for chunk system to halt for world 'world'
+[20:06:57 INFO]: [ChunkHolderManager] Halted chunk system for world 'world'
+[20:06:57 INFO]: [ChunkHolderManager] Saving all chunkholders for world 'world'
+[20:06:57 INFO]: [ChunkHolderManager] Saved 0 block chunks, 88 entity chunks, 0 poi chunks in world 'world' in 0.01s
+[20:06:57 INFO]: ThreadedAnvilChunkStorage (world): All chunks are saved
+[20:06:57 INFO]: Saving chunks for level 'ServerLevel[world_nether]'/minecraft:the_nether
+[20:06:57 INFO]: [ChunkHolderManager] Waiting 60s for chunk system to halt for world 'world_nether'
+[20:06:57 INFO]: [ChunkHolderManager] Halted chunk system for world 'world_nether'
+[20:06:57 INFO]: [ChunkHolderManager] Saving all chunkholders for world 'world_nether'
+[20:06:57 INFO]: [ChunkHolderManager] Saved 0 block chunks, 24 entity chunks, 0 poi chunks in world 'world_nether' in 0.00s
+[20:06:57 INFO]: ThreadedAnvilChunkStorage (DIM-1): All chunks are saved
+[20:06:57 INFO]: Saving chunks for level 'ServerLevel[world_the_end]'/minecraft:the_end
+[20:06:57 INFO]: [ChunkHolderManager] Waiting 60s for chunk system to halt for world 'world_the_end'
+[20:06:57 INFO]: [ChunkHolderManager] Halted chunk system for world 'world_the_end'
+[20:06:57 INFO]: [ChunkHolderManager] Saving all chunkholders for world 'world_the_end'
+[20:06:57 INFO]: [ChunkHolderManager] Saved 10 block chunks, 10 entity chunks, 0 poi chunks in world 'world_the_end' in 0.00s
+[20:06:57 INFO]: ThreadedAnvilChunkStorage (DIM1): All chunks are saved
+[20:06:57 INFO]: ThreadedAnvilChunkStorage: All dimensions are saved
+[20:06:57 INFO]: Flushing Chunk IO
+[20:06:57 INFO]: Closing Thread Pool
+2025-12-10 20:06:57,711 Log4j2-AsyncAppenderEventDispatcher-1-Async WARN Advanced terminal features are not available in this environment
+[20:06:57 INFO]: Closing Server

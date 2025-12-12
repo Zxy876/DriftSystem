@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import unittest
 
-from backend.app.core.story.story_graph import StoryGraph
+from app.core.story.story_graph import StoryGraph
 
 class StoryGraphRecommendationTest(unittest.TestCase):
     def setUp(self):

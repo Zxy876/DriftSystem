@@ -118,7 +118,33 @@
   "world_patch": {
     "mc": {
       "lighting_shift": "night_to_neon_glow",
-      "weather_transition": {"from": "STORM_BUILD", "to": "SOFT_RAIN"}
+      "weather_transition": {"from": "STORM_BUILD", "to": "SOFT_RAIN"},
+      "trigger_zones": [
+        {
+          "id": "flagship_08_maze_entry",
+          "label": "迷宫入口",
+          "quest_event": "flagship_08_intro",
+          "radius": 4.0
+        },
+        {
+          "id": "flagship_08_grandma",
+          "label": "奶奶的灯光",
+          "quest_event": "approach_grandma",
+          "radius": 3.0,
+          "offset": {"dx": 3.0, "dy": 0.0, "dz": 3.0}
+        },
+        {
+          "id": "flagship_08_heart_demon",
+          "label": "心魔裂口",
+          "quest_event": "approach_heart_demon",
+          "radius": 3.0,
+          "offset": {"dx": -4.0, "dy": 0.0, "dz": -4.0}
+        }
+      ],
+      "npc_trigger_events": [
+        {"npc": "回忆中的奶奶", "quest_event": "comfort_path"},
+        {"npc": "心魔裂口", "quest_event": "deny_path"}
+      ]
     },
     "variables": {
       "arc_position": "midpoint"
@@ -137,7 +163,8 @@
       {
         "id": "intro",
         "trigger": "on_enter",
-        "rule_refs": [],
+        "rule_refs": ["flagship_08_intro"],
+        "milestone_event": "flagship_08_intro",
         "cinematic": "rain_intro",
         "cinematic_alias": "flagship_08.rain_entry",
         "branch_hint": "flagship_resilience.fork",
@@ -171,6 +198,7 @@
         "memory_set": ["xinyue.face_once"],
         "memory_clear": ["xinyue.escape_once"],
         "branch_hint": "flagship_resilience.face_memory",
+        "milestone_event": "comfort_path",
         "world_patch": {
           "mc": {
             "tell": "§a 雨声渐弱，你踩在泥水里的脚步慢慢稳了下来。",
@@ -186,6 +214,7 @@
         "memory_set": ["xinyue.escape_once"],
         "memory_clear": ["xinyue.face_once"],
         "branch_hint": "flagship_resilience.escape_loop",
+        "milestone_event": "escape_path",
         "world_patch": {
           "mc": {
             "tell": "§7 泥水溅起，你转身离开的背影被夜色吞没。",
@@ -200,6 +229,7 @@
         "trigger": "story:continue",
         "memory_required": ["xinyue.face_once"],
         "branch_hint": "flagship_resilience.face_recap",
+        "milestone_event": "flagship_08_reconcile",
         "world_patch": {
           "mc": {
             "tell": "✨ 你回头望向迷宫，光束像线索一样指向更深处。",
@@ -215,6 +245,7 @@
         "trigger": "story:continue",
         "memory_required": ["xinyue.escape_once"],
         "branch_hint": "flagship_resilience.escape_recap",
+        "milestone_event": "flagship_08_linger",
         "world_patch": {
           "mc": {
             "tell": "☔ 雨更密了，迷宫墙面映出你匆忙的倒影。",
@@ -229,6 +260,7 @@
         "id": "meet_grandma",
         "trigger": "rule:approach_grandma",
         "rule_refs": ["calm_gain"],
+        "milestone_event": "approach_grandma",
         "npc_dialogue": [
           {
             "npc": "grandma_memory",
@@ -288,13 +320,15 @@
           "mc": { "particle": { "type": "smoke", "count": 35 } }
         },
         "cinematic": "heart_demon_rise",
-        "cinematic_alias": "flagship_08.shadow_rise"
+        "cinematic_alias": "flagship_08.shadow_rise",
+        "milestone_event": "approach_heart_demon"
       },
 
       {
         "id": "ending",
         "trigger": "story:continue",
-        "rule_refs": [],
+        "rule_refs": ["flagship_08_ending"],
+        "milestone_event": "flagship_08_ending",
         "next_major_level": "flagship_12",
         "world_patch": {
           "mc": {
@@ -317,13 +351,48 @@
 
   "tasks": [
     {
-      "id": "explore_maze",
+      "id": "flagship_08_maze",
+      "type": "quest_event",
       "title": "穿越心象迷宫",
-      "type": "story",
-      "conditions": [],
+      "hint": "在雨夜迷宫中寻找引导与心魔的答案。",
+      "rule_event": "flagship_08_ending",
+      "conditions": [
+        {
+          "quest_event": "approach_grandma",
+          "count": 1,
+          "title": "找到奶奶的幻影"
+        },
+        {
+          "quest_event": "approach_heart_demon",
+          "count": 1,
+          "title": "面对心魔裂口"
+        }
+      ],
       "milestones": [
-        { "id": "find_grandma", "title": "找到奶奶的幻影" },
-        { "id": "face_demon", "title": "面对心魔裂口" }
+        {
+          "id": "flagship_08_find_grandma",
+          "title": "找到奶奶的幻影",
+          "hint": "靠近雨巷深处的灯光，与熟悉的影子对话。",
+          "milestone_event": "approach_grandma",
+          "target": "approach_grandma"
+        },
+        {
+          "id": "flagship_08_face_demon",
+          "title": "面对心魔裂口",
+          "hint": "直面迷宫阴影的低语，做出属于你的回应。",
+          "milestone_event": "approach_heart_demon",
+          "target": "approach_heart_demon"
+        }
+      ],
+      "rule_refs": [
+        "approach_grandma",
+        "approach_heart_demon",
+        "comfort_path",
+        "deny_path",
+        "fight_path",
+        "escape_path",
+        "flagship_08_intro",
+        "flagship_08_ending"
       ],
       "rewards": ["clarity_fragment"]
     }

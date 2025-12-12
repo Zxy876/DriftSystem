@@ -12,6 +12,7 @@ import org.bukkit.entity.Player;
 import com.driftmc.backend.BackendClient;
 import com.driftmc.intent.IntentRouter;
 import com.driftmc.session.PlayerSessionManager;
+import com.driftmc.story.LevelIds;
 import com.driftmc.world.WorldPatchExecutor;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
@@ -59,13 +60,17 @@ public class LevelCommand implements CommandExecutor {
             return true;
         }
 
-        String levelId = args[0];
+        String requestedLevel = args[0];
+        String levelId = LevelIds.canonicalizeOrDefault(requestedLevel);
         String playerId = player.getName();
 
         player.sendMessage(ChatColor.YELLOW + "📘 正在为 "
                 + ChatColor.AQUA + playerId
                 + ChatColor.YELLOW + " 加载关卡: "
                 + ChatColor.GOLD + levelId);
+        if (!levelId.equals(requestedLevel)) {
+            player.sendMessage(ChatColor.GRAY + "(使用别名 " + requestedLevel + " → " + levelId + ")");
+        }
 
         try {
             String path = "/story/load/" + playerId + "/" + levelId;
