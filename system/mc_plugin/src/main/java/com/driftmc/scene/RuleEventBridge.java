@@ -106,9 +106,15 @@ public final class RuleEventBridge {
         body.put("payload", payloadCopy);
 
         if (shouldThrottle(player, type, payloadCopy)) {
+            plugin.getLogger().log(Level.FINE,
+                    "[RuleEventBridge] Throttled event {0} for player {1}",
+                    new Object[]{type, playerName});
             return;
         }
 
+        plugin.getLogger().log(Level.INFO,
+                "[RuleEventBridge] Emitting event {0} for player {1} payload={2}",
+                new Object[]{type, playerName, payloadCopy});
         String json = gson.toJson(body);
         backend.postJsonAsync("/world/story/rule-event", json, new Callback() {
             @Override
@@ -189,6 +195,9 @@ public final class RuleEventBridge {
         if (!pos.isEmpty()) {
             payload.put("location", pos);
         }
+        plugin.getLogger().log(Level.INFO,
+                "[RuleEventBridge] emitInteractEntity player={0}, entity={1}, interaction={2}",
+                new Object[]{player != null ? player.getName() : "unknown", entity != null ? entity.getType() : "null", interaction});
         emit(player, "interact_entity", payload);
     }
 
@@ -214,6 +223,9 @@ public final class RuleEventBridge {
         if (extraPayload != null && !extraPayload.isEmpty()) {
             payload.putAll(extraPayload);
         }
+        plugin.getLogger().log(Level.INFO,
+                "[RuleEventBridge] emitQuestEvent {0} for player {1} payload={2}",
+                new Object[]{canonical, player != null ? player.getName() : "unknown", payload});
         emit(player, "quest_event", payload);
     }
 

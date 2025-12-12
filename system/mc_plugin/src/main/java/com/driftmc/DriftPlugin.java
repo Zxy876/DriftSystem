@@ -139,7 +139,7 @@ public class DriftPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(npcManager, this);
 
         // 注册 NPC 临近监听（触发老版 IntentRouter）
-        Bukkit.getPluginManager().registerEvents(new NearbyNPCListener(npcManager, intentRouter, ruleEventBridge), this);
+        Bukkit.getPluginManager().registerEvents(new NearbyNPCListener(this, npcManager, intentRouter, ruleEventBridge), this);
 
         // 注册命令
         registerCommand("drift", new DriftCommand(backend, storyManager, worldPatcher, tutorialManager));
