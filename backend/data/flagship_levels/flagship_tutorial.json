@@ -96,21 +96,21 @@
           {
             "id": "intro_yes",
             "text": "点头：我准备好了。",
-            "rule_event": "tutorial_begin",
+            "rule_event": "tutorial_intro_started",
             "continuity_tags": ["courage_signal"],
             "next_major_level": "flagship_03"
           },
           {
             "id": "intro_confused",
             "text": "疑惑：这里是哪里？",
-            "rule_event": "tutorial_question",
+            "rule_event": "tutorial_meet_guide",
             "continuity_tags": ["processing_signal"]
           }
         ]
       },
       {
         "id": "tutorial_confession",
-        "trigger": "rule_event:tutorial_question",
+        "trigger": "rule_event:tutorial_meet_guide",
         "cinematic_alias": "flagship_tutorial.confession",
         "rule_refs": ["tutorial_reassure"],
         "memory_set": ["xinyue.admitted_pain"],
@@ -126,7 +126,7 @@
           {
             "id": "confession_affirm",
             "text": "谢谢你，我还想继续走下去。",
-            "rule_event": "tutorial_begin",
+            "rule_event": "tutorial_intro_started",
             "tags": ["confession", "pain_shared"],
             "continuity_tags": ["shared_weight"]
           }
@@ -134,7 +134,7 @@
       },
       {
         "id": "tutorial_start",
-        "trigger": "rule_event:tutorial_begin",
+        "trigger": "rule_event:tutorial_intro_started",
         "cinematic": "tutorial_light_bloom",
         "cinematic_alias": "flagship_tutorial.first_step",
         "rule_refs": ["tutorial_step_one"],
@@ -142,7 +142,7 @@
       },
       {
         "id": "tutorial_finish",
-        "trigger": "rule_event:tutorial_complete",
+        "trigger": "rule_event:tutorial_task_complete",
         "cinematic": "tutorial_portal_open",
         "cinematic_alias": "flagship_tutorial.arc_handoff",
         "next_level": "flagship_03",
@@ -196,8 +196,8 @@
       {
         "id": "tutorial_step_one",
         "type": "quest_event",
-        "targets": ["tutorial_checkpoint"],
-        "quest_event": "tutorial_progress",
+        "targets": ["tutorial_reach_checkpoint"],
+        "quest_event": "tutorial_reach_checkpoint",
         "metadata": {
           "dialogue": [
             "很好，你迈出了第一步。",
@@ -211,8 +211,8 @@
       {
         "id": "tutorial_launch",
         "type": "quest_event",
-        "targets": ["tutorial_complete"],
-        "quest_event": "tutorial_complete",
+        "targets": ["tutorial_task_complete"],
+        "quest_event": "tutorial_task_complete",
         "metadata": {
           "dialogue": {
             "title": "传送门已开启",
@@ -231,12 +231,38 @@
   "tasks": [
     {
       "id": "tutorial_task_01",
-      "type": "story",
+      "type": "quest_event",
       "title": "踏上旅程",
+      "rule_event": "tutorial_task_complete",
+      "memory_set": ["xinyue.tutorial_completed"],
+      "count": 4,
       "conditions": [
-        { "location": "tutorial_checkpoint", "count": 1 }
+        {
+          "quest_event": "tutorial_intro_started",
+          "rule_event": "tutorial_intro_started",
+          "count": 1,
+          "title": "迈出第一步"
+        },
+        {
+          "quest_event": "tutorial_meet_guide",
+          "rule_event": "tutorial_meet_guide",
+          "count": 1,
+          "title": "与心悦向导对话"
+        },
+        {
+          "quest_event": "tutorial_reach_checkpoint",
+          "rule_event": "tutorial_reach_checkpoint",
+          "count": 1,
+          "title": "抵达光点"
+        }
       ],
-      "milestones": ["first_step", "checkpoint_reached"],
+      "rule_refs": [
+        "tutorial_intro_started",
+        "tutorial_meet_guide",
+        "tutorial_reach_checkpoint",
+        "tutorial_task_complete"
+      ],
+      "milestones": [],
       "rewards": [
         { "type": "item", "amount": 1, "data": {"id": "guide_compass"} }
       ],
@@ -258,12 +284,35 @@
         "level_id": "flagship_tutorial",
         "title": "心悦旗舰教程",
         "scene_world": "KunmingLakeTutorial",
-        "featured_npc": "心悦向导"
+        "featured_npc": "心悦向导",
+        "entry_trigger": "tutorial_intro_started",
+        "trigger_zones": [
+          {
+            "id": "tutorial_checkpoint",
+            "label": "教程光点",
+            "quest_event": "tutorial_reach_checkpoint",
+            "radius": 4.0
+          }
+        ],
+        "npc_triggers": [
+          { "npc": "心悦向导", "quest_event": "tutorial_meet_guide" }
+        ]
       },
       "music": { "record": "mellohi" },
       "particle": { "type": "enchantment", "count": 20 },
       "lighting_shift": "sunrise_warm",
-      "weather_transition": { "from": "DAWN_MIST", "to": "SUNRISE" }
+      "weather_transition": { "from": "DAWN_MIST", "to": "SUNRISE" },
+      "trigger_zones": [
+        {
+          "id": "tutorial_checkpoint",
+          "quest_event": "tutorial_reach_checkpoint",
+          "radius": 4.0,
+          "offset": { "dx": 10.0, "dy": 0.0, "dz": 12.0 }
+        }
+      ],
+      "npc_trigger_events": [
+        { "npc": "心悦向导", "quest_event": "tutorial_meet_guide" }
+      ]
     },
     "variables": {
       "theme": "tutorial",

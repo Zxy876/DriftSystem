@@ -47,14 +47,18 @@ public class StoryManager {
    * 获取玩家当前关卡
    */
   public String getCurrentLevel(Player player) {
-    return playerLevels.getOrDefault(player.getUniqueId(), "level_01");
+    String stored = playerLevels.get(player.getUniqueId());
+    if (stored == null || stored.isBlank()) {
+      return LevelIds.DEFAULT_LEVEL;
+    }
+    return LevelIds.canonicalizeLevelId(stored);
   }
 
   /**
    * 设置玩家当前关卡
    */
   public void setCurrentLevel(Player player, String levelId) {
-    playerLevels.put(player.getUniqueId(), levelId);
+    playerLevels.put(player.getUniqueId(), LevelIds.canonicalizeOrDefault(levelId));
   }
 
   /**

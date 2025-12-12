@@ -1,8 +1,10 @@
 # backend/app/core/story/story_engine.py
 from __future__ import annotations
 
+import logging
 import time
 from copy import deepcopy
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
@@ -27,6 +29,9 @@ from app.core.story.level_schema import (
     EmotionalWorldPatchConfig,
 )
 from app.core.events.event_manager import EventManager
+
+
+logger = logging.getLogger(__name__)
 
 
 CINEMATIC_LIBRARY: Dict[str, Dict[str, Any]] = {
@@ -313,6 +318,7 @@ class StoryEngine:
         # Phase 2 runtime
         self.event_manager = EventManager()
         quest_runtime.set_rule_callback(self._handle_rule_catalyst)
+        quest_runtime.set_orphan_callback(self._handle_orphan_rule_event)
 
         self._custom_story_dir = primary_dir
 
@@ -393,6 +399,7 @@ class StoryEngine:
         player_state.pop("pending_nodes", None)
         player_state.pop("pending_patches", None)
         player_state.pop("emotional_profile", None)
+        player_state.pop("autofix_hints", None)
         self.event_manager.unregister(player_id)
         quest_runtime.exit_level(player_id)
 
@@ -517,6 +524,131 @@ class StoryEngine:
             flags = normalized
             state["memory_flags"] = flags
         return flags
+
+    def _handle_orphan_rule_event(
+        self,
+        player_id: str,
+        orphan_record: Dict[str, Any],
+        runtime_state: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Provide a confidence-scored auto-heal hint for orphan rule events."""
+
+        player_state = self.players.get(player_id)
+        if not player_state:
+            return None
+
+        level = player_state.get("level")
+        if not level:
+            return None
+
+        event = orphan_record.get("event") or {}
+        orphan_token = event.get("quest_event") or event.get("target")
+        if not isinstance(orphan_token, str):
+            return None
+
+        normalized_token = orphan_token.strip().lower()
+        if not normalized_token:
+            return None
+
+        best: Optional[Dict[str, Any]] = None
+
+        def _consider(candidate: Optional[str], *, reason: str, task_id: Optional[str], task_title: Optional[str], source: str) -> None:
+            nonlocal best
+            if not candidate:
+                return
+            token = str(candidate).strip().lower()
+            if not token:
+                return
+            ratio = SequenceMatcher(None, normalized_token, token).ratio()
+            if ratio < 0.55:
+                return
+
+            proposal = {
+                "candidate_event": token,
+                "task_id": task_id,
+                "task_title": task_title,
+                "reason": reason,
+                "source": source,
+                "level_id": getattr(level, "level_id", None),
+                "confidence": round(ratio, 3),
+            }
+            if not best or ratio > best.get("confidence", 0.0):
+                best = proposal
+
+        runtime_tasks = runtime_state.get("tasks") or []
+        for session in runtime_tasks:
+            task_id = getattr(session, "id", None)
+            task_title = getattr(session, "title", None)
+
+            for ref in getattr(session, "rule_refs", []) or []:
+                if isinstance(ref, str):
+                    _consider(ref, reason="rule_ref", task_id=task_id, task_title=task_title, source="runtime")
+
+            milestone_list = getattr(session, "milestones", []) or []
+            for milestone in milestone_list:
+                milestone_event = getattr(milestone, "event", None) or getattr(milestone, "milestone_event", None)
+                if isinstance(milestone_event, str):
+                    _consider(milestone_event, reason="milestone_event", task_id=task_id, task_title=task_title, source="runtime")
+                target = getattr(milestone, "target", None)
+                if isinstance(target, str):
+                    _consider(target, reason="milestone_target", task_id=task_id, task_title=task_title, source="runtime")
+
+            target_value = getattr(session, "target", None)
+            if isinstance(target_value, str):
+                _consider(target_value, reason="task_target", task_id=task_id, task_title=task_title, source="runtime")
+
+        level_tasks = getattr(level, "tasks", []) or []
+        for task in level_tasks:
+            if hasattr(task, "__dict__") and not isinstance(task, dict):
+                task_map = dict(getattr(task, "__dict__", {}))
+            elif isinstance(task, dict):
+                task_map = dict(task)
+            else:
+                task_map = {}
+            task_id = task_map.get("id") or task_map.get("task_id")
+            task_title = task_map.get("title")
+
+            for field in ("rule_event", "target"):
+                field_value = task_map.get(field)
+                if isinstance(field_value, str):
+                    _consider(field_value, reason=field, task_id=task_id, task_title=task_title, source="level")
+
+            for cond in task_map.get("conditions", []) or []:
+                quest_event = cond.get("quest_event") if isinstance(cond, dict) else None
+                if isinstance(quest_event, str):
+                    _consider(quest_event, reason="condition", task_id=task_id, task_title=task_title, source="level")
+
+            for milestone in task_map.get("milestones", []) or []:
+                milestone_event = milestone.get("milestone_event") if isinstance(milestone, dict) else None
+                if isinstance(milestone_event, str):
+                    _consider(milestone_event, reason="level_milestone", task_id=task_id, task_title=task_title, source="level")
+
+            title_slug = str(task_title or "").strip().lower().replace(" ", "_")
+            if title_slug:
+                _consider(title_slug, reason="title_slug", task_id=task_id, task_title=task_title, source="level")
+
+            for tag in task_map.get("tags", []) or []:
+                if isinstance(tag, str):
+                    _consider(tag, reason="tag", task_id=task_id, task_title=task_title, source="level")
+
+        if not best:
+            return None
+
+        autofix_bucket = player_state.setdefault("autofix_hints", {})
+        autofix_bucket[normalized_token] = dict(best)
+
+        logger.info(
+            "StoryEngine auto-heal suggestion",
+            extra={
+                "player_id": player_id,
+                "level_id": getattr(level, "level_id", None),
+                "orphan_event": normalized_token,
+                "candidate_event": best["candidate_event"],
+                "confidence": best["confidence"],
+            },
+        )
+
+        return dict(best)
 
     def _is_memory_satisfied(self, player_id: str, requirement: Any) -> bool:
         memory = self._get_memory_set(player_id)

@@ -140,7 +140,30 @@
       "breath": 1.0,
       "unlocked": true,
       "arc_position": "rising_action"
-    }
+    },
+    "trigger_zones": [
+      {
+        "id": "flagship_03_base_camp",
+        "label": "营地暖火",
+        "quest_event": "intro_calm",
+        "radius": 4.0,
+        "offset": { "dx": 2.0, "dy": 0.0, "dz": -2.0 }
+      },
+      {
+        "id": "flagship_03_mid_camp",
+        "label": "迷雾营地",
+        "quest_event": "fear_pulse",
+        "radius": 5.0,
+        "offset": { "dx": 16.0, "dy": 4.0, "dz": 18.0 }
+      },
+      {
+        "id": "flagship_03_summit_portal",
+        "label": "峰顶门户",
+        "quest_event": "summit_view",
+        "radius": 5.5,
+        "offset": { "dx": 30.0, "dy": 18.0, "dz": 34.0 }
+      }
+    ]
   },
 
   "narrative": {
@@ -156,6 +179,7 @@
         "scene_patch": "scene_base_camp_cinematic",
         "cinematic_alias": "flagship_03.supported_entry",
         "rule_refs": ["intro_calm"],
+        "milestone_event": "intro_calm",
         "memory_required": ["xinyue.admitted_pain"],
         "branch_hint": "flagship_resilience.support_path",
         "world_patch": {
@@ -187,6 +211,7 @@
         "id": "flag_03_intro",
         "trigger": "on_enter",
         "rule_refs": ["intro_calm"],
+        "milestone_event": "intro_calm",
         "memory_required": ["xinyue.masked_pain"],
         "scene_patch": "scene_base_camp_cinematic",
         "cinematic_alias": "flagship_03.storm_entry",
@@ -222,6 +247,7 @@
         "trigger": "rule_event:ready_to_climb",
         "scene_patch": "scene_mid_camp_fog",
         "rule_refs": ["fear_pulse"],
+        "milestone_event": "fear_pulse",
         "branch_hint": "flagship_resilience.mid_climb",
         "choices": [
           {
@@ -247,6 +273,7 @@
         "trigger": ["rule_event:push_forward", "rule_event:overcome_fear"],
         "scene_patch": "scene_summit_arrival",
         "rule_refs": ["summit_view"],
+        "milestone_event": "summit_view",
         "memory_set": ["xinyue.reached_summit"],
         "next_major_level": "flagship_08",
         "branch_hint": "flagship_resilience.arc_handoff"
@@ -299,14 +326,52 @@
 
   "tasks": [
     {
-      "id": "flag_03_climb_progress",
-      "type": "exploration",
+      "id": "flagship_03_climb",
+      "type": "quest_event",
+      "title": "攀登风暴之山",
+      "hint": "跟随登山者的指引，穿过营地、迷雾与峰顶。",
+      "rule_event": "summit_view",
       "conditions": [
-        { "location": "base_camp", "count": 1 },
-        { "location": "mid_camp", "count": 1 },
-        { "location": "summit_portal", "count": 1 }
+        {
+          "quest_event": "intro_calm",
+          "count": 1,
+          "title": "抵达营地，安定呼吸"
+        },
+        {
+          "quest_event": "fear_pulse",
+          "count": 1,
+          "title": "穿越迷雾营地"
+        },
+        {
+          "quest_event": "summit_view",
+          "count": 1,
+          "title": "登上风暴之巅"
+        }
       ],
-      "milestones": ["reached_mid", "reached_summit"],
+      "milestones": [
+        {
+          "id": "flagship_03_arrive_base",
+          "title": "抵达营地",
+          "hint": "靠近营地火堆，聆听登山者的鼓励。",
+          "milestone_event": "intro_calm",
+          "target": "intro_calm"
+        },
+        {
+          "id": "flagship_03_reach_mid",
+          "title": "突破迷雾",
+          "hint": "保持步伐，走进迷雾营地中央。",
+          "milestone_event": "fear_pulse",
+          "target": "fear_pulse"
+        },
+        {
+          "id": "flagship_03_reach_summit",
+          "title": "俯瞰峰顶",
+          "hint": "沿着绳索抵达山顶石门。",
+          "milestone_event": "summit_view",
+          "target": "summit_view"
+        }
+      ],
+      "rule_refs": ["intro_calm", "fear_pulse", "summit_view"],
       "rewards": [
         { "type": "xp", "amount": 200 },
         { "type": "item", "amount": 1, "data": { "id": "summit_token" } }

@@ -22,6 +22,7 @@ import com.driftmc.commands.RecommendCommand;
 import com.driftmc.commands.SayToAICommand;
 import com.driftmc.commands.StoryCreativeCommand;
 import com.driftmc.commands.TalkCommand;
+import com.driftmc.commands.TaskDebugCommand;
 import com.driftmc.commands.custom.CmdSay;
 import com.driftmc.commands.custom.CmdStoryNext;
 import com.driftmc.commands.custom.CmdTeleport;
@@ -70,6 +71,7 @@ public class DriftPlugin extends JavaPlugin {
     private DialoguePanel dialoguePanel;
     private ChoicePanel choicePanel;
     private CinematicController cinematicController;
+    private String taskDebugToken;
 
     @Override
     public void onEnable() {
@@ -85,6 +87,8 @@ public class DriftPlugin extends JavaPlugin {
         }
 
         getLogger().log(Level.INFO, "[DriftPlugin] 后端地址: {0}", url);
+
+        this.taskDebugToken = getConfig().getString("debug.task_token", "");
 
         // 初始化核心组件
         this.backend = new BackendClient(url);
@@ -155,6 +159,7 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("recommend", new RecommendCommand(recommendationHud));
         registerCommand("questlog", new QuestLogCommand(questLogHud));
         registerCommand("cinematic", new CinematicCommand(cinematicController));
+        registerCommand("taskdebug", new TaskDebugCommand(this, backend, taskDebugToken));
 
         getLogger().info("======================================");
         getLogger().info("   DriftSystem / 心悦宇宙");

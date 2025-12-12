@@ -47,7 +47,7 @@ public class HeartMenuCommand implements CommandExecutor {
         }
 
         player.sendMessage(ChatColor.LIGHT_PURPLE + "========== 心悦宇宙 · 菜单 ==========");
-        player.sendMessage(ChatColor.AQUA + "/level level_01  "
+        player.sendMessage(ChatColor.AQUA + "/level flagship_tutorial  "
                 + ChatColor.GRAY + "进入「心悦文集 · 第 1 章」");
         player.sendMessage(ChatColor.AQUA + "/storynext       "
                 + ChatColor.GRAY + "让故事自动向前一步");

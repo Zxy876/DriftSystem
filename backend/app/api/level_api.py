@@ -5,10 +5,15 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.core.story.story_loader import DATA_DIR
+from app.core.story.story_loader import DATA_DIR, load_level
 from app.core.story.story_engine import story_engine
+from app.core.story.level_schema import ensure_level_extensions
 
-from ...enhance_generated_level import generate_flagship_level
+try:
+    # Prefer loading from the top-level backend package when available (test contexts).
+    from backend.enhance_generated_level import generate_flagship_level
+except ImportError:  # pragma: no cover - production runtime invoked from backend dir
+    from enhance_generated_level import generate_flagship_level
 
 router = APIRouter()
 
@@ -48,6 +53,16 @@ async def generate_story_level(payload: GenerateLevelRequest):
         json.dump(level_payload, f, ensure_ascii=False, indent=2)
 
     story_engine.register_generated_level(level_payload.get("id", level_id))
+
+    try:
+        level = load_level(level_payload.get("id", level_id))
+        ensure_level_extensions(level, level_payload)
+        story_engine.register_rule_listeners(level)
+    except FileNotFoundError:
+        # The reload did not materialize the level file; skip runtime registration.
+        pass
+    except Exception as exc:  # noqa: BLE001 - surface for diagnostics without failing the API
+        print(f"[LevelAPI] failed to register rule listeners for {level_id}: {exc}")
 
     return {
         "status": "ok",

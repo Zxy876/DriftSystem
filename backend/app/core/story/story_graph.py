@@ -84,6 +84,18 @@ class StoryGraph:
 
             self._register_numeric_aliases(key)
 
+            if key == "flagship_tutorial":
+                for alias in (
+                    "tutorial",
+                    "tutorial_level",
+                    "level_tutorial",
+                    "level_01",
+                    "level_1",
+                    "level01",
+                    "level1",
+                ):
+                    self._register_alias(alias, key)
+
         print(f"[StoryGraph] Loaded {len(self.levels)} levels from {self.level_dir}")
 
     def _build_linear_graph(self) -> None:
@@ -467,6 +479,10 @@ class StoryGraph:
                     if cue not in reasons:
                         reasons.append(cue)
 
+            tasks = []
+            if isinstance(level_data, dict):
+                tasks = [task for task in level_data.get("tasks", []) if isinstance(task, dict)]
+
             if level_source == "generated":
                 entry.setdefault("origin", "generated")
                 if canonical not in completed_levels:
@@ -477,6 +493,12 @@ class StoryGraph:
                     entry["score"] += 12.0
                     if "延续近期玩家创作" not in reasons:
                         reasons.append("延续近期玩家创作")
+                if tasks:
+                    has_conditions = any(task.get("conditions") for task in tasks)
+                    if has_conditions:
+                        entry["score"] += 9.0
+                        if "玩家创作任务已准备" not in reasons:
+                            reasons.append("玩家创作任务已准备")
 
             if memory_flags:
                 affinity_flags = self._collect_memory_list(level_data.get("memory_affinity"))

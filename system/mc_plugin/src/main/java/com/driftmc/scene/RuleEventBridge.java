@@ -97,12 +97,15 @@ public final class RuleEventBridge {
         if (type.isEmpty()) {
             return;
         }
+        Map<String, Object> payloadCopy = payload != null ? new LinkedHashMap<>(payload) : new LinkedHashMap<>();
+        QuestEventCanonicalizer.canonicalizePayload(payloadCopy);
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("player_id", playerName);
         body.put("event_type", type);
-        body.put("payload", payload != null ? new LinkedHashMap<>(payload) : Collections.emptyMap());
+        body.put("payload", payloadCopy);
 
-        if (shouldThrottle(player, type, body.get("payload"))) {
+        if (shouldThrottle(player, type, payloadCopy)) {
             return;
         }
 
@@ -144,7 +147,7 @@ public final class RuleEventBridge {
     public void emitNearNpc(Player player, String npcName, Location location) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("target", npcName != null ? npcName : "unknown_npc");
-        payload.put("quest_event", canonicalize("near", npcName));
+        payload.put("quest_event", QuestEventCanonicalizer.canonicalize(canonicalize("near", npcName)));
         Map<String, Object> pos = extractLocation(location, player);
         if (!pos.isEmpty()) {
             payload.put("location", pos);
@@ -156,7 +159,7 @@ public final class RuleEventBridge {
         Map<String, Object> payload = new LinkedHashMap<>();
         String text = message != null ? message : "";
         payload.put("text", text);
-        payload.put("quest_event", canonicalize("chat", text));
+        payload.put("quest_event", QuestEventCanonicalizer.canonicalize(canonicalize("chat", text)));
         emit(player, "chat", payload);
     }
 
@@ -165,7 +168,7 @@ public final class RuleEventBridge {
         String matName = material != null ? material.name().toLowerCase() : "unknown";
         payload.put("action", action != null ? action : "unknown");
         payload.put("block_type", matName);
-        payload.put("quest_event", canonicalize("interact_block", matName));
+        payload.put("quest_event", QuestEventCanonicalizer.canonicalize(canonicalize("interact_block", matName)));
         Map<String, Object> pos = extractLocation(location, player);
         if (!pos.isEmpty()) {
             payload.put("location", pos);
@@ -181,12 +184,37 @@ public final class RuleEventBridge {
         if (entity != null && entity.getCustomName() != null) {
             payload.put("entity_name", entity.getCustomName());
         }
-        payload.put("quest_event", canonicalize("interact_entity", type));
+        payload.put("quest_event", QuestEventCanonicalizer.canonicalize(canonicalize("interact_entity", type)));
         Map<String, Object> pos = extractLocation(entity != null ? entity.getLocation() : null, player);
         if (!pos.isEmpty()) {
             payload.put("location", pos);
         }
         emit(player, "interact_entity", payload);
+    }
+
+    public void emitQuestEvent(Player player, String questEvent) {
+        emitQuestEvent(player, questEvent, player != null ? player.getLocation() : null, Collections.emptyMap());
+    }
+
+    public void emitQuestEvent(Player player, String questEvent, Location location, Map<String, Object> extraPayload) {
+        if (questEvent == null || questEvent.isBlank()) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        String canonical = QuestEventCanonicalizer.canonicalize(questEvent);
+        if (!canonical.isEmpty()) {
+            payload.put("quest_event", canonical);
+        }
+        if (location != null) {
+            Map<String, Object> loc = extractLocation(location, player);
+            if (!loc.isEmpty()) {
+                payload.put("location", loc);
+            }
+        }
+        if (extraPayload != null && !extraPayload.isEmpty()) {
+            payload.putAll(extraPayload);
+        }
+        emit(player, "quest_event", payload);
     }
 
     private boolean shouldThrottle(Player player, String eventType, Object payloadObj) {

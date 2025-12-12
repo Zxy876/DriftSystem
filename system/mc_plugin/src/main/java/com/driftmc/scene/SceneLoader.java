@@ -1,5 +1,6 @@
 package com.driftmc.scene;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Level;
@@ -20,12 +21,14 @@ public final class SceneLoader implements SceneLifecycleBridge {
 
     private final JavaPlugin plugin;
     private final SceneCleanupService cleanup;
+    private final WorldPatchExecutor world;
     private final NPCManager npcManager;
     private CinematicController cinematicController;
 
     public SceneLoader(JavaPlugin plugin, WorldPatchExecutor world, NPCManager npcManager) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
-        this.cleanup = new SceneCleanupService(plugin, Objects.requireNonNull(world, "world"));
+        this.world = Objects.requireNonNull(world, "world");
+        this.cleanup = new SceneCleanupService(plugin, this.world);
         this.npcManager = Objects.requireNonNull(npcManager, "npcManager");
     }
 
@@ -35,8 +38,10 @@ public final class SceneLoader implements SceneLifecycleBridge {
             return;
         }
         cleanup.beginSession(player, metadata, operations);
+        world.ensureFeaturedNpc(player, metadata, operations);
         npcManager.onScenePatch(player, metadata, operations);
         triggerCinematic(player, metadata, operations);
+        emitSceneEntryTrigger(player, metadata);
         plugin.getLogger().log(Level.FINE, "[SceneLoader] Scene applied for player {0}", player.getName());
     }
 
@@ -85,5 +90,31 @@ public final class SceneLoader implements SceneLifecycleBridge {
         if (candidate != null && !candidate.isEmpty()) {
             cinematicController.playSequence(player, candidate);
         }
+    }
+
+    private void emitSceneEntryTrigger(Player player, Map<String, Object> metadata) {
+        if (player == null || metadata == null) {
+            return;
+        }
+        RuleEventBridge bridge = world.getRuleEventBridge();
+        if (bridge == null) {
+            return;
+        }
+
+        String trigger = asString(metadata.get("entry_trigger"));
+        if (trigger.isBlank()) {
+            trigger = asString(metadata.get("entry_rule_event"));
+        }
+        if (trigger.isBlank()) {
+            return;
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("source", "scene_entry");
+        bridge.emitQuestEvent(player, trigger, player.getLocation(), payload);
+    }
+
+    private String asString(Object value) {
+        return value == null ? "" : value.toString().trim();
     }
 }

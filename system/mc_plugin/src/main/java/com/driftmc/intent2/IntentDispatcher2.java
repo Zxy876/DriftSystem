@@ -14,6 +14,7 @@ import com.driftmc.backend.BackendClient;
 import com.driftmc.hud.QuestLogHud;
 import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.hud.dialogue.DialoguePanel;
+import com.driftmc.story.LevelIds;
 import com.driftmc.tutorial.TutorialManager;
 import com.driftmc.world.WorldPatchExecutor;
 import com.google.gson.Gson;
@@ -158,10 +159,11 @@ public class IntentDispatcher2 {
     // ============================================================
     private void loadLevelForPlayer(Player p, String levelId, IntentResponse2 intent) {
         final Player fp = p;
+        final String canonicalLevel = LevelIds.canonicalizeOrDefault(levelId);
 
         fp.sendMessage("§e🌍 正在加载关卡场景...");
 
-        backend.postJsonAsync("/story/load/" + fp.getName() + "/" + levelId, "{}", new Callback() {
+        backend.postJsonAsync("/story/load/" + fp.getName() + "/" + canonicalLevel, "{}", new Callback() {
 
             @Override
             public void onFailure(Call call, IOException e) {
@@ -284,10 +286,10 @@ public class IntentDispatcher2 {
 
         // 显示当前关卡信息
         String cur = (mm.has("current_level") && !mm.get("current_level").isJsonNull())
-            ? mm.get("current_level").getAsString()
+            ? LevelIds.canonicalizeLevelId(mm.get("current_level").getAsString())
             : "未知";
         String nxt = (mm.has("recommended_next") && !mm.get("recommended_next").isJsonNull())
-            ? mm.get("recommended_next").getAsString()
+            ? LevelIds.canonicalizeLevelId(mm.get("recommended_next").getAsString())
             : "无";
 
         p.sendMessage("§b--- 心悦小地图 ---");
@@ -458,7 +460,7 @@ public class IntentDispatcher2 {
     private void gotoLevelAndLoad(Player p, IntentResponse2 intent) {
 
         final Player fp = p;
-        final String levelId = intent.levelId;
+        final String levelId = LevelIds.canonicalizeOrDefault(intent.levelId);
         final JsonObject minimap = intent.minimap;
 
         if (levelId == null) {
@@ -478,7 +480,7 @@ public class IntentDispatcher2 {
 
         for (int i = 0; i < nodes.size(); i++) {
             JsonObject n = nodes.get(i).getAsJsonObject();
-            if (n.get("level").getAsString().equals(levelId)) {
+            if (LevelIds.canonicalizeLevelId(n.get("level").getAsString()).equals(levelId)) {
                 JsonObject pos = n.getAsJsonObject("pos");
                 tx = pos.get("x").getAsInt();
                 tz = pos.get("y").getAsInt();
