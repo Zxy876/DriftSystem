@@ -7,12 +7,18 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.cinematic.CinematicController;
 import com.driftmc.npc.NPCManager;
 import com.driftmc.world.WorldPatchExecutor;
+
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 /**
  * Wrapper over {@link WorldPatchExecutor} that inspects scene metadata before executing patches.
@@ -139,6 +145,10 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
         }
         spawn.put("type", type);
         spawn.put("name", npcName);
+        String npcId = cleanString(skinDefinition.get("id"));
+        if (!npcId.isEmpty()) {
+            spawn.put("id", npcId);
+        }
         spawn.put("_auto_featured", Boolean.TRUE);
 
         Map<String, Object> offset = resolveOffset(metadata, skinDefinition);
@@ -426,5 +436,38 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
 
     public void attachCinematicController(CinematicController controller) {
         this.sceneLoader.setCinematicController(controller);
+    }
+
+    @Override
+    protected void afterSpawn(Player player, Map<String, Object> spawnSpec, Entity entity) {
+        super.afterSpawn(player, spawnSpec, entity);
+        if (spawnSpec == null || entity == null) {
+            return;
+        }
+        if (!Boolean.TRUE.equals(spawnSpec.get("_auto_featured"))) {
+            return;
+        }
+        if (!(entity instanceof LivingEntity living)) {
+            return;
+        }
+
+        String npcName = cleanString(spawnSpec.get("name"));
+        if (npcName.isEmpty()) {
+            Component customName = living.customName();
+            if (customName != null) {
+                npcName = cleanString(PlainTextComponentSerializer.plainText().serialize(customName));
+            }
+        }
+
+        String npcId = cleanString(spawnSpec.get("id"));
+        if (!npcId.isEmpty()) {
+            living.addScoreboardTag("npc_id:" + npcId);
+            living.setMetadata("npc_id", new FixedMetadataValue(getPlugin(), npcId));
+            if (npcName.isEmpty()) {
+                npcName = npcId;
+            }
+        }
+
+        npcManager.registerAutoFeaturedNpc(living, npcName);
     }
 }

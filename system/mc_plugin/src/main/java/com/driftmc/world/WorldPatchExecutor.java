@@ -712,8 +712,14 @@ public class WorldPatchExecutor {
             }
         }
 
+        afterSpawn(player, spawnMap, entity);
+
         player.sendMessage(ChatColor.LIGHT_PURPLE + "✧ 世界召唤了一个存在：" +
                 (name.isEmpty() ? type.name() : name));
+    }
+
+    protected void afterSpawn(Player player, Map<String, Object> spawnSpec, Entity entity) {
+        // extension hook for subclasses
     }
 
     // =============================== effect ===============================

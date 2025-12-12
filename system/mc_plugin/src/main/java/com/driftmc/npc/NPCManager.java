@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -78,6 +79,20 @@ public class NPCManager implements Listener {
     public List<Entity> getSpawnedNPCs() {
         spawnedNPCs.removeIf(entity -> entity == null || !entity.isValid());
         return spawnedNPCs;
+    }
+
+    public void registerAutoFeaturedNpc(LivingEntity entity, String declaredName) {
+        if (entity == null) {
+            return;
+        }
+        String name = declaredName;
+        if (name == null || name.isBlank()) {
+            name = resolveName(entity);
+        }
+        if (!name.isBlank()) {
+            pendingSpawns.remove(normalize(name));
+        }
+        registerNpc(entity, name);
     }
 
     public boolean isNpc(Entity entity) {
@@ -200,8 +215,32 @@ public class NPCManager implements Listener {
         if (!spawnedNPCs.contains(entity)) {
             spawnedNPCs.add(entity);
         }
+
+        if (entity instanceof ArmorStand armorStand) {
+            // ArmorStand markers ignore interactions; ensure the featured NPC keeps a hitbox.
+            armorStand.setMarker(false);
+            armorStand.setInvisible(false);
+            armorStand.setSmall(false);
+            armorStand.setGravity(false);
+        }
+
         applyAppearance(entity, declaredName);
         entity.addScoreboardTag(NPC_TAG);
+
+        String baseName = resolveName(entity);
+        String worldName = entity.getLocation().getWorld() != null
+            ? entity.getLocation().getWorld().getName()
+            : "unknown";
+        plugin.getLogger().log(Level.INFO,
+            "[NPCManager] Registered NPC {0} ({1}) at {2}:{3},{4},{5}",
+            new Object[]{
+                baseName,
+                entity.getType(),
+                worldName,
+                entity.getLocation().getBlockX(),
+                entity.getLocation().getBlockY(),
+                entity.getLocation().getBlockZ()
+            });
     }
 
     private void unregisterNpc(Entity entity) {
