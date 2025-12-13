@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import time
 from dataclasses import dataclass, field, is_dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
-from app.core.story.story_loader import Level
+from app.core.story.story_loader import Level, TUTORIAL_CANONICAL_ID
 from app.core.story.level_schema import RuleListener
 from app.core.npc import npc_engine
 
@@ -343,6 +344,10 @@ class QuestRuntime:
 
             matched_details.append(detail)
 
+        tutorial_completion = self._handle_tutorial_completion(state, normalized)
+        if tutorial_completion:
+            responses.append(tutorial_completion)
+
         suggestion: Optional[Dict[str, Any]] = None
         if not matched_any:
             suggestion = self._register_orphan_event(player_id, state, normalized, payload)
@@ -494,6 +499,19 @@ class QuestRuntime:
             "last_rule_event": None,
             "recent_rule_events": [],
         }
+
+        if level.level_id == TUTORIAL_CANONICAL_ID:
+            raw_payload = getattr(level, "_raw_payload", {}) or {}
+            state["tutorial_tracker"] = {
+                "meet_guide": False,
+                "reach_checkpoint": False,
+                "basic_action": False,
+                "completed": False,
+            }
+            exit_patch = raw_payload.get("tutorial_exit_patch")
+            if isinstance(exit_patch, dict) and exit_patch:
+                state["tutorial_exit_patch"] = copy.deepcopy(exit_patch)
+
         self._players[player_id] = state
 
     def exit_level(self, player_id: str) -> None:
@@ -768,6 +786,62 @@ class QuestRuntime:
 
         return normalized
 
+    def _handle_tutorial_completion(
+        self,
+        state: Dict[str, Any],
+        normalized_event: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        if not state or state.get("level_id") != TUTORIAL_CANONICAL_ID:
+            return None
+
+        tracker = state.get("tutorial_tracker")
+        if not isinstance(tracker, dict) or tracker.get("completed"):
+            return None
+
+        canonical = normalized_event.get("quest_event")
+        event_type = normalized_event.get("event_type")
+
+        if canonical == "tutorial_meet_guide":
+            tracker["meet_guide"] = True
+        elif canonical == "tutorial_reach_checkpoint":
+            tracker["reach_checkpoint"] = True
+        elif canonical == "tutorial_task_complete":
+            tracker["basic_action"] = True
+
+        if event_type == "chat":
+            tracker["basic_action"] = True
+        elif event_type == "interact_entity":
+            tracker["basic_action"] = True
+
+        if tracker.get("meet_guide") and tracker.get("reach_checkpoint") and tracker.get("basic_action"):
+            tracker["completed"] = True
+            state["tutorial_complete_emitted"] = True
+
+            completion_payload: Dict[str, Any] = {
+                "milestones": ["tutorial_complete"],
+                "exit_ready": True,
+            }
+
+            exit_patch = state.get("tutorial_exit_patch")
+            if isinstance(exit_patch, dict) and exit_patch:
+                completion_payload["world_patch"] = copy.deepcopy(exit_patch)
+
+            completion_payload["nodes"] = [
+                {
+                    "type": "task_milestone",
+                    "task_id": "tutorial_complete",
+                    "milestone_id": "tutorial_complete",
+                    "title": "教程完成",
+                    "text": "教程完成，已进入正式剧情。",
+                    "status": "milestone",
+                    "milestone_event": "tutorial_complete",
+                }
+            ]
+
+            return completion_payload
+
+        return None
+
     def _aggregate_rule_responses(
         self,
         state: Dict[str, Any],
@@ -791,9 +865,12 @@ class QuestRuntime:
             for milestone in session.milestones:
                 milestone_lookup[milestone.id] = milestone
 
+        extra_payload: Optional[Dict[str, Any]] = None
         for resp in responses:
             if not isinstance(resp, dict):
                 continue
+
+            extra_payload = self._merge_response_payload(extra_payload, resp)
 
             if resp.get("task_completed"):
                 task_id = resp.get("task_id")
@@ -978,6 +1055,14 @@ class QuestRuntime:
                 nodes.append(node_payload)
 
         if not nodes and not world_patch and not completed and not milestones:
+            if extra_payload:
+                summary_payload: Dict[str, Any] = {}
+                summary_payload = self._merge_response_payload(summary_payload, extra_payload) or summary_payload
+                active_snapshot = self._build_active_tasks_snapshot(state)
+                if active_snapshot:
+                    summary_payload["active_tasks"] = active_snapshot
+                    self._inject_snapshot_summary(summary_payload, active_snapshot)
+                return summary_payload or None
             snapshot_only = self._build_active_tasks_snapshot(state)
             if snapshot_only:
                 payload: Dict[str, Any] = {"active_tasks": snapshot_only}
@@ -996,6 +1081,8 @@ class QuestRuntime:
         if active_snapshot:
             summary["active_tasks"] = active_snapshot
             self._inject_snapshot_summary(summary, active_snapshot)
+        if extra_payload:
+            summary = self._merge_response_payload(summary, extra_payload) or summary
         return summary
 
     def _inject_snapshot_summary(self, target: Dict[str, Any], snapshot: Dict[str, Any]) -> None:

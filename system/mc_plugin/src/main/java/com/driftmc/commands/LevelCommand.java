@@ -1,6 +1,7 @@
 package com.driftmc.commands;
 
 import java.lang.reflect.Type;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.bukkit.ChatColor;
@@ -63,6 +64,25 @@ public class LevelCommand implements CommandExecutor {
         String requestedLevel = args[0];
         String levelId = LevelIds.canonicalizeOrDefault(requestedLevel);
         String playerId = player.getName();
+
+        if (sessions != null
+                && LevelIds.isFlagshipTutorial(levelId)
+                && sessions.hasCompletedTutorial(player)) {
+            player.sendMessage(ChatColor.GOLD + "教程已完成，正为你打开心湖枢纽入口。");
+            Map<String, Object> mcPatch = new LinkedHashMap<>();
+            Map<String, Object> teleport = new LinkedHashMap<>();
+            teleport.put("mode", "absolute");
+            teleport.put("world", "KunmingLakeHub");
+            teleport.put("x", 128.5D);
+            teleport.put("y", 72.0D);
+            teleport.put("z", -16.5D);
+            teleport.put("yaw", 180.0D);
+            teleport.put("pitch", 0.0D);
+            mcPatch.put("teleport", teleport);
+            mcPatch.put("tell", "§e教程完成§r，欢迎回到心湖枢纽探索主线章节。");
+            world.execute(player, mcPatch);
+            return true;
+        }
 
         player.sendMessage(ChatColor.YELLOW + "📘 正在为 "
                 + ChatColor.AQUA + playerId

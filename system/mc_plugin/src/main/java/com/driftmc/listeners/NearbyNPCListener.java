@@ -26,6 +26,7 @@ import com.driftmc.intent.IntentRouter;
 import com.driftmc.npc.NPCManager;
 import com.driftmc.scene.QuestEventCanonicalizer;
 import com.driftmc.scene.RuleEventBridge;
+import com.driftmc.session.PlayerSessionManager;
 import com.driftmc.story.LevelIds;
 import com.driftmc.story.StoryManager;
 
@@ -51,17 +52,19 @@ public class NearbyNPCListener implements Listener {
     private final IntentRouter router;
     private final RuleEventBridge ruleEvents;
     private final StoryManager storyManager;
+    private final PlayerSessionManager sessions;
     private final Map<String, Long> proximityCooldown = new ConcurrentHashMap<>();
     private final Map<UUID, Long> interactCooldown = new ConcurrentHashMap<>();
     private final Map<String, Long> npcQuestCooldown = new ConcurrentHashMap<>();
     private final Map<UUID, Long> tutorialCheckpointCooldown = new ConcurrentHashMap<>();
 
-    public NearbyNPCListener(JavaPlugin plugin, NPCManager npcManager, IntentRouter router, RuleEventBridge ruleEvents) {
+    public NearbyNPCListener(JavaPlugin plugin, NPCManager npcManager, IntentRouter router, RuleEventBridge ruleEvents, PlayerSessionManager sessions) {
         this.plugin = plugin;
         this.npcManager = npcManager;
         this.router = router;
         this.ruleEvents = ruleEvents;
         this.storyManager = plugin instanceof DriftPlugin drift ? drift.getStoryManager() : null;
+        this.sessions = sessions;
     }
 
     @EventHandler
@@ -141,6 +144,10 @@ public class NearbyNPCListener implements Listener {
 
         Location location = player.getLocation();
         if (!isFlagshipTutorialLevel(player)) {
+            return;
+        }
+
+        if (sessions != null && sessions.hasCompletedTutorial(player)) {
             return;
         }
 
@@ -239,11 +246,16 @@ public class NearbyNPCListener implements Listener {
         String levelId = resolveCurrentLevel(player);
         boolean flagshipTutorial = LevelIds.isFlagshipTutorial(levelId);
         boolean tutorialGuide = isTutorialGuide(target, displayName, npcId);
+        boolean tutorialCompleted = sessions != null && sessions.hasCompletedTutorial(player);
 
         if (ruleEvents != null) {
             ruleEvents.emitInteractEntity(player, target, "right_click");
 
             if (tutorialGuide && flagshipTutorial) {
+                if (tutorialCompleted) {
+                    player.sendMessage(ChatColor.GRAY + "你已经完成教程，心悦向导在主线入口等待你。");
+                    return true;
+                }
                 Map<String, Object> payload = new LinkedHashMap<>();
                 payload.put("source", "npc_interact");
                 payload.put("npc", TUTORIAL_GUIDE_NAME);

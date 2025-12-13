@@ -25,6 +25,7 @@ import com.driftmc.backend.BackendClient;
 import com.driftmc.hud.QuestLogHud;
 import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.hud.dialogue.DialoguePanel;
+import com.driftmc.session.PlayerSessionManager;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -34,6 +35,8 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.Response;
@@ -62,19 +65,22 @@ public final class RuleEventBridge {
     private final QuestLogHud questLogHud;
     private final DialoguePanel dialoguePanel;
     private final ChoicePanel choicePanel;
+    private final PlayerSessionManager sessions;
     private final Gson gson = new Gson();
     private final Map<String, Long> cooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, PlayerRuleState> playerStates = new ConcurrentHashMap<>();
     private long cooldownMillis = DEFAULT_COOLDOWN_MS;
 
     public RuleEventBridge(JavaPlugin plugin, BackendClient backend, SceneAwareWorldPatchExecutor worldPatcher,
-            QuestLogHud questLogHud, DialoguePanel dialoguePanel, ChoicePanel choicePanel) {
+            QuestLogHud questLogHud, DialoguePanel dialoguePanel, ChoicePanel choicePanel,
+            PlayerSessionManager sessions) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.backend = Objects.requireNonNull(backend, "backend");
         this.worldPatcher = Objects.requireNonNull(worldPatcher, "worldPatcher");
         this.questLogHud = questLogHud;
         this.dialoguePanel = dialoguePanel;
         this.choicePanel = choicePanel;
+        this.sessions = sessions;
     }
 
     public void setCooldownMillis(long millis) {
@@ -307,6 +313,17 @@ public final class RuleEventBridge {
             return;
         }
 
+        boolean tutorialMilestoneReached = containsTutorialComplete(milestones);
+        boolean exitReadyDuringTutorial = sessions != null && sessions.isTutorial(player) && exitReady;
+        if (sessions != null && (tutorialMilestoneReached || exitReadyDuringTutorial)) {
+            boolean alreadyCompleted = sessions.hasCompletedTutorial(player);
+            sessions.markTutorialComplete(player);
+            if (!alreadyCompleted) {
+                player.sendMessage(ChatColor.GOLD + "★ 教程完成，已进入正式剧情。\n" + ChatColor.WHITE + "欢迎探索主线章节。");
+                player.sendActionBar(Component.text("教程完成，已进入正式剧情", NamedTextColor.GOLD));
+            }
+        }
+
         if (questLogHud != null && activeTasks != null && activeTasks.size() > 0) {
             questLogHud.handleSnapshot(player, activeTasks, QuestLogHud.Trigger.RULE_EVENT);
         }
@@ -377,6 +394,19 @@ public final class RuleEventBridge {
         if (exitReady) {
             player.sendMessage(ChatColor.GOLD + "★ 当前关卡任务全部完成，可以前往下一阶段或输入 /advance。");
         }
+    }
+
+    private boolean containsTutorialComplete(JsonArray milestones) {
+        if (milestones == null) {
+            return false;
+        }
+        for (JsonElement element : milestones) {
+            String value = safeString(element);
+            if (value != null && value.equalsIgnoreCase("tutorial_complete")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void deliverNode(Player player, JsonObject node) {

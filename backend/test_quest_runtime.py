@@ -11,7 +11,7 @@ from __future__ import annotations
 import unittest
 
 from app.core.quest.runtime import QuestRuntime
-from app.core.story.story_loader import Level
+from app.core.story.story_loader import Level, TUTORIAL_CANONICAL_ID
 from app.core.story.level_schema import RuleListener
 from app.core.npc import npc_engine
 
@@ -31,6 +31,26 @@ def build_level(tasks):
     )
     setattr(level, "tasks", tasks)
     setattr(level, "rule_graph", None)
+    return level
+
+
+def build_tutorial_level(exit_patch):
+    level = Level(
+        level_id=TUTORIAL_CANONICAL_ID,
+        title="Flagship Tutorial",
+        text=["Tutorial narrative"],
+        tags=[],
+        mood={},
+        choices=[],
+        meta={},
+        npcs=[],
+        bootstrap_patch={},
+        tree=None,
+    )
+    setattr(level, "tasks", [])
+    setattr(level, "rule_graph", None)
+    raw_payload = {"tutorial_exit_patch": exit_patch or {}}
+    setattr(level, "_raw_payload", raw_payload)
     return level
 
 
@@ -302,6 +322,71 @@ class QuestRuntimeRuleEventTests(unittest.TestCase):
         )
         npc_patch = response.get("world_patch", {})
         self.assertEqual(npc_patch.get("tell"), "米娅向你微笑。", "NPC world_patch should merge into response")
+
+    def test_tutorial_completion_emits_milestone_and_exit_patch(self):
+        exit_patch = {
+            "mc": {
+                "tell": "教程完成，欢迎回到主线。",
+                "teleport": {
+                    "world": "KunmingLakeHub",
+                    "x": 128.5,
+                    "y": 72.0,
+                    "z": -16.5,
+                },
+            }
+        }
+        level = build_tutorial_level(exit_patch)
+        self.runtime.load_level_tasks(level, self.player)
+
+        self.runtime.handle_rule_trigger(
+            self.player,
+            {
+                "event_type": "quest_event",
+                "payload": {"quest_event": "tutorial_meet_guide"},
+            },
+        )
+        self.runtime.handle_rule_trigger(
+            self.player,
+            {
+                "event_type": "quest_event",
+                "payload": {"quest_event": "tutorial_reach_checkpoint"},
+            },
+        )
+
+        completion = self.runtime.handle_rule_trigger(
+            self.player,
+            {
+                "event_type": "chat",
+                "payload": {"text": "完成教程"},
+            },
+        )
+
+        self.assertIsNotNone(completion, "Tutorial completion should yield a response payload")
+        self.assertTrue(completion.get("exit_ready"), "Tutorial completion should mark exit readiness")
+        self.assertIn(
+            "tutorial_complete",
+            completion.get("milestones", []),
+            "Tutorial milestone should be emitted exactly once",
+        )
+        self.assertEqual(
+            completion.get("world_patch"),
+            exit_patch,
+            "Tutorial exit patch should be forwarded to the caller",
+        )
+
+        repeat = self.runtime.handle_rule_trigger(
+            self.player,
+            {
+                "event_type": "chat",
+                "payload": {"text": "再次触发"},
+            },
+        )
+        milestones = repeat.get("milestones") if isinstance(repeat, dict) else []
+        self.assertNotIn(
+            "tutorial_complete",
+            milestones or [],
+            "Tutorial completion should not emit twice",
+        )
 
 
 if __name__ == "__main__":

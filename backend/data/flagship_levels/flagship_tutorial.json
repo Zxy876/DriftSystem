@@ -319,5 +319,23 @@
       "unlocked": true,
       "arc_position": "opening"
     }
+  },
+
+  "tutorial_exit_patch": {
+    "mc": {
+      "tell": "§6教程完成§r，传送门已开启，欢迎返回湖心枢纽。",
+      "_scene_cleanup": {
+        "id": "tutorial_exit"
+      },
+      "teleport": {
+        "mode": "absolute",
+        "world": "KunmingLakeHub",
+        "x": 128.5,
+        "y": 72.0,
+        "z": -16.5,
+        "yaw": 180.0,
+        "pitch": 0.0
+      }
+    }
   }
 }

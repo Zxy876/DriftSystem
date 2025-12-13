@@ -140,6 +140,12 @@ Verification
 	•	Verify free story interaction works immediately after exit
 	•	Verify flagship chapters load normally and independently
 
+### Verification evidence
+- `python -m unittest test_quest_runtime` (backend) now exercises the tutorial guide/checkpoint/chat path and asserts the `tutorial_complete` milestone, exit_ready flag, and exit patch forwarding.
+- `python -m unittest test_story_graph` (backend) passes, covering StoryGraph graph progression.
+- `mvn -DskipITs test` (system/mc_plugin) succeeds, including `RuleEventBridgeTest` which now checks PlayerSessionManager wiring and tutorial completion messaging.
+
+
 ⸻
 
  
