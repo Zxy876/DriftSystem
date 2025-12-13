@@ -31,6 +31,7 @@ import com.driftmc.backend.BackendClient;
 import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.hud.dialogue.DialoguePanel;
 import com.driftmc.npc.NPCManager;
+import com.driftmc.session.PlayerSessionManager;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -45,6 +46,7 @@ class RuleEventBridgeTest {
     private NPCManager npcManager;
     private ChoicePanel choicePanel;
     private DialoguePanel dialoguePanel;
+    private PlayerSessionManager sessions;
     private MockedStatic<Bukkit> bukkit;
     private Player player;
     private UUID playerId;
@@ -61,7 +63,8 @@ class RuleEventBridgeTest {
         worldPatcher = new SceneAwareWorldPatchExecutor(plugin, npcManager);
         choicePanel = new ChoicePanel(plugin);
         dialoguePanel = new DialoguePanel(plugin, choicePanel);
-        bridge = new RuleEventBridge(plugin, backend, worldPatcher, null, dialoguePanel, choicePanel);
+        sessions = new PlayerSessionManager();
+        bridge = new RuleEventBridge(plugin, backend, worldPatcher, null, dialoguePanel, choicePanel, sessions);
         choicePanel.setRuleEventBridge(bridge);
 
         player = mock(Player.class);
@@ -173,6 +176,31 @@ class RuleEventBridgeTest {
         assertTrue(messages.stream().anyMatch(msg -> msg.contains("当前关卡任务全部完成")),
                 "Exit readiness message should notify the player");
     }
+
+        @Test
+        void tutorialMilestoneMarksCompletion() throws Exception {
+        sessions.markTutorialStarted(player);
+
+        JsonArray milestones = new JsonArray();
+        milestones.add("tutorial_complete");
+
+        invokeApplyRuleEventResult(
+            bridge,
+            playerId,
+            player.getName(),
+            new JsonObject(),
+            new JsonArray(),
+            new JsonArray(),
+            new JsonArray(),
+            milestones,
+            false,
+            new JsonObject(),
+            new JsonObject());
+
+        assertTrue(messages.stream().anyMatch(msg -> msg.contains("教程完成")),
+            "Tutorial completion message should reach the player");
+        assertTrue(sessions.hasCompletedTutorial(player));
+        }
 
         private static void invokeApplyRuleEventResult(
             RuleEventBridge bridge,

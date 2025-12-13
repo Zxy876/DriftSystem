@@ -92,10 +92,10 @@ public class DriftPlugin extends JavaPlugin {
 
         // 初始化核心组件
         this.backend = new BackendClient(url);
+        this.sessionManager = new PlayerSessionManager();
         this.storyManager = new StoryManager(this, backend);
         this.storyCreativeManager = new StoryCreativeManager(this);
-        this.tutorialManager = new TutorialManager(this, backend);
-        this.sessionManager = new PlayerSessionManager();
+        this.tutorialManager = new TutorialManager(this, backend, sessionManager);
         this.npcManager = new NPCManager(this);
         this.worldPatcher = new SceneAwareWorldPatchExecutor(this, npcManager);
         this.cinematicController = new CinematicController(this, worldPatcher);
@@ -106,7 +106,7 @@ public class DriftPlugin extends JavaPlugin {
         this.questLogHud = new QuestLogHud(this, backend);
         this.choicePanel = new ChoicePanel(this);
         this.dialoguePanel = new DialoguePanel(this, choicePanel);
-        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher, questLogHud, dialoguePanel, choicePanel);
+        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher, questLogHud, dialoguePanel, choicePanel, sessionManager);
         this.choicePanel.setRuleEventBridge(ruleEventBridge);
         this.recommendationHud = new RecommendationHud(this, backend, storyManager);
 
@@ -139,7 +139,7 @@ public class DriftPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(npcManager, this);
 
         // 注册 NPC 临近监听（触发老版 IntentRouter）
-        Bukkit.getPluginManager().registerEvents(new NearbyNPCListener(this, npcManager, intentRouter, ruleEventBridge), this);
+        Bukkit.getPluginManager().registerEvents(new NearbyNPCListener(this, npcManager, intentRouter, ruleEventBridge, sessionManager), this);
 
         // 注册命令
         registerCommand("drift", new DriftCommand(backend, storyManager, worldPatcher, tutorialManager));

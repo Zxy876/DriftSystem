@@ -1,7 +1,7 @@
 # Shared World State Authority (STATE.md)
 
 ## 1. Current Phase
-CURRENT_PHASE = 27
+CURRENT_PHASE = 28
 PHASE_1_COMPLETE = true
 PHASE_1_5_COMPLETE = true
 PHASE_2_COMPLETE = true
@@ -29,12 +29,14 @@ PHASE_23_COMPLETE = true
 PHASE_24_COMPLETE = true
 PHASE_25_COMPLETE = true
 PHASE_26_COMPLETE = true
+PHASE_27_COMPLETE = true
 
 ## 2. Current Goal
-- Monitor the restored NPC interaction and quest_event trigger loop from Phase 26 while awaiting the Phase 27 charter to continue campaign polish.
+- Await Phase 28 charter to continue flagship campaign polish now that tutorial completion, exit scene, and post-tutorial progression are live.
 
 ## 3. Progress – Done
 - Capabilities already achieved:
+	- Phase 27 tutorial completion tracker now emits the `tutorial_complete` milestone, applies the JSON `tutorial_exit_patch`, and the plugin session manager switches players into NORMAL mode with `/level` rerouted once the tutorial is cleared.
 	- Phase 26 restored plugin-side NPC interaction listeners so right-clicking featured NPCs emits canonical quest_events with cooldown feedback, unblocking tutorial and flagship beats end-to-end.
 	- Phase 25 self-healing diagnostics log orphan rule_events with context-aware suggestions; QuestRuntime exposes orphan history and StoryEngine stores SequenceMatcher-ranked auto-heal hints, documented in `docs/TASK_AUTOFIX.md` and covered by `backend/test_task_autofix.py`.
 	- Natural-language level generation now infers quest tasks, listeners, trigger zones, and milestones automatically (Phase 23), with verification covering quest log HUD integration and rule-event progression.
@@ -74,6 +76,8 @@ PHASE_26_COMPLETE = true
 
 ## 5. Latest Code Updates (to be auto-updated from git diff or manual input)
 ```
+- QuestRuntime aggregates tutorial completion payloads so exit_ready, milestone, and exit patch metadata survive even without task matches; regression test `test_tutorial_completion_emits_milestone_and_exit_patch` covers guide/checkpoint/chat flow.
+- RuleEventBridgeTest now validates tutorial milestone handling and PlayerSessionManager integration, ensuring players receive completion messaging exactly once.
 - Minecraft plugin's `NearbyNPCListener` now listens for `PlayerInteractAtEntityEvent`, surfaces action-bar feedback, and emits canonical quest_event payloads with per-NPC throttling to close the action trigger loop (Phase 26).
 - QuestRuntime now records orphan rule_events with auto-heal suggestions, StoryEngine stores SequenceMatcher-ranked hints, and debug snapshots expose diagnostics for operator tooling (Phase 25).
 - `docs/TASK_AUTOFIX.md` documents the detection pipeline and `backend/test_task_autofix.py` verifies orphan hints and StoryEngine state propagation.

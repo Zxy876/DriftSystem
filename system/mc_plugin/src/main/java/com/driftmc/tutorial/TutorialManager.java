@@ -15,6 +15,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.session.PlayerSessionManager;
+import com.driftmc.session.PlayerSessionManager.Mode;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -31,6 +33,7 @@ public class TutorialManager {
   private final Plugin plugin;
   private final BackendClient backend;
   private final Gson gson;
+  private final PlayerSessionManager sessions;
 
   // 追踪正在教学中的玩家
   private final Set<UUID> playersInTutorial;
@@ -51,10 +54,11 @@ public class TutorialManager {
     STEP_NAMES.put("COMPLETE", "完成");
   }
 
-  public TutorialManager(Plugin plugin, BackendClient backend) {
+  public TutorialManager(Plugin plugin, BackendClient backend, PlayerSessionManager sessions) {
     this.plugin = plugin;
     this.backend = backend;
     this.gson = new Gson();
+    this.sessions = sessions;
     this.playersInTutorial = new HashSet<>();
     this.tutorialBossBars = new HashMap<>();
   }
@@ -78,7 +82,16 @@ public class TutorialManager {
       return;
     }
 
+    if (sessions != null && sessions.hasCompletedTutorial(player)) {
+      player.sendMessage("§e你已经完成教程，正在为你保持主线入口开启。");
+      return;
+    }
+
     plugin.getLogger().info("[教学] 为玩家 " + player.getName() + " 启动新手教学");
+
+    if (sessions != null) {
+      sessions.markTutorialStarted(player);
+    }
 
     backend.postJsonAsync("/tutorial/start/" + player.getName(), "{}", new Callback() {
       @Override
@@ -324,6 +337,11 @@ public class TutorialManager {
     player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     plugin.getLogger().info("[教学] 玩家 " + player.getName() + " 完成教学");
+
+    if (sessions != null) {
+      sessions.markTutorialComplete(player);
+      player.sendActionBar(net.kyori.adventure.text.Component.text("教程完成，已进入正式剧情", net.kyori.adventure.text.format.NamedTextColor.GOLD));
+    }
   }
 
   /**
@@ -399,6 +417,10 @@ public class TutorialManager {
     BossBar bar = tutorialBossBars.remove(uuid);
     if (bar != null) {
       bar.removePlayer(player);
+    }
+
+    if (sessions != null && !sessions.hasCompletedTutorial(player)) {
+      sessions.setMode(player, Mode.NORMAL);
     }
   }
 }
