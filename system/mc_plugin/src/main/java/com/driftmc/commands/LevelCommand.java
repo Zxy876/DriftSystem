@@ -3,12 +3,15 @@ package com.driftmc.commands;
 import java.lang.reflect.Type;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.backend.BackendClient;
 import com.driftmc.intent.IntentRouter;
@@ -29,6 +32,7 @@ public class LevelCommand implements CommandExecutor {
 
     private static final Gson GSON = new Gson();
 
+    private final JavaPlugin plugin;
     private final BackendClient backend;
     @SuppressWarnings("unused")
     private final IntentRouter router;
@@ -37,11 +41,13 @@ public class LevelCommand implements CommandExecutor {
     private final PlayerSessionManager sessions;
 
     public LevelCommand(
+            JavaPlugin plugin,
             BackendClient backend,
             IntentRouter router,
             WorldPatchExecutor world,
             PlayerSessionManager sessions
     ) {
+        this.plugin = plugin;
         this.backend = backend;
         this.router = router;
         this.world = world;
@@ -92,27 +98,42 @@ public class LevelCommand implements CommandExecutor {
             player.sendMessage(ChatColor.GRAY + "(使用别名 " + requestedLevel + " → " + levelId + ")");
         }
 
-        try {
-            String path = "/story/load/" + playerId + "/" + levelId;
-            String body = "{}";
-
-            String resp = backend.postJson(path, body);
-
-            // 解析 JSON，尝试执行 bootstrap_patch
-            applyPatchFromResponse(player, resp, true);
-
-            String msg = extractMsg(resp);
-            if (msg == null || msg.isEmpty()) {
-                msg = "关卡已加载，欢迎来到心悦宇宙的这一章。";
+        UUID playerUuid = player.getUniqueId();
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                String path = "/story/load/" + playerId + "/" + levelId;
+                String resp = backend.postJson(path, "{}");
+                Bukkit.getScheduler().runTask(plugin, () -> handleSuccess(playerUuid, resp));
+            } catch (Exception e) {
+                Bukkit.getScheduler().runTask(plugin, () -> handleFailure(playerUuid, e));
             }
-
-            player.sendMessage(ChatColor.GREEN + "✔ " + msg);
-
-        } catch (Exception e) {
-            player.sendMessage(ChatColor.RED + "❌ 加载关卡失败: " + e.getMessage());
-        }
+        });
 
         return true;
+    }
+
+    private void handleSuccess(UUID playerUuid, String resp) {
+        Player player = Bukkit.getPlayer(playerUuid);
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+
+        applyPatchFromResponse(player, resp, true);
+
+        String msg = extractMsg(resp);
+        if (msg == null || msg.isEmpty()) {
+            msg = "关卡已加载，欢迎来到心悦宇宙的这一章。";
+        }
+
+        player.sendMessage(ChatColor.GREEN + "✔ " + msg);
+    }
+
+    private void handleFailure(UUID playerUuid, Exception error) {
+        Player player = Bukkit.getPlayer(playerUuid);
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        player.sendMessage(ChatColor.RED + "❌ 加载关卡失败: " + error.getMessage());
     }
 
     // ------------ JSON 帮助 ------------

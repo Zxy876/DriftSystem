@@ -1,11 +1,14 @@
 package com.driftmc.tutorial;
 
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.boss.BarColor;
@@ -15,11 +18,16 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.scene.RuleEventBridge;
+import com.driftmc.scene.SceneAwareWorldPatchExecutor;
+import com.driftmc.scene.SceneLoader;
 import com.driftmc.session.PlayerSessionManager;
 import com.driftmc.session.PlayerSessionManager.Mode;
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -34,15 +42,23 @@ public class TutorialManager {
   private final BackendClient backend;
   private final Gson gson;
   private final PlayerSessionManager sessions;
+  private final TutorialStateMachine stateMachine;
 
   // 追踪正在教学中的玩家
   private final Set<UUID> playersInTutorial;
+  private final Set<UUID> completionEmittedPlayers;
+  private final Set<UUID> finalizedPlayers;
+  private final Set<UUID> tutorialExitPlayers;
 
   // Boss Bar 进度显示
   private final Map<UUID, BossBar> tutorialBossBars;
 
   // 教学步骤名称映射
   private static final Map<String, String> STEP_NAMES = new HashMap<>();
+  private static final String TUTORIAL_LEVEL_ID = "flagship_tutorial";
+  private static final String FIRST_PRIMARY_LEVEL_ID = "flagship_03";
+  private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {
+  }.getType();
   static {
     STEP_NAMES.put("WELCOME", "欢迎");
     STEP_NAMES.put("DIALOGUE", "对话交流");
@@ -59,8 +75,138 @@ public class TutorialManager {
     this.backend = backend;
     this.gson = new Gson();
     this.sessions = sessions;
-    this.playersInTutorial = new HashSet<>();
+    this.stateMachine = new TutorialStateMachine(plugin, sessions);
+    this.completionEmittedPlayers = ConcurrentHashMap.newKeySet();
+    this.finalizedPlayers = ConcurrentHashMap.newKeySet();
+    this.playersInTutorial = ConcurrentHashMap.newKeySet();
+    this.tutorialExitPlayers = ConcurrentHashMap.newKeySet();
     this.tutorialBossBars = new HashMap<>();
+  }
+
+  private SceneLoader sceneLoader;
+  private SceneAwareWorldPatchExecutor worldPatcher;
+  private RuleEventBridge ruleEventBridge;
+
+  public void attachSceneLoader(SceneLoader loader) {
+    this.sceneLoader = loader;
+  }
+
+  public void attachWorldPatcher(SceneAwareWorldPatchExecutor patcher) {
+    this.worldPatcher = patcher;
+  }
+
+  public void attachRuleEventBridge(RuleEventBridge bridge) {
+    this.ruleEventBridge = bridge;
+  }
+
+  public TutorialStateMachine getStateMachine() {
+    return stateMachine;
+  }
+
+  public boolean isTutorialComplete(Player player) {
+    return isTutorialFinalized(player);
+  }
+
+  public boolean isTutorialFinalized(Player player) {
+    if (player == null) {
+      return false;
+    }
+    UUID playerId = player.getUniqueId();
+    if (finalizedPlayers.contains(playerId)) {
+      return true;
+    }
+    return sessions != null && sessions.hasCompletedTutorial(player);
+  }
+
+  public boolean hasExitedTutorialPhase(Player player) {
+    if (player == null) {
+      return false;
+    }
+    UUID playerId = player.getUniqueId();
+    if (tutorialExitPlayers.contains(playerId)) {
+      return true;
+    }
+    if (sessions != null && sessions.hasExitedTutorial(player)) {
+      tutorialExitPlayers.add(playerId);
+      return true;
+    }
+    return false;
+  }
+
+  public boolean hasExitedTutorial(Player player) {
+    return hasExitedTutorialPhase(player);
+  }
+
+  public boolean hasExitedTutorial(UUID playerId) {
+    if (playerId == null) {
+      return false;
+    }
+    if (tutorialExitPlayers.contains(playerId)) {
+      return true;
+    }
+    if (sessions != null && sessions.hasExitedTutorial(playerId)) {
+      tutorialExitPlayers.add(playerId);
+      return true;
+    }
+    return false;
+  }
+
+  public boolean hasCompletionEmitted(Player player) {
+    if (player == null) {
+      return false;
+    }
+    UUID playerId = player.getUniqueId();
+    if (completionEmittedPlayers.contains(playerId)) {
+      return true;
+    }
+    return sessions != null && sessions.hasTutorialCompletionSignal(player);
+  }
+
+  public boolean isInTutorial(Player player) {
+    if (player == null) {
+      return false;
+    }
+    if (hasExitedTutorialPhase(player)) {
+      return false;
+    }
+    if (isTutorialFinalized(player)) {
+      return false;
+    }
+    UUID playerId = player.getUniqueId();
+    if (playersInTutorial.contains(playerId)) {
+      return true;
+    }
+    if (sessions != null && sessions.isTutorial(player)) {
+      return true;
+    }
+    TutorialState state = stateMachine.getState(player);
+    return state != null && state != TutorialState.INACTIVE && state != TutorialState.COMPLETE;
+  }
+
+  public boolean markCompletionEmitted(Player player) {
+    if (player == null) {
+      return false;
+    }
+    UUID playerId = player.getUniqueId();
+    boolean firstEmission = completionEmittedPlayers.add(playerId);
+    if (sessions != null) {
+      sessions.markTutorialCompletionSignal(player);
+    }
+    if (firstEmission) {
+      plugin.getLogger().log(Level.INFO, "[TutorialComplete] emitted for {0}", player.getName());
+    }
+    return firstEmission;
+  }
+
+  private void markTutorialExit(Player player) {
+    if (player == null) {
+      return;
+    }
+    UUID playerId = player.getUniqueId();
+    tutorialExitPlayers.add(playerId);
+    if (sessions != null) {
+      sessions.markTutorialExited(player);
+    }
   }
 
   /**
@@ -80,6 +226,14 @@ public class TutorialManager {
     if (playersInTutorial.contains(uuid)) {
       plugin.getLogger().info("[教学] 玩家 " + player.getName() + " 已在教学中");
       return;
+    }
+
+    completionEmittedPlayers.remove(uuid);
+    finalizedPlayers.remove(uuid);
+    tutorialExitPlayers.remove(uuid);
+    if (sessions != null) {
+      sessions.clearTutorialCompletionSignal(player);
+      sessions.clearTutorialExit(player);
     }
 
     if (sessions != null && sessions.hasCompletedTutorial(player)) {
@@ -129,6 +283,7 @@ public class TutorialManager {
               }
 
               plugin.getLogger().info("[教学] 玩家 " + player.getName() + " 教学已启动");
+              stateMachine.start(player);
             }
           });
         }
@@ -141,6 +296,10 @@ public class TutorialManager {
    */
   public void checkProgress(Player player, String message) {
     final UUID uuid = player.getUniqueId();
+
+    if (isTutorialComplete(player)) {
+      return;
+    }
 
     if (!playersInTutorial.contains(uuid)) {
       return; // 不在教学中
@@ -214,9 +373,21 @@ public class TutorialManager {
       player.sendMessage("§f" + instruction);
       player.sendMessage("");
       player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+      TutorialState completedState = extractState(result.get("step"));
+      TutorialState nextState = extractState(nextStep.get("step"));
+      if (nextState == null) {
+        nextState = extractState(nextStep.get("id"));
+      }
+      if (nextState == null) {
+        nextState = extractState(nextStep.get("name"));
+      }
+      stateMachine.handleStepResult(player, completedState, nextState);
     } else {
       // 教学完成
-      completeTutorial(player);
+      TutorialState completedState = extractState(result.get("step"));
+      stateMachine.handleStepResult(player, completedState, null);
+      markCompletionEmitted(player);
     }
   }
 
@@ -309,42 +480,6 @@ public class TutorialManager {
   }
 
   /**
-   * 完成教学
-   */
-  private void completeTutorial(Player player) {
-    UUID uuid = player.getUniqueId();
-    playersInTutorial.remove(uuid);
-
-    // 移除Boss Bar
-    BossBar bar = tutorialBossBars.remove(uuid);
-    if (bar != null) {
-      bar.removePlayer(player);
-    }
-
-    // 显示完成消息
-    player.sendMessage("");
-    player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    player.sendMessage("§e✨ §6§l恭喜完成新手教学！");
-    player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    player.sendMessage("");
-    player.sendMessage("§f现在你已经掌握了所有核心功能：");
-    player.sendMessage("§a  ✓ 与NPC对话");
-    player.sendMessage("§a  ✓ 创造和推进剧情");
-    player.sendMessage("§a  ✓ 在关卡间跳转");
-    player.sendMessage("§a  ✓ 查看地图导航");
-    player.sendMessage("");
-    player.sendMessage("§f开始你的心悦之旅吧！");
-    player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-    plugin.getLogger().info("[教学] 玩家 " + player.getName() + " 完成教学");
-
-    if (sessions != null) {
-      sessions.markTutorialComplete(player);
-      player.sendActionBar(net.kyori.adventure.text.Component.text("教程完成，已进入正式剧情", net.kyori.adventure.text.format.NamedTextColor.GOLD));
-    }
-  }
-
-  /**
    * 获取教学提示
    */
   public void getHint(Player player) {
@@ -399,7 +534,8 @@ public class TutorialManager {
       public void onResponse(Call call, Response resp) throws IOException {
         try (resp) {
           Bukkit.getScheduler().runTask(plugin, () -> {
-            completeTutorial(player);
+            markCompletionEmitted(player);
+            finalizeTutorial(player);
             player.sendMessage("§e已跳过教学");
           });
         }
@@ -419,8 +555,238 @@ public class TutorialManager {
       bar.removePlayer(player);
     }
 
+    if (!isTutorialFinalized(player)) {
+      completionEmittedPlayers.remove(uuid);
+      if (sessions != null) {
+        sessions.clearTutorialCompletionSignal(player);
+      }
+    }
+
     if (sessions != null && !sessions.hasCompletedTutorial(player)) {
       sessions.setMode(player, Mode.NORMAL);
+    }
+    stateMachine.reset(player);
+  }
+
+  public boolean ensureUnlocked(Player player, TutorialState required, String message) {
+    return stateMachine.ensureUnlocked(player, required, message);
+  }
+
+  public boolean ensureUnlocked(Player player, TutorialState required) {
+    return stateMachine.ensureUnlocked(player, required, null);
+  }
+
+  public void syncWorldPatch(Player player, Map<String, Object> patch) {
+    if (player == null || patch == null || patch.isEmpty()) {
+      return;
+    }
+    if (isTutorialFinalized(player)) {
+      return;
+    }
+    stateMachine.syncFromPatch(player, patch);
+    if (stateMachine.getState(player) == TutorialState.COMPLETE) {
+      markCompletionEmitted(player);
+    }
+  }
+
+  private TutorialState extractState(JsonElement element) {
+    if (element == null || element.isJsonNull()) {
+      return null;
+    }
+    if (element.isJsonPrimitive()) {
+      if (element.getAsJsonPrimitive().isNumber()) {
+        return TutorialState.fromObject(element.getAsNumber());
+      }
+      if (element.getAsJsonPrimitive().isString()) {
+        return TutorialState.fromString(element.getAsString());
+      }
+    }
+    if (element.isJsonObject()) {
+      JsonObject obj = element.getAsJsonObject();
+      if (obj.has("step")) {
+        TutorialState state = extractState(obj.get("step"));
+        if (state != null) {
+          return state;
+        }
+      }
+      if (obj.has("id")) {
+        TutorialState state = extractState(obj.get("id"));
+        if (state != null) {
+          return state;
+        }
+      }
+      if (obj.has("name")) {
+        TutorialState state = extractState(obj.get("name"));
+        if (state != null) {
+          return state;
+        }
+      }
+      if (obj.has("state")) {
+        TutorialState state = extractState(obj.get("state"));
+        if (state != null) {
+          return state;
+        }
+      }
+    }
+    return null;
+  }
+
+  public boolean finalizeTutorial(Player player) {
+    if (player == null) {
+      return false;
+    }
+    markCompletionEmitted(player);
+    UUID playerId = player.getUniqueId();
+    if (isTutorialFinalized(player)) {
+      finalizedPlayers.add(playerId);
+      playersInTutorial.remove(playerId);
+      BossBar existing = tutorialBossBars.remove(playerId);
+      if (existing != null) {
+        existing.removePlayer(player);
+      }
+      markTutorialExit(player);
+      return false;
+    }
+    if (!finalizedPlayers.add(playerId)) {
+      return false;
+    }
+
+    boolean success = false;
+    try {
+      playersInTutorial.remove(playerId);
+      BossBar bar = tutorialBossBars.remove(playerId);
+      if (bar != null) {
+        bar.removePlayer(player);
+      }
+
+      // 1. 持久化标记教程完成
+      if (sessions != null) {
+        sessions.setTutorial(player, false);
+        sessions.markTutorialComplete(player);
+      }
+      stateMachine.markCompleted(player);
+
+      // 3. 结束教学场景
+      if (sceneLoader != null) {
+        String activeScene = sceneLoader.getActiveSceneId(player);
+        if (activeScene != null && activeScene.equalsIgnoreCase(TUTORIAL_LEVEL_ID)) {
+          sceneLoader.endSession(player, "tutorial_complete");
+        }
+      }
+
+      if (worldPatcher != null) {
+        worldPatcher.execute(player, buildTutorialCleanupPatch());
+      }
+
+      if (ruleEventBridge != null) {
+        ruleEventBridge.handleTutorialFinalize(player);
+      }
+
+      announceTutorialCompletion(player);
+
+      plugin.getLogger().log(Level.INFO, "[TutorialExit] finalized for {0}", player.getName());
+
+      success = true;
+      markTutorialExit(player);
+      return true;
+    } finally {
+      launchPrimaryStory(player);
+      if (!success) {
+        finalizedPlayers.remove(playerId);
+      }
+    }
+  }
+
+  private Map<String, Object> buildTutorialCleanupPatch() {
+    Map<String, Object> cleanup = new LinkedHashMap<>();
+    cleanup.put("id", "tutorial_finalize_cleanup");
+    cleanup.put("scene_id", TUTORIAL_LEVEL_ID);
+
+    Map<String, Object> mcPayload = new LinkedHashMap<>();
+    mcPayload.put("_scene_cleanup", cleanup);
+
+    Map<String, Object> patch = new LinkedHashMap<>();
+    patch.put("mc", mcPayload);
+    return patch;
+  }
+
+  private void launchPrimaryStory(Player player) {
+    if (player == null || backend == null) {
+      return;
+    }
+
+    if (worldPatcher == null) {
+      return;
+    }
+
+    String playerName = player.getName();
+    plugin.getLogger().log(Level.INFO, "[TutorialExit] loading flagship_03 for {0}", playerName);
+    backend.postJsonAsync("/story/load/" + playerName + "/" + FIRST_PRIMARY_LEVEL_ID, "{}", new Callback() {
+      @Override
+      public void onFailure(Call call, IOException e) {
+        plugin.getLogger()
+            .warning("[TutorialExit] Failed to load first storyline for " + playerName + ": " + e.getMessage());
+      }
+
+      @Override
+      public void onResponse(Call call, Response response) throws IOException {
+        try (response) {
+          String body = response.body() != null ? response.body().string() : "{}";
+          JsonObject root = JsonParser.parseString(body).getAsJsonObject();
+
+          JsonObject patchObj = null;
+          if (root.has("bootstrap_patch") && root.get("bootstrap_patch").isJsonObject()) {
+            patchObj = root.getAsJsonObject("bootstrap_patch");
+          } else if (root.has("world_patch") && root.get("world_patch").isJsonObject()) {
+            patchObj = root.getAsJsonObject("world_patch");
+          }
+
+          Map<String, Object> patch = null;
+          if (patchObj != null && patchObj.size() > 0) {
+            patch = gson.fromJson(patchObj, MAP_TYPE);
+          }
+
+          Map<String, Object> finalPatch = patch;
+          Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!player.isOnline()) {
+              return;
+            }
+            markTutorialExit(player);
+            if (finalPatch != null && !finalPatch.isEmpty()) {
+              worldPatcher.execute(player, finalPatch);
+            }
+          });
+        } catch (Exception ex) {
+          plugin.getLogger().warning(
+              "[TutorialExit] Unable to parse flagship load response for " + playerName + ": " + ex.getMessage());
+        }
+      }
+    });
+  }
+
+  private void announceTutorialCompletion(Player player) {
+    if (player == null) {
+      return;
+    }
+
+    player.sendMessage("");
+    player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    player.sendMessage("§e✨ §6§l恭喜完成新手教学！");
+    player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    player.sendMessage("");
+    player.sendMessage("§f现在你已经掌握了所有核心功能：");
+    player.sendMessage("§a  ✓ 与NPC对话");
+    player.sendMessage("§a  ✓ 创造和推进剧情");
+    player.sendMessage("§a  ✓ 在关卡间跳转");
+    player.sendMessage("§a  ✓ 查看地图导航");
+    player.sendMessage("");
+    player.sendMessage("§e教程完成，已进入正式剧情。");
+    player.sendMessage("§f开始你的心悦之旅吧！");
+    player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    if (sessions != null) {
+      player.sendActionBar(
+          net.kyori.adventure.text.Component.text("教程完成，已进入正式剧情", net.kyori.adventure.text.format.NamedTextColor.GOLD));
     }
   }
 }

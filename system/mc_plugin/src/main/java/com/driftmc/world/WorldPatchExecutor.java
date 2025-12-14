@@ -687,6 +687,25 @@ public class WorldPatchExecutor {
         }
 
         Location loc = base.clone();
+
+        String worldName = string(spawnMap.get("world"), "");
+        if (!worldName.isBlank()) {
+            World targetWorld = Bukkit.getWorld(worldName);
+            if (targetWorld != null) {
+                loc.setWorld(targetWorld);
+            }
+        }
+
+        if (spawnMap.get("x") != null) {
+            loc.setX(number(spawnMap.get("x"), loc.getX()).doubleValue());
+        }
+        if (spawnMap.get("y") != null) {
+            loc.setY(number(spawnMap.get("y"), loc.getY()).doubleValue());
+        }
+        if (spawnMap.get("z") != null) {
+            loc.setZ(number(spawnMap.get("z"), loc.getZ()).doubleValue());
+        }
+
         if (offsetMap != null) {
             double dx = number(offsetMap.get("dx"), 0).doubleValue();
             double dy = number(offsetMap.get("dy"), 0).doubleValue();
@@ -694,9 +713,36 @@ public class WorldPatchExecutor {
             loc.add(dx, dy, dz);
         }
 
+        if (spawnMap.get("dx") != null || spawnMap.get("dy") != null || spawnMap.get("dz") != null) {
+            double dx = number(spawnMap.get("dx"), 0).doubleValue();
+            double dy = number(spawnMap.get("dy"), 0).doubleValue();
+            double dz = number(spawnMap.get("dz"), 0).doubleValue();
+            loc.add(dx, dy, dz);
+        }
+
+        if (spawnMap.get("yaw") != null) {
+            loc.setYaw(number(spawnMap.get("yaw"), loc.getYaw()).floatValue());
+        }
+        if (spawnMap.get("pitch") != null) {
+            loc.setPitch(number(spawnMap.get("pitch"), loc.getPitch()).floatValue());
+        }
+
+        if (loc.getWorld() != null && loc.getWorld() != world) {
+            world = loc.getWorld();
+        }
+
         EntityType type = EntityType.fromName(typeName.toUpperCase());
         if (type == null) {
             type = EntityType.ARMOR_STAND;
+        }
+
+        if (type == EntityType.PLAYER) {
+            player.teleport(loc);
+            plugin.getLogger().info(String.format(Locale.ROOT,
+                    "[WorldPatchExecutor] Treated player spawn as teleport to %.2f, %.2f, %.2f", loc.getX(),
+                    loc.getY(), loc.getZ()));
+            player.sendMessage(ChatColor.GREEN + "✧ 你被世界轻轻挪到了一个新的位置。");
+            return;
         }
 
         Entity entity = world.spawnEntity(loc, type);
@@ -710,6 +756,7 @@ public class WorldPatchExecutor {
                 attr.setBaseValue(40.0);
                 living.setHealth(40.0);
             }
+            entity.teleport(loc);
         }
 
         afterSpawn(player, spawnMap, entity);

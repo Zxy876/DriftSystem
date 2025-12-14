@@ -147,7 +147,7 @@
         "cinematic_alias": "flagship_tutorial.arc_handoff",
         "next_level": "flagship_03",
         "next_major_level": "flagship_03",
-        "rule_refs": [],
+        "rule_refs": ["tutorial_task_complete"],
         "branch_hint": "flagship_resilience.hand_off"
       }
     ]
@@ -196,8 +196,8 @@
       {
         "id": "tutorial_step_one",
         "type": "quest_event",
-        "targets": ["tutorial_reach_checkpoint"],
-        "quest_event": "tutorial_reach_checkpoint",
+        "targets": ["tutorial_task_complete"],
+        "quest_event": "tutorial_task_complete",
         "metadata": {
           "dialogue": [
             "很好，你迈出了第一步。",
@@ -235,31 +235,16 @@
       "title": "踏上旅程",
       "rule_event": "tutorial_task_complete",
       "memory_set": ["xinyue.tutorial_completed"],
-      "count": 4,
+      "count": 1,
       "conditions": [
         {
-          "quest_event": "tutorial_intro_started",
-          "rule_event": "tutorial_intro_started",
-          "count": 1,
-          "title": "迈出第一步"
-        },
-        {
-          "quest_event": "tutorial_meet_guide",
-          "rule_event": "tutorial_meet_guide",
-          "count": 1,
-          "title": "与心悦向导对话"
-        },
-        {
-          "quest_event": "tutorial_reach_checkpoint",
-          "rule_event": "tutorial_reach_checkpoint",
+          "quest_event": "tutorial_task_complete",
+          "rule_event": "tutorial_task_complete",
           "count": 1,
           "title": "抵达光点"
         }
       ],
       "rule_refs": [
-        "tutorial_intro_started",
-        "tutorial_meet_guide",
-        "tutorial_reach_checkpoint",
         "tutorial_task_complete"
       ],
       "milestones": [],
@@ -286,14 +271,6 @@
         "scene_world": "KunmingLakeTutorial",
         "featured_npc": "心悦向导",
         "entry_trigger": "tutorial_intro_started",
-        "trigger_zones": [
-          {
-            "id": "tutorial_checkpoint",
-            "label": "教程光点",
-            "quest_event": "tutorial_reach_checkpoint",
-            "radius": 4.0
-          }
-        ],
         "npc_triggers": [
           { "npc": "心悦向导", "quest_event": "tutorial_meet_guide" }
         ]
@@ -302,14 +279,6 @@
       "particle": { "type": "enchantment", "count": 20 },
       "lighting_shift": "sunrise_warm",
       "weather_transition": { "from": "DAWN_MIST", "to": "SUNRISE" },
-      "trigger_zones": [
-        {
-          "id": "tutorial_checkpoint",
-          "quest_event": "tutorial_reach_checkpoint",
-          "radius": 4.0,
-          "offset": { "dx": 10.0, "dy": 0.0, "dz": 12.0 }
-        }
-      ],
       "npc_trigger_events": [
         { "npc": "心悦向导", "quest_event": "tutorial_meet_guide" }
       ]
@@ -318,24 +287,6 @@
       "theme": "tutorial",
       "unlocked": true,
       "arc_position": "opening"
-    }
-  },
-
-  "tutorial_exit_patch": {
-    "mc": {
-      "tell": "§6教程完成§r，传送门已开启，欢迎返回湖心枢纽。",
-      "_scene_cleanup": {
-        "id": "tutorial_exit"
-      },
-      "teleport": {
-        "mode": "absolute",
-        "world": "KunmingLakeHub",
-        "x": 128.5,
-        "y": 72.0,
-        "z": -16.5,
-        "yaw": 180.0,
-        "pitch": 0.0
-      }
     }
   }
 }

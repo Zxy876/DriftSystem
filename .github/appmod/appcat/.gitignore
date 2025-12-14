@@ -1,5 +1,2 @@
-# Ignore everything inside this helper directory by default
-*
 
-# Keep the ignore file itself so the folder stays in git
-!.gitignore
+*

@@ -1,0 +1,21 @@
+Manifest-Version: 1.0
+Main-Class: org.bukkit.craftbukkit.Main
+Implementation-Title: CraftBukkit
+Implementation-Version: git-Paper-150
+Implementation-Vendor: 2023-08-22 14:08:43 +1000
+Specification-Title: Bukkit
+Specification-Version: 1.20.1-R0.1-SNAPSHOT
+Specification-Vendor: Bukkit Team
+Git-Branch: master
+Git-Commit: fed9042
+CraftBukkit-Package-Version: 1_20_R1
+
+Name: org/bukkit
+Sealed: true
+
+Name: net/bukkit
+Sealed: true
+
+Name: com/bukkit
+Sealed: true
+

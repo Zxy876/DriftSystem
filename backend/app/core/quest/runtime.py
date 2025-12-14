@@ -20,8 +20,7 @@ logger = logging.getLogger(__name__)
 TUTORIAL_CANONICAL_EVENTS: Set[str] = {
     "tutorial_intro_started",
     "tutorial_meet_guide",
-    "tutorial_reach_checkpoint",
-    "tutorial_task_complete",
+    "tutorial_complete",
 }
 
 TUTORIAL_EVENT_ALIASES: Dict[str, str] = {
@@ -29,10 +28,14 @@ TUTORIAL_EVENT_ALIASES: Dict[str, str] = {
     "tutorial_intro": "tutorial_intro_started",
     "tutorial_start": "tutorial_intro_started",
     "tutorial_question": "tutorial_meet_guide",
-    "tutorial_progress": "tutorial_reach_checkpoint",
-    "tutorial_checkpoint": "tutorial_reach_checkpoint",
-    "tutorial_complete": "tutorial_task_complete",
-    "tutorial_finish": "tutorial_task_complete",
+    "tutorial_progress": "tutorial_complete",
+    "tutorial_checkpoint": "tutorial_complete",
+    "tutorial_checkpoint_reach": "tutorial_complete",
+    "tutorial_reach_checkpoint": "tutorial_complete",
+    "tutorial_task_complete": "tutorial_complete",
+    "tutorial_exit": "tutorial_complete",
+    "tutorial_finish": "tutorial_complete",
+    "tutorial_end": "tutorial_complete",
 }
 
 
@@ -503,9 +506,9 @@ class QuestRuntime:
         if level.level_id == TUTORIAL_CANONICAL_ID:
             raw_payload = getattr(level, "_raw_payload", {}) or {}
             state["tutorial_tracker"] = {
+                "intro_started": False,
                 "meet_guide": False,
-                "reach_checkpoint": False,
-                "basic_action": False,
+                "complete": False,
                 "completed": False,
             }
             exit_patch = raw_payload.get("tutorial_exit_patch")
@@ -801,30 +804,38 @@ class QuestRuntime:
         canonical = normalized_event.get("quest_event")
         event_type = normalized_event.get("event_type")
 
-        if canonical == "tutorial_meet_guide":
+        if canonical == "tutorial_intro_started":
+            tracker["intro_started"] = True
+        elif canonical == "tutorial_meet_guide":
             tracker["meet_guide"] = True
-        elif canonical == "tutorial_reach_checkpoint":
-            tracker["reach_checkpoint"] = True
-        elif canonical == "tutorial_task_complete":
-            tracker["basic_action"] = True
+        elif canonical == "tutorial_complete":
+            tracker["complete"] = True
 
-        if event_type == "chat":
-            tracker["basic_action"] = True
-        elif event_type == "interact_entity":
-            tracker["basic_action"] = True
-
-        if tracker.get("meet_guide") and tracker.get("reach_checkpoint") and tracker.get("basic_action"):
+        if canonical == "tutorial_complete":
             tracker["completed"] = True
             state["tutorial_complete_emitted"] = True
+            state["tutorial_completed"] = True
+            state["next_level_id"] = "flagship_03"
 
             completion_payload: Dict[str, Any] = {
                 "milestones": ["tutorial_complete"],
                 "exit_ready": True,
+                "tutorial_completed": True,
+                "next_level": "flagship_03",
             }
 
             exit_patch = state.get("tutorial_exit_patch")
             if isinstance(exit_patch, dict) and exit_patch:
                 completion_payload["world_patch"] = copy.deepcopy(exit_patch)
+            else:
+                completion_payload.setdefault("world_patch", {})
+
+            level_exit_signal = {
+                "level_id": TUTORIAL_CANONICAL_ID,
+                "next_level": "flagship_03",
+                "auto": True,
+            }
+            completion_payload.setdefault("level_exit", level_exit_signal)
 
             completion_payload["nodes"] = [
                 {

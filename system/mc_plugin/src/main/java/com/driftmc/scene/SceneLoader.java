@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Level;
 
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -116,5 +117,36 @@ public final class SceneLoader implements SceneLifecycleBridge {
 
     private String asString(Object value) {
         return value == null ? "" : value.toString().trim();
+    }
+
+    public boolean isPlayerInScene(Player player, String sceneId) {
+        if (player == null) {
+            return false;
+        }
+        return cleanup.isPlayerInScene(player.getUniqueId(), sceneId);
+    }
+
+    public Location getSceneAnchor(Player player) {
+        if (player == null) {
+            return null;
+        }
+        SceneSession session = cleanup.getSession(player.getUniqueId());
+        if (session == null) {
+            return null;
+        }
+        Location anchor = session.getAnchor();
+        return anchor == null ? null : anchor.clone();
+    }
+
+    public String getActiveSceneId(Player player) {
+        if (player == null) {
+            return null;
+        }
+        SceneSession session = cleanup.getSession(player.getUniqueId());
+        return session == null ? null : session.getSceneId();
+    }
+
+    public void endSession(Player player, String reason) {
+        cleanup.endSession(player, reason);
     }
 }

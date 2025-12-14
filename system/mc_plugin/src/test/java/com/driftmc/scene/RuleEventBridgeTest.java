@@ -32,6 +32,7 @@ import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.hud.dialogue.DialoguePanel;
 import com.driftmc.npc.NPCManager;
 import com.driftmc.session.PlayerSessionManager;
+import com.driftmc.tutorial.TutorialManager;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -47,6 +48,7 @@ class RuleEventBridgeTest {
     private ChoicePanel choicePanel;
     private DialoguePanel dialoguePanel;
     private PlayerSessionManager sessions;
+    private TutorialManager tutorialManager;
     private MockedStatic<Bukkit> bukkit;
     private Player player;
     private UUID playerId;
@@ -64,7 +66,8 @@ class RuleEventBridgeTest {
         choicePanel = new ChoicePanel(plugin);
         dialoguePanel = new DialoguePanel(plugin, choicePanel);
         sessions = new PlayerSessionManager();
-        bridge = new RuleEventBridge(plugin, backend, worldPatcher, null, dialoguePanel, choicePanel, sessions);
+        tutorialManager = new TutorialManager(plugin, backend, sessions);
+        bridge = new RuleEventBridge(plugin, backend, worldPatcher, null, dialoguePanel, choicePanel, sessions, tutorialManager);
         choicePanel.setRuleEventBridge(bridge);
 
         player = mock(Player.class);

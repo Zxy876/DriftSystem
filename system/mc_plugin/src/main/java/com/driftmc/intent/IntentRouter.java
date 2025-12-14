@@ -3,7 +3,9 @@ package com.driftmc.intent;
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -54,28 +56,48 @@ public class IntentRouter {
      */
     public void handlePlayerSpeak(Player player, String text) {
 
-        if (text == null || text.isEmpty()) return;
+        if (player == null || text == null || text.isEmpty()) {
+            return;
+        }
 
-        String playerId = player.getName();
+        final String trimmed = text.trim();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+
+        final UUID playerUuid = player.getUniqueId();
+        final String playerId = player.getName();
+
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                Map<String, Object> bodyMap = new HashMap<>();
+                bodyMap.put("world_state", new HashMap<>());
+
+                Map<String, Object> action = new HashMap<>();
+                action.put("say", trimmed);
+                bodyMap.put("action", action);
+
+                String body = GSON.toJson(bodyMap);
+                String path = "/story/advance/" + playerId;
+                String resp = backend.postJson(path, body);
+
+                Bukkit.getScheduler().runTask(plugin, () -> handleResponse(playerUuid, trimmed, resp));
+
+            } catch (Exception e) {
+                Bukkit.getScheduler().runTask(plugin, () -> handleFailure(playerUuid, e));
+            }
+        });
+    }
+
+    private void handleResponse(UUID playerUuid, String text, String resp) {
+        Player online = Bukkit.getPlayer(playerUuid);
+        if (online == null || !online.isOnline()) {
+            return;
+        }
+
+        plugin.getLogger().info("[IntentRouter] speak='" + text + "', resp=" + resp);
 
         try {
-            // ------- 构造请求 -------
-            Map<String, Object> bodyMap = new HashMap<>();
-            bodyMap.put("world_state", new HashMap<>());
-
-            Map<String, Object> action = new HashMap<>();
-            action.put("say", text);
-            bodyMap.put("action", action);
-
-            String body = GSON.toJson(bodyMap);
-
-            // ------- 请求后端 -------
-            String path = "/story/advance/" + playerId;
-            String resp = backend.postJson(path, body);
-
-            plugin.getLogger().info("[IntentRouter] speak='" + text + "', resp=" + resp);
-
-            // ------- 解析 node 中的文本 -------
             JsonObject root = JsonParser.parseString(resp).getAsJsonObject();
             if (root.has("node") && root.get("node").isJsonObject()) {
                 JsonObject node = root.getAsJsonObject("node");
@@ -83,14 +105,13 @@ public class IntentRouter {
                 String t = node.has("text") ? node.get("text").getAsString() : "";
 
                 if (!title.isEmpty()) {
-                    player.sendMessage(ChatColor.AQUA + "【" + title + "】");
+                    online.sendMessage(ChatColor.AQUA + "【" + title + "】");
                 }
                 if (!t.isEmpty()) {
-                    player.sendMessage(ChatColor.WHITE + t);
+                    online.sendMessage(ChatColor.WHITE + t);
                 }
             }
 
-            // ------- 执行 world_patch -------
             if (root.has("world_patch") && root.get("world_patch").isJsonObject()) {
                 JsonObject patchObj = root.getAsJsonObject("world_patch");
                 Type type = new TypeToken<Map<String, Object>>() {}.getType();
@@ -108,13 +129,21 @@ public class IntentRouter {
 
                     plugin.getLogger().info("[IntentRouter] mc_patch = " + mcPatch);
 
-                    world.execute(player, mcPatch);
+                    world.execute(online, mcPatch);
                 }
             }
 
-        } catch (Exception e) {
-            plugin.getLogger().warning("[IntentRouter] handlePlayerSpeak error: " + e.getMessage());
-            player.sendMessage(ChatColor.RED + "❌ AI 解析失败: " + e.getMessage());
+        } catch (Exception parseEx) {
+            plugin.getLogger().warning("[IntentRouter] failed to parse response: " + parseEx.getMessage());
+            online.sendMessage(ChatColor.RED + "❌ AI 解析失败: " + parseEx.getMessage());
+        }
+    }
+
+    private void handleFailure(UUID playerUuid, Exception error) {
+        Player online = Bukkit.getPlayer(playerUuid);
+        plugin.getLogger().warning("[IntentRouter] handlePlayerSpeak error: " + error.getMessage());
+        if (online != null && online.isOnline()) {
+            online.sendMessage(ChatColor.RED + "❌ AI 解析失败: " + error.getMessage());
         }
     }
 }

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -26,6 +27,8 @@ import com.driftmc.hud.QuestLogHud;
 import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.hud.dialogue.DialoguePanel;
 import com.driftmc.session.PlayerSessionManager;
+import com.driftmc.story.LevelIds;
+import com.driftmc.tutorial.TutorialManager;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -35,29 +38,34 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 /**
- * Sends Minecraft-side rule events back to the backend so QuestRuntime can react.
+ * Sends Minecraft-side rule events back to the backend so QuestRuntime can
+ * react.
  */
 public final class RuleEventBridge {
 
     private static final long DEFAULT_COOLDOWN_MS = 1_500L;
 
-    private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {}.getType();
+    private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {
+    }.getType();
 
     private static final QuestMessageStyle STORY_STYLE = new QuestMessageStyle(ChatColor.YELLOW, "【剧情】", false);
     private static final QuestMessageStyle TASK_STYLE = new QuestMessageStyle(ChatColor.GOLD, "【任务】", true);
     private static final QuestMessageStyle PROGRESS_STYLE = new QuestMessageStyle(ChatColor.AQUA, "【进度】", true);
     private static final QuestMessageStyle COMPLETE_STYLE = new QuestMessageStyle(ChatColor.GREEN, "【完成】", true);
-    private static final QuestMessageStyle MILESTONE_STYLE = new QuestMessageStyle(ChatColor.LIGHT_PURPLE, "【阶段】", true);
+    private static final QuestMessageStyle MILESTONE_STYLE = new QuestMessageStyle(ChatColor.LIGHT_PURPLE, "【阶段】",
+            true);
     private static final QuestMessageStyle SUMMARY_STYLE = new QuestMessageStyle(ChatColor.GOLD, "【总结】", true);
     private static final QuestMessageStyle NPC_STYLE = new QuestMessageStyle(ChatColor.LIGHT_PURPLE, "【NPC】", false);
+    private static final String TUTORIAL_COMPLETE_EVENT = "tutorial_complete";
+    private static final String TUTORIAL_EXIT_EVENT = "tutorial_exit";
+    private static final String TUTORIAL_GUIDE_ID = "tutorial_guide";
+    private static final String TUTORIAL_GUIDE_NAME = "心悦向导";
 
     private final JavaPlugin plugin;
     private final BackendClient backend;
@@ -66,6 +74,7 @@ public final class RuleEventBridge {
     private final DialoguePanel dialoguePanel;
     private final ChoicePanel choicePanel;
     private final PlayerSessionManager sessions;
+    private final TutorialManager tutorialManager;
     private final Gson gson = new Gson();
     private final Map<String, Long> cooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, PlayerRuleState> playerStates = new ConcurrentHashMap<>();
@@ -73,7 +82,7 @@ public final class RuleEventBridge {
 
     public RuleEventBridge(JavaPlugin plugin, BackendClient backend, SceneAwareWorldPatchExecutor worldPatcher,
             QuestLogHud questLogHud, DialoguePanel dialoguePanel, ChoicePanel choicePanel,
-            PlayerSessionManager sessions) {
+            PlayerSessionManager sessions, TutorialManager tutorialManager) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.backend = Objects.requireNonNull(backend, "backend");
         this.worldPatcher = Objects.requireNonNull(worldPatcher, "worldPatcher");
@@ -81,6 +90,7 @@ public final class RuleEventBridge {
         this.dialoguePanel = dialoguePanel;
         this.choicePanel = choicePanel;
         this.sessions = sessions;
+        this.tutorialManager = tutorialManager;
     }
 
     public void setCooldownMillis(long millis) {
@@ -106,6 +116,13 @@ public final class RuleEventBridge {
         Map<String, Object> payloadCopy = payload != null ? new LinkedHashMap<>(payload) : new LinkedHashMap<>();
         QuestEventCanonicalizer.canonicalizePayload(payloadCopy);
 
+        if (shouldSuppressTutorialEvent(player, type, payloadCopy)) {
+            plugin.getLogger().log(Level.FINE,
+                    "[RuleEventBridge] Suppressed tutorial event {0} for player {1} after completion",
+                    new Object[] { type, playerName });
+            return;
+        }
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("player_id", playerName);
         body.put("event_type", type);
@@ -114,13 +131,13 @@ public final class RuleEventBridge {
         if (shouldThrottle(player, type, payloadCopy)) {
             plugin.getLogger().log(Level.FINE,
                     "[RuleEventBridge] Throttled event {0} for player {1}",
-                    new Object[]{type, playerName});
+                    new Object[] { type, playerName });
             return;
         }
 
         plugin.getLogger().log(Level.INFO,
                 "[RuleEventBridge] Emitting event {0} for player {1} payload={2}",
-                new Object[]{type, playerName, payloadCopy});
+                new Object[] { type, playerName, payloadCopy });
         String json = gson.toJson(body);
         backend.postJsonAsync("/world/story/rule-event", json, new Callback() {
             @Override
@@ -169,6 +186,20 @@ public final class RuleEventBridge {
 
     public void emitChat(Player player, String message) {
         Map<String, Object> payload = new LinkedHashMap<>();
+        if (player != null && tutorialManager != null && message != null) {
+            String trimmed = message.trim();
+            if (!trimmed.isEmpty() && tutorialManager.isInTutorial(player)
+                    && isPlayerInFlagshipTutorialScene(player)
+                    && containsTutorialCompletionKeyword(trimmed)) {
+                plugin.getLogger().log(Level.FINE,
+                        "[RuleEventBridge] Tutorial completion requested via chat for player {0}",
+                        new Object[] { player.getName() });
+                emitQuestEvent(player, TUTORIAL_COMPLETE_EVENT);
+                tutorialManager.finalizeTutorial(player);
+                return;
+            }
+        }
+
         String text = message != null ? message : "";
         payload.put("text", text);
         payload.put("quest_event", QuestEventCanonicalizer.canonicalize(canonicalize("chat", text)));
@@ -203,7 +234,8 @@ public final class RuleEventBridge {
         }
         plugin.getLogger().log(Level.INFO,
                 "[RuleEventBridge] emitInteractEntity player={0}, entity={1}, interaction={2}",
-                new Object[]{player != null ? player.getName() : "unknown", entity != null ? entity.getType() : "null", interaction});
+                new Object[] { player != null ? player.getName() : "unknown",
+                        entity != null ? entity.getType() : "null", interaction });
         emit(player, "interact_entity", payload);
     }
 
@@ -217,6 +249,10 @@ public final class RuleEventBridge {
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         String canonical = QuestEventCanonicalizer.canonicalize(questEvent);
+        if (canonical.equalsIgnoreCase(TUTORIAL_COMPLETE_EVENT) && tutorialManager != null) {
+            tutorialManager.finalizeTutorial(player);
+            return;
+        }
         if (!canonical.isEmpty()) {
             payload.put("quest_event", canonical);
         }
@@ -231,8 +267,52 @@ public final class RuleEventBridge {
         }
         plugin.getLogger().log(Level.INFO,
                 "[RuleEventBridge] emitQuestEvent {0} for player {1} payload={2}",
-                new Object[]{canonical, player != null ? player.getName() : "unknown", payload});
+                new Object[] { canonical, player != null ? player.getName() : "unknown", payload });
         emit(player, "quest_event", payload);
+    }
+
+    private boolean isPlayerInFlagshipTutorialScene(Player player) {
+        if (player == null || worldPatcher == null) {
+            return false;
+        }
+        SceneLoader loader = worldPatcher.getSceneLoader();
+        if (loader == null) {
+            return false;
+        }
+        String activeScene = loader.getActiveSceneId(player);
+        return LevelIds.isFlagshipTutorial(activeScene);
+    }
+
+    private boolean containsTutorialCompletionKeyword(String message) {
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("完成教学")
+                || normalized.contains("结束教学")
+                || normalized.contains("完成新手教学");
+    }
+
+    public void handleTutorialFinalize(Player player) {
+        if (player == null) {
+            return;
+        }
+        UUID playerId = player.getUniqueId();
+        playerStates.remove(playerId);
+        cooldowns.keySet().removeIf(key -> key.startsWith(playerId.toString() + ":"));
+
+        if (questLogHud != null) {
+            questLogHud.handleLevelExit(player);
+        }
+        if (dialoguePanel != null) {
+            dialoguePanel.clear(player);
+        }
+        if (choicePanel != null) {
+            choicePanel.clear(player);
+        }
+        plugin.getLogger().log(Level.INFO,
+                "[TutorialExit] tutorial fully disabled for player {0}",
+                new Object[] { player.getName() });
     }
 
     private boolean shouldThrottle(Player player, String eventType, Object payloadObj) {
@@ -313,15 +393,51 @@ public final class RuleEventBridge {
             return;
         }
 
-        boolean tutorialMilestoneReached = containsTutorialComplete(milestones);
-        boolean exitReadyDuringTutorial = sessions != null && sessions.isTutorial(player) && exitReady;
-        if (sessions != null && (tutorialMilestoneReached || exitReadyDuringTutorial)) {
-            boolean alreadyCompleted = sessions.hasCompletedTutorial(player);
-            sessions.markTutorialComplete(player);
-            if (!alreadyCompleted) {
-                player.sendMessage(ChatColor.GOLD + "★ 教程完成，已进入正式剧情。\n" + ChatColor.WHITE + "欢迎探索主线章节。");
-                player.sendActionBar(Component.text("教程完成，已进入正式剧情", NamedTextColor.GOLD));
+        boolean milestoneHasCompletion = containsTutorialMarker(milestones, TUTORIAL_COMPLETE_EVENT);
+        boolean summaryHasCompletion = summaryContainsQuestEvent(summary, TUTORIAL_COMPLETE_EVENT);
+        boolean nodesSignalCompletion = nodesContainQuestEvent(nodes, TUTORIAL_COMPLETE_EVENT);
+        boolean completionSignalDetected = milestoneHasCompletion || summaryHasCompletion || nodesSignalCompletion;
+
+        if (completionSignalDetected) {
+            if (tutorialManager != null) {
+                tutorialManager.markCompletionEmitted(player);
+                if (!tutorialManager.hasExitedTutorial(player)) {
+                    tutorialManager.finalizeTutorial(player);
+                }
+                if (tutorialManager.hasExitedTutorial(player)) {
+                    return;
+                }
+            } else if (sessions != null) {
+                boolean alreadyCompleted = sessions.hasCompletedTutorial(player);
+                if (!alreadyCompleted) {
+                    sessions.markTutorialComplete(player);
+                }
+                return;
             }
+        }
+
+        boolean patchRequestsFinalize = worldPatchRequestsFinalize(worldPatch);
+        boolean storyFlowEnded = nodesContainQuestEvent(nodes, TUTORIAL_EXIT_EVENT)
+                || nodesReachTutorialStoryEnd(nodes);
+
+        boolean shouldFinalize = completionSignalDetected
+                || patchRequestsFinalize
+                || storyFlowEnded;
+
+        boolean finalized = false;
+        if (shouldFinalize) {
+            if (tutorialManager != null) {
+                finalized = tutorialManager.finalizeTutorial(player);
+            } else if (sessions != null) {
+                boolean alreadyCompleted = sessions.hasCompletedTutorial(player);
+                sessions.markTutorialComplete(player);
+                finalized = !alreadyCompleted;
+            }
+        }
+
+        if (shouldFinalize && (finalized
+                || (tutorialManager != null && tutorialManager.hasExitedTutorial(player)))) {
+            return;
         }
 
         if (questLogHud != null && activeTasks != null && activeTasks.size() > 0) {
@@ -331,6 +447,9 @@ public final class RuleEventBridge {
         if (worldPatch != null && worldPatch.size() > 0) {
             Map<String, Object> patch = gson.fromJson(worldPatch, MAP_TYPE);
             if (patch != null && !patch.isEmpty()) {
+                if (tutorialManager != null) {
+                    tutorialManager.syncWorldPatch(player, patch);
+                }
                 worldPatcher.execute(player, patch);
             }
         }
@@ -396,17 +515,266 @@ public final class RuleEventBridge {
         }
     }
 
-    private boolean containsTutorialComplete(JsonArray milestones) {
-        if (milestones == null) {
+    private boolean containsTutorialMarker(JsonArray array, String... tokens) {
+        if (array == null || tokens == null || tokens.length == 0) {
             return false;
         }
-        for (JsonElement element : milestones) {
+        for (JsonElement element : array) {
             String value = safeString(element);
-            if (value != null && value.equalsIgnoreCase("tutorial_complete")) {
+            if (value == null || value.isBlank()) {
+                continue;
+            }
+            for (String token : tokens) {
+                if (token != null && !token.isBlank() && value.equalsIgnoreCase(token)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean nodesContainQuestEvent(JsonArray nodes, String... questEvents) {
+        if (nodes == null || questEvents == null || questEvents.length == 0) {
+            return false;
+        }
+        for (JsonElement element : nodes) {
+            if (element == null || !element.isJsonObject()) {
+                continue;
+            }
+            JsonObject node = element.getAsJsonObject();
+            if (jsonContainsQuestEvent(node, questEvents)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private boolean nodesReachTutorialStoryEnd(JsonArray nodes) {
+        if (nodes == null || nodes.size() == 0) {
+            return false;
+        }
+        for (JsonElement element : nodes) {
+            if (element == null || !element.isJsonObject()) {
+                continue;
+            }
+            JsonObject node = element.getAsJsonObject();
+            String type = safeString(node.get("type"));
+            if (!"story_node".equalsIgnoreCase(type) && !"story".equalsIgnoreCase(type)) {
+                continue;
+            }
+            if (jsonContainsQuestEvent(node, TUTORIAL_EXIT_EVENT)) {
+                return true;
+            }
+            if (nodeHasTerminalFlag(node)) {
+                return true;
+            }
+            JsonObject metadata = node.has("metadata") && node.get("metadata").isJsonObject()
+                    ? node.getAsJsonObject("metadata")
+                    : null;
+            if (nodeHasTerminalFlag(metadata)) {
+                return true;
+            }
+            if (node.has("next_level") || node.has("next_major_level") || node.has("next_scene")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean nodeHasTerminalFlag(JsonObject node) {
+        if (node == null || node.size() == 0) {
+            return false;
+        }
+        for (String key : new String[] { "is_terminal", "terminal", "is_last", "final", "final_node" }) {
+            if (!node.has(key)) {
+                continue;
+            }
+            JsonElement value = node.get(key);
+            if (value == null) {
+                continue;
+            }
+            if (value.isJsonPrimitive()) {
+                JsonPrimitive primitive = value.getAsJsonPrimitive();
+                if (primitive.isBoolean() && primitive.getAsBoolean()) {
+                    return true;
+                }
+                if (primitive.isString()) {
+                    String text = primitive.getAsString();
+                    if (text != null && !text.isBlank() && Boolean.parseBoolean(text.trim())) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean summaryContainsQuestEvent(JsonObject summary, String... questEvents) {
+        if (summary == null || summary.size() == 0 || questEvents == null || questEvents.length == 0) {
+            return false;
+        }
+        return jsonContainsQuestEvent(summary, questEvents);
+    }
+
+    private boolean jsonContainsQuestEvent(JsonObject node, String... questEvents) {
+        if (node == null || questEvents == null) {
+            return false;
+        }
+        for (String field : new String[] { "quest_event", "event", "milestone_event", "id" }) {
+            if (!node.has(field)) {
+                continue;
+            }
+            String candidate = safeString(node.get(field));
+            if (candidate == null || candidate.isBlank()) {
+                continue;
+            }
+            for (String expected : questEvents) {
+                if (expected != null && !expected.isBlank() && candidate.equalsIgnoreCase(expected)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean worldPatchRequestsFinalize(JsonObject worldPatch) {
+        if (worldPatch == null || worldPatch.size() == 0) {
+            return false;
+        }
+        if (worldPatch.has("mc") && worldPatch.get("mc").isJsonObject()) {
+            JsonObject mc = worldPatch.getAsJsonObject("mc");
+            if (containsTutorialCleanup(mc)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsTutorialCleanup(JsonObject mc) {
+        if (mc == null || mc.size() == 0) {
+            return false;
+        }
+        if (mc.has("_scene_cleanup") && mc.get("_scene_cleanup").isJsonObject()) {
+            JsonObject cleanup = mc.getAsJsonObject("_scene_cleanup");
+            String cleanupId = safeString(cleanup.get("id"));
+            if (cleanupId != null && !cleanupId.isBlank()
+                    && cleanupId.toLowerCase(Locale.ROOT).contains("tutorial")) {
+                return true;
+            }
+            String sceneId = safeString(cleanup.get("scene_id"));
+            if (sceneId != null && !sceneId.isBlank()
+                    && sceneId.equalsIgnoreCase("flagship_tutorial")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean shouldSuppressTutorialEvent(Player player, String eventType, Map<String, Object> payload) {
+        if (player == null) {
+            return false;
+        }
+        boolean tutorialDone = false;
+        if (tutorialManager != null && tutorialManager.hasExitedTutorial(player)) {
+            tutorialDone = true;
+        }
+        if (tutorialManager != null && tutorialManager.hasCompletionEmitted(player)) {
+            tutorialDone = true;
+        }
+        if (!tutorialDone && sessions != null && sessions.hasTutorialCompletionSignal(player)) {
+            tutorialDone = true;
+        }
+        if (tutorialManager != null && tutorialManager.isTutorialComplete(player)) {
+            tutorialDone = true;
+        }
+        if (!tutorialDone && sessions != null && sessions.hasCompletedTutorial(player)) {
+            tutorialDone = true;
+        }
+        if (!tutorialDone) {
+            return false;
+        }
+
+        String normalizedType = normalizeToken(eventType);
+        if (normalizedType.isEmpty()) {
+            return false;
+        }
+
+        if ("quest_event".equals(normalizedType)) {
+            String questEvent = extractQuestEvent(payload);
+            if (!questEvent.isEmpty() && questEvent.startsWith("tutorial_")) {
+                return true;
+            }
+        }
+
+        if (normalizedType.contains("tutorial")) {
+            return true;
+        }
+
+        if (("near".equals(normalizedType) || normalizedType.startsWith("interact")) && payload != null) {
+            String target = extractNormalizedTarget(payload);
+            if (!target.isEmpty() && isTutorialGuideTarget(target)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private String extractQuestEvent(Map<String, Object> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return "";
+        }
+        Object raw = payload.get("quest_event");
+        if (raw == null) {
+            return "";
+        }
+        String canonical = QuestEventCanonicalizer.canonicalize(String.valueOf(raw));
+        return canonical == null ? "" : canonical;
+    }
+
+    private String extractNormalizedTarget(Map<String, Object> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return "";
+        }
+        Object[] candidates = new Object[] {
+                payload.get("target"),
+                payload.get("npc"),
+                payload.get("entity_name"),
+                payload.get("entity_id")
+        };
+        for (Object candidate : candidates) {
+            if (candidate == null) {
+                continue;
+            }
+            String value = String.valueOf(candidate).trim();
+            if (value.isEmpty()) {
+                continue;
+            }
+            String stripped = ChatColor.stripColor(value);
+            if (stripped != null && !stripped.isBlank()) {
+                return stripped.trim();
+            }
+            return value;
+        }
+        return "";
+    }
+
+    private boolean isTutorialGuideTarget(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String lower = value.toLowerCase(Locale.ROOT);
+        if (lower.contains(TUTORIAL_GUIDE_ID)) {
+            return true;
+        }
+        return lower.contains(TUTORIAL_GUIDE_NAME.toLowerCase(Locale.ROOT));
+    }
+
+    private String normalizeToken(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
     private void deliverNode(Player player, JsonObject node) {
