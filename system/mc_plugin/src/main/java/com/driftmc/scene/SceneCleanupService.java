@@ -12,7 +12,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 import com.driftmc.world.WorldPatchExecutor;
 
 /**
- * Tracks active scene sessions per player and applies inverse patches when needed.
+ * Tracks active scene sessions per player and applies inverse patches when
+ * needed.
  */
 final class SceneCleanupService {
 
@@ -33,7 +34,8 @@ final class SceneCleanupService {
 
         SceneSession session = SceneSession.create(player, metadata, operations);
         if (session.buildCleanupPatch().isEmpty()) {
-            plugin.getLogger().log(Level.FINE, "[SceneCleanup] Skip tracking; nothing to clean for player {0}", player.getName());
+            plugin.getLogger().log(Level.FINE, "[SceneCleanup] Skip tracking; nothing to clean for player {0}",
+                    player.getName());
             return;
         }
 
@@ -43,7 +45,8 @@ final class SceneCleanupService {
             String nextScene = session.getSceneId();
             if (previousScene != null && nextScene != null && previousScene.equalsIgnoreCase(nextScene)) {
                 sessions.put(playerId, session);
-                plugin.getLogger().log(Level.FINE, "[SceneCleanup] Skip cleanup: same scene_id refresh for player {0}", player.getName());
+                plugin.getLogger().log(Level.FINE, "[SceneCleanup] Skip cleanup: same scene_id refresh for player {0}",
+                        player.getName());
                 return;
             }
 
@@ -103,8 +106,8 @@ final class SceneCleanupService {
             return;
         }
         plugin.getLogger().log(Level.INFO,
-            "[SceneCleanup] Applying cleanup for player {0} due to {1}",
-            new Object[]{player.getName(), reason});
+                "[SceneCleanup] Applying cleanup for player {0} due to {1}",
+                new Object[] { player.getName(), reason });
         world.execute(player, cleanup);
         session.reset();
     }

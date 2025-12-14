@@ -13,8 +13,6 @@ import com.driftmc.cinematic.CinematicController;
 import com.driftmc.npc.NPCManager;
 import com.driftmc.world.WorldPatchExecutor;
 
-
-
 /**
  * Coordinates scene application and cleanup for a player.
  */
