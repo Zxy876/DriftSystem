@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 
+import org.bukkit.Bukkit;
+
 import okhttp3.Callback;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -46,6 +48,9 @@ public class BackendClient {
     // 同步 postJson（调试用）
     // ------------------------------------------------------
     public String postJson(String path, String json) throws IOException {
+        if (Bukkit.getServer() != null && Bukkit.isPrimaryThread()) {
+            throw new IllegalStateException("BackendClient.postJson cannot run on the primary server thread");
+        }
         RequestBody body = RequestBody.create(
             MediaType.parse("application/json; charset=utf-8"),
             json);

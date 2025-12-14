@@ -3,7 +3,11 @@ package com.driftmc.intent2;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -16,6 +20,7 @@ import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.hud.dialogue.DialoguePanel;
 import com.driftmc.story.LevelIds;
 import com.driftmc.tutorial.TutorialManager;
+import com.driftmc.tutorial.TutorialState;
 import com.driftmc.world.WorldPatchExecutor;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -36,10 +41,12 @@ public class IntentDispatcher2 {
     private QuestLogHud questLogHud;
     private DialoguePanel dialoguePanel;
     private ChoicePanel choicePanel;
+    private final Set<UUID> tutorialReentryWarned = ConcurrentHashMap.newKeySet();
 
     private static final Gson GSON = new Gson();
     private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {
     }.getType();
+    private static final String PRIMARY_LEVEL_ID = "flagship_03";
 
     public IntentDispatcher2(Plugin plugin, BackendClient backend, WorldPatchExecutor world) {
         this.plugin = plugin;
@@ -61,6 +68,20 @@ public class IntentDispatcher2 {
 
     public void setChoicePanel(ChoicePanel choicePanel) {
         this.choicePanel = choicePanel;
+    }
+
+    private boolean ensureUnlocked(Player player, TutorialState required, String message) {
+        if (tutorialManager == null || tutorialManager.isTutorialComplete(player)) {
+            return true;
+        }
+        return tutorialManager.ensureUnlocked(player, required, message);
+    }
+
+    private void syncTutorialState(Player player, Map<String, Object> patch) {
+        if (tutorialManager == null || patch == null || patch.isEmpty()) {
+            return;
+        }
+        tutorialManager.syncWorldPatch(player, patch);
     }
 
     // ============================================================
@@ -108,6 +129,10 @@ public class IntentDispatcher2 {
     // ============================================================
     private void createStory(Player p, IntentResponse2 intent) {
         final Player fp = p;
+
+        if (!ensureUnlocked(fp, TutorialState.CREATE_STORY, "请继续当前教学提示后再创造剧情。")) {
+            return;
+        }
 
         // 从 rawText 中提取标题和内容
         String rawText = intent.rawText != null ? intent.rawText : "新剧情";
@@ -159,7 +184,8 @@ public class IntentDispatcher2 {
     // ============================================================
     private void loadLevelForPlayer(Player p, String levelId, IntentResponse2 intent) {
         final Player fp = p;
-        final String canonicalLevel = LevelIds.canonicalizeOrDefault(levelId);
+        final String canonicalLevel = LevelIds.canonicalizeOrDefault(
+                enforceTutorialExitRedirect(fp, levelId, intent != null ? intent.rawText : null));
 
         fp.sendMessage("§e🌍 正在加载关卡场景...");
 
@@ -175,6 +201,7 @@ public class IntentDispatcher2 {
                     if (intent != null && intent.worldPatch != null) {
                         plugin.getLogger().info("[加载关卡] 使用备用worldPatch");
                         Map<String, Object> patch = GSON.fromJson(intent.worldPatch, MAP_TYPE);
+                        syncTutorialState(fp, patch);
                         world.execute(fp, patch);
                     }
                 });
@@ -195,6 +222,7 @@ public class IntentDispatcher2 {
                     if (patchObj != null && patchObj.size() > 0) {
                         plugin.getLogger().info("[加载关卡] 应用bootstrap_patch");
                         Map<String, Object> patch = GSON.fromJson(patchObj, MAP_TYPE);
+                        syncTutorialState(fp, patch);
                         world.execute(fp, patch);
                         fp.sendMessage("§a✨ 场景已加载！");
                     } else {
@@ -204,6 +232,7 @@ public class IntentDispatcher2 {
                         if (intent != null && intent.worldPatch != null) {
                             plugin.getLogger().info("[加载关卡] 使用intent的worldPatch");
                             Map<String, Object> patch = GSON.fromJson(intent.worldPatch, MAP_TYPE);
+                            syncTutorialState(fp, patch);
                             world.execute(fp, patch);
                             fp.sendMessage("§a✨ 场景已加载！");
                         } else {
@@ -278,6 +307,10 @@ public class IntentDispatcher2 {
     // ============================================================
     private void showMinimap(Player p, IntentResponse2 intent) {
 
+        if (!ensureUnlocked(p, TutorialState.VIEW_MAP, "完成小地图教学后即可使用该功能。")) {
+            return;
+        }
+
         JsonObject mm = intent.minimap;
         if (mm == null) {
             p.sendMessage("§c[小地图] 后端未返回 minimap 数据。");
@@ -286,11 +319,11 @@ public class IntentDispatcher2 {
 
         // 显示当前关卡信息
         String cur = (mm.has("current_level") && !mm.get("current_level").isJsonNull())
-            ? LevelIds.canonicalizeLevelId(mm.get("current_level").getAsString())
-            : "未知";
+                ? LevelIds.canonicalizeLevelId(mm.get("current_level").getAsString())
+                : "未知";
         String nxt = (mm.has("recommended_next") && !mm.get("recommended_next").isJsonNull())
-            ? LevelIds.canonicalizeLevelId(mm.get("recommended_next").getAsString())
-            : "无";
+                ? LevelIds.canonicalizeLevelId(mm.get("recommended_next").getAsString())
+                : "无";
 
         p.sendMessage("§b--- 心悦小地图 ---");
         p.sendMessage("当前关卡: §a" + cur);
@@ -341,12 +374,14 @@ public class IntentDispatcher2 {
                             if ("filled_map".equalsIgnoreCase(itemType)) {
                                 org.bukkit.Material mapMat = org.bukkit.Material.FILLED_MAP;
                                 org.bukkit.inventory.ItemStack mapItem = new org.bukkit.inventory.ItemStack(mapMat);
-                                org.bukkit.inventory.meta.MapMeta mapMeta = (org.bukkit.inventory.meta.MapMeta) mapItem.getItemMeta();
+                                org.bukkit.inventory.meta.MapMeta mapMeta = (org.bukkit.inventory.meta.MapMeta) mapItem
+                                        .getItemMeta();
                                 if (mapMeta != null) {
                                     mapMeta.displayName(net.kyori.adventure.text.Component.text("心悦小地图"));
                                     try {
                                         byte[] imgBytes = java.util.Base64.getDecoder().decode(base64Image);
-                                        java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(imgBytes));
+                                        java.awt.image.BufferedImage img = javax.imageio.ImageIO
+                                                .read(new java.io.ByteArrayInputStream(imgBytes));
                                         org.bukkit.map.MapView mapView = Bukkit.createMap(fp.getWorld());
                                         mapView.getRenderers().clear();
                                         mapView.addRenderer(new com.driftmc.minimap.PNGMapRenderer(img));
@@ -437,7 +472,8 @@ public class IntentDispatcher2 {
                                 String storyText = node.get("text").getAsString();
                                 fp.sendMessage("§f" + storyText);
                                 plugin.getLogger()
-                                        .info("[剧情推进] 显示文本: " + storyText.substring(0, Math.min(50, storyText.length())));
+                                        .info("[剧情推进] 显示文本: "
+                                                + storyText.substring(0, Math.min(50, storyText.length())));
                             }
                         }
                     } else {
@@ -447,6 +483,7 @@ public class IntentDispatcher2 {
                     if (wpatch != null && wpatch.size() > 0) {
                         plugin.getLogger().info("[剧情推进] 执行世界patch");
                         Map<String, Object> patch = GSON.fromJson(wpatch, MAP_TYPE);
+                        syncTutorialState(fp, patch);
                         world.execute(fp, patch);
                     }
                 });
@@ -460,8 +497,12 @@ public class IntentDispatcher2 {
     private void gotoLevelAndLoad(Player p, IntentResponse2 intent) {
 
         final Player fp = p;
-        final String levelId = LevelIds.canonicalizeOrDefault(intent.levelId);
+        final String levelId = LevelIds.canonicalizeOrDefault(resolveRequestedLevel(fp, intent));
         final JsonObject minimap = intent.minimap;
+
+        if (!ensureUnlocked(fp, TutorialState.JUMP_LEVEL, "完成关卡跳转教学后即可自由跳关。")) {
+            return;
+        }
 
         if (levelId == null) {
             p.sendMessage("§c跳关失败：没有 levelId");
@@ -525,6 +566,7 @@ public class IntentDispatcher2 {
                             final Map<String, Object> patch = GSON.fromJson(patchObj, MAP_TYPE);
 
                             Bukkit.getScheduler().runTask(plugin, () -> {
+                                syncTutorialState(fp, patch);
                                 world.execute(fp, patch);
                                 if (questLogHud != null) {
                                     questLogHud.showQuestLog(fp, QuestLogHud.Trigger.LEVEL_ENTER);
@@ -536,5 +578,49 @@ public class IntentDispatcher2 {
                         }
                     }
                 });
+    }
+
+    private String resolveRequestedLevel(Player player, IntentResponse2 intent) {
+        if (intent == null) {
+            return null;
+        }
+        return enforceTutorialExitRedirect(player, intent.levelId, intent.rawText);
+    }
+
+    private String enforceTutorialExitRedirect(Player player, String requestedLevelId, String rawText) {
+        String canonicalRequested = LevelIds.canonicalizeLevelId(requestedLevelId);
+        if (tutorialManager == null || player == null) {
+            return canonicalRequested;
+        }
+
+        if (!tutorialManager.hasExitedTutorial(player)) {
+            return canonicalRequested;
+        }
+
+        boolean requestTargetsTutorial = LevelIds.isFlagshipTutorial(canonicalRequested);
+        String normalizedRaw = rawText != null ? rawText.toLowerCase(Locale.ROOT) : "";
+        if (!normalizedRaw.isBlank()) {
+            requestTargetsTutorial = requestTargetsTutorial
+                    || normalizedRaw.contains("第一关")
+                    || normalizedRaw.contains("主线")
+                    || normalizedRaw.contains("开始");
+        }
+
+        if (requestTargetsTutorial) {
+            warnTutorialReentry(player);
+            return PRIMARY_LEVEL_ID;
+        }
+
+        return canonicalRequested;
+    }
+
+    private void warnTutorialReentry(Player player) {
+        if (player == null) {
+            return;
+        }
+        UUID playerId = player.getUniqueId();
+        if (tutorialReentryWarned.add(playerId)) {
+            plugin.getLogger().warning("[LevelResolve] Blocked tutorial re-entry for " + player.getName());
+        }
     }
 }

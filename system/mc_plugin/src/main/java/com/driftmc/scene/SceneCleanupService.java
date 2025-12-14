@@ -30,16 +30,27 @@ final class SceneCleanupService {
             return;
         }
         UUID playerId = player.getUniqueId();
-        SceneSession previous = sessions.remove(playerId);
-        if (previous != null) {
-            applyCleanup(player, previous, "previous_session");
-        }
 
         SceneSession session = SceneSession.create(player, metadata, operations);
         if (session.buildCleanupPatch().isEmpty()) {
             plugin.getLogger().log(Level.FINE, "[SceneCleanup] Skip tracking; nothing to clean for player {0}", player.getName());
             return;
         }
+
+        SceneSession previous = sessions.get(playerId);
+        if (previous != null) {
+            String previousScene = previous.getSceneId();
+            String nextScene = session.getSceneId();
+            if (previousScene != null && nextScene != null && previousScene.equalsIgnoreCase(nextScene)) {
+                sessions.put(playerId, session);
+                plugin.getLogger().log(Level.FINE, "[SceneCleanup] Skip cleanup: same scene_id refresh for player {0}", player.getName());
+                return;
+            }
+
+            sessions.remove(playerId);
+            applyCleanup(player, previous, "previous_session");
+        }
+
         sessions.put(playerId, session);
         plugin.getLogger().log(Level.INFO, "[SceneCleanup] Tracked scene for player {0}", player.getName());
     }
@@ -59,6 +70,19 @@ final class SceneCleanupService {
             return;
         }
         applyCleanup(player, session, "requested_cleanup");
+    }
+
+    void endSession(Player player, String reason) {
+        if (player == null) {
+            return;
+        }
+        UUID playerId = player.getUniqueId();
+        SceneSession session = sessions.remove(playerId);
+        if (session == null) {
+            return;
+        }
+        String cleanupReason = (reason == null || reason.isBlank()) ? "manual_end" : reason;
+        applyCleanup(player, session, cleanupReason);
     }
 
     void cleanupAll() {
@@ -83,5 +107,24 @@ final class SceneCleanupService {
             new Object[]{player.getName(), reason});
         world.execute(player, cleanup);
         session.reset();
+    }
+
+    SceneSession getSession(UUID playerId) {
+        if (playerId == null) {
+            return null;
+        }
+        return sessions.get(playerId);
+    }
+
+    boolean isPlayerInScene(UUID playerId, String sceneId) {
+        SceneSession session = getSession(playerId);
+        if (session == null) {
+            return false;
+        }
+        if (sceneId == null || sceneId.isBlank()) {
+            return true;
+        }
+        String activeScene = session.getSceneId();
+        return activeScene != null && activeScene.equalsIgnoreCase(sceneId);
     }
 }

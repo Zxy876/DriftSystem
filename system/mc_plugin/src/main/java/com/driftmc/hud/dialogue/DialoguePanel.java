@@ -23,7 +23,8 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 /**
- * DialoguePanel renders structured NPC dialogue nodes with a light typing effect.
+ * DialoguePanel renders structured NPC dialogue nodes with a light typing
+ * effect.
  */
 public final class DialoguePanel {
 
@@ -37,6 +38,16 @@ public final class DialoguePanel {
     public DialoguePanel(JavaPlugin plugin, ChoicePanel choicePanel) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.choicePanel = choicePanel;
+    }
+
+    public void clear(Player player) {
+        if (player == null) {
+            return;
+        }
+        clearScheduled(player);
+        if (choicePanel != null) {
+            choicePanel.clear(player);
+        }
     }
 
     /**
@@ -70,7 +81,7 @@ public final class DialoguePanel {
 
         for (Component line : payload.lines) {
             Component decorated = Component.text("❝ ", NamedTextColor.GRAY)
-                .append(line);
+                    .append(line);
             int taskId = Bukkit.getScheduler().scheduleSyncDelayedTask(plugin,
                     () -> player.sendMessage(decorated),
                     delay);
@@ -79,17 +90,17 @@ public final class DialoguePanel {
         }
 
         boolean hasChoiceArray = node.has("choices") && node.get("choices").isJsonArray()
-            && node.getAsJsonArray("choices").size() > 0;
+                && node.getAsJsonArray("choices").size() > 0;
 
         if (hasChoiceArray && choicePanel != null) {
             int taskId = Bukkit.getScheduler().scheduleSyncDelayedTask(plugin,
-                () -> choicePanel.presentChoiceNode(player, node),
-                delay);
+                    () -> choicePanel.presentChoiceNode(player, node),
+                    delay);
             taskIds.add(taskId);
         } else if (!payload.choices.isEmpty()) {
             int taskId = Bukkit.getScheduler().scheduleSyncDelayedTask(plugin,
-                () -> renderChoices(player, payload.choices),
-                delay);
+                    () -> renderChoices(player, payload.choices),
+                    delay);
             taskIds.add(taskId);
         }
 
@@ -105,7 +116,7 @@ public final class DialoguePanel {
         for (int i = 0; i < choices.size(); i++) {
             Choice choice = choices.get(i);
             int index = i + 1;
-                TextComponent.Builder line = Component.text()
+            TextComponent.Builder line = Component.text()
                     .append(Component.text(index + ". ", NamedTextColor.GOLD))
                     .append(choice.label);
             if (choice.command != null) {

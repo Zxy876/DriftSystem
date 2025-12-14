@@ -13,6 +13,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -212,12 +213,21 @@ public class NPCManager implements Listener {
         if (entity == null) {
             return;
         }
+        if (isTutorialWorld(entity) && isDuplicateTutorialNpc(declaredName)) {
+            plugin.getLogger().log(Level.FINE,
+                    "[NPCManager] Suppressed duplicate tutorial NPC spawn: {0}",
+                    declaredName);
+            pendingSpawns.remove(normalize(declaredName));
+            entity.remove();
+            return;
+        }
         if (!spawnedNPCs.contains(entity)) {
             spawnedNPCs.add(entity);
         }
 
         if (entity instanceof ArmorStand armorStand) {
-            // ArmorStand markers ignore interactions; ensure the featured NPC keeps a hitbox.
+            // ArmorStand markers ignore interactions; ensure the featured NPC keeps a
+            // hitbox.
             armorStand.setMarker(false);
             armorStand.setInvisible(false);
             armorStand.setSmall(false);
@@ -229,18 +239,18 @@ public class NPCManager implements Listener {
 
         String baseName = resolveName(entity);
         String worldName = entity.getLocation().getWorld() != null
-            ? entity.getLocation().getWorld().getName()
-            : "unknown";
+                ? entity.getLocation().getWorld().getName()
+                : "unknown";
         plugin.getLogger().log(Level.INFO,
-            "[NPCManager] Registered NPC {0} ({1}) at {2}:{3},{4},{5}",
-            new Object[]{
-                baseName,
-                entity.getType(),
-                worldName,
-                entity.getLocation().getBlockX(),
-                entity.getLocation().getBlockY(),
-                entity.getLocation().getBlockZ()
-            });
+                "[NPCManager] Registered NPC {0} ({1}) at {2}:{3},{4},{5}",
+                new Object[] {
+                        baseName,
+                        entity.getType(),
+                        worldName,
+                        entity.getLocation().getBlockX(),
+                        entity.getLocation().getBlockY(),
+                        entity.getLocation().getBlockZ()
+                });
     }
 
     private void unregisterNpc(Entity entity) {
@@ -270,6 +280,42 @@ public class NPCManager implements Listener {
                 applyAppearance(living, resolveName(living));
             }
         }
+    }
+
+    private boolean isTutorialWorld(Entity entity) {
+        if (entity == null) {
+            return false;
+        }
+        World world = entity.getWorld();
+        if (world == null) {
+            return false;
+        }
+        String worldName = world.getName();
+        if (worldName == null) {
+            return false;
+        }
+        return worldName.toLowerCase(Locale.ROOT).contains("tutorial");
+    }
+
+    private boolean isDuplicateTutorialNpc(String declaredName) {
+        String canonical = normalize(declaredName);
+        if (canonical.isEmpty()) {
+            return false;
+        }
+        spawnedNPCs.removeIf(entity -> entity == null || !entity.isValid());
+        for (Entity existing : spawnedNPCs) {
+            if (!(existing instanceof LivingEntity living) || !living.isValid()) {
+                continue;
+            }
+            if (!isTutorialWorld(existing)) {
+                continue;
+            }
+            String existingName = normalize(resolveName(existing));
+            if (!existingName.isEmpty() && existingName.equals(canonical)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void attachMarker(LivingEntity entity, Component display, NpcSkin skin) {
@@ -317,14 +363,24 @@ public class NPCManager implements Listener {
     }
 
     private Component formatDisplay(String baseName) {
-        String styled = baseName;
-        if (baseName != null && NAMEPLATE_OVERRIDES.containsKey(baseName)) {
-            styled = NAMEPLATE_OVERRIDES.get(baseName);
+        String reference = baseName;
+        if (reference != null) {
+            String stripped = ChatColor.stripColor(reference);
+            if (stripped != null && !stripped.isBlank()) {
+                reference = stripped.trim();
+            }
+        }
+
+        String styled = reference;
+        if (styled != null && NAMEPLATE_OVERRIDES.containsKey(styled)) {
+            styled = NAMEPLATE_OVERRIDES.get(styled);
         }
         if (styled == null || styled.isBlank()) {
-            styled = "旅者";
+            styled = (reference != null && !reference.isBlank()) ? reference : "旅者";
         }
-        EmotionProfile profile = emotionProfiles.get(normalize(baseName));
+
+        String emotionKey = reference != null && !reference.isBlank() ? reference : baseName;
+        EmotionProfile profile = emotionProfiles.get(normalize(emotionKey));
         if (profile != null) {
             String cue = !profile.label().isBlank() ? profile.label() : profile.tone();
             if (cue != null && !cue.isBlank()) {

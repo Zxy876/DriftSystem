@@ -6,8 +6,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
@@ -20,6 +22,7 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.metadata.MetadataValue;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import com.driftmc.DriftPlugin;
 import com.driftmc.intent.IntentRouter;
@@ -29,6 +32,7 @@ import com.driftmc.scene.RuleEventBridge;
 import com.driftmc.session.PlayerSessionManager;
 import com.driftmc.story.LevelIds;
 import com.driftmc.story.StoryManager;
+import com.driftmc.tutorial.TutorialManager;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -37,15 +41,14 @@ import net.kyori.adventure.text.format.NamedTextColor;
 public class NearbyNPCListener implements Listener {
 
     private static final long NPC_INTERACT_COOLDOWN_MS = 2_000L;
-    private static final long TUTORIAL_CHECKPOINT_COOLDOWN_MS = 3_000L;
+    private static final long NEAR_INTENT_COOLDOWN_MS = 2_500L;
+    private static final long NEAR_INTENT_DEBOUNCE_TICKS = 10L;
     private static final String NPC_ID_META = "npc_id";
     private static final String NPC_ID_PREFIX = "npc_id:";
     private static final String TUTORIAL_WORLD_NAME = "KunmingLakeTutorial";
     private static final String TUTORIAL_GUIDE_NAME = "心悦向导";
     private static final String TUTORIAL_GUIDE_ID = "tutorial_guide";
-    private static final String TUTORIAL_MEET_GUIDE_EVENT = "tutorial_meet_guide";
-    private static final String TUTORIAL_REACH_CHECKPOINT_EVENT = "tutorial_reach_checkpoint";
-    private static final double TUTORIAL_SAFE_Y_THRESHOLD = 118.0D;
+    private static final String TUTORIAL_COMPLETE_EVENT = "tutorial_complete";
 
     private final JavaPlugin plugin;
     private final NPCManager npcManager;
@@ -53,51 +56,90 @@ public class NearbyNPCListener implements Listener {
     private final RuleEventBridge ruleEvents;
     private final StoryManager storyManager;
     private final PlayerSessionManager sessions;
+    private final TutorialManager tutorialManager;
     private final Map<String, Long> proximityCooldown = new ConcurrentHashMap<>();
     private final Map<UUID, Long> interactCooldown = new ConcurrentHashMap<>();
     private final Map<String, Long> npcQuestCooldown = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> tutorialCheckpointCooldown = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> nearIntentCooldown = new ConcurrentHashMap<>();
+    private final Map<UUID, BukkitTask> pendingNearIntents = new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, Boolean> tutorialCompletionEmitted = new ConcurrentHashMap<>();
 
-    public NearbyNPCListener(JavaPlugin plugin, NPCManager npcManager, IntentRouter router, RuleEventBridge ruleEvents, PlayerSessionManager sessions) {
+    public NearbyNPCListener(JavaPlugin plugin, NPCManager npcManager, IntentRouter router, RuleEventBridge ruleEvents,
+            PlayerSessionManager sessions) {
         this.plugin = plugin;
         this.npcManager = npcManager;
         this.router = router;
         this.ruleEvents = ruleEvents;
         this.storyManager = plugin instanceof DriftPlugin drift ? drift.getStoryManager() : null;
         this.sessions = sessions;
+        this.tutorialManager = plugin instanceof DriftPlugin drift ? drift.getTutorialManager() : null;
     }
 
     @EventHandler
     public void onMove(PlayerMoveEvent event) {
 
         Player p = event.getPlayer();
+        if (p == null) {
+            return;
+        }
+
+        UUID playerId = p.getUniqueId();
+
+        if (shouldIgnoreTutorialListener(p)) {
+            cancelPendingNearIntent(playerId);
+            return;
+        }
+
+        boolean tutorialMovement = isTutorialMovement(p);
+        if (tutorialMovement) {
+            cancelPendingNearIntent(playerId);
+        }
+
+        String levelId = resolveCurrentLevel(p);
+        boolean flagshipTutorial = LevelIds.isFlagshipTutorial(levelId);
+        boolean tutorialCompleted = sessions != null && sessions.hasCompletedTutorial(p);
 
         for (Entity entity : npcManager.getSpawnedNPCs()) {
 
-            if (entity == null) continue;
-            if (!entity.isValid()) continue;
+            if (entity == null)
+                continue;
+            if (!entity.isValid())
+                continue;
 
             Location loc = entity.getLocation();
-            if (loc.getWorld() != p.getWorld()) continue;
+            if (loc.getWorld() != p.getWorld())
+                continue;
 
             // 距离判断
             if (loc.distance(p.getLocation()) < 3) {
 
                 String name = entity.getCustomName();
-                if (name == null) name = "未知NPC";
+                if (name == null)
+                    name = "未知NPC";
 
-                boolean notify = shouldNotifyProximity(p.getUniqueId(), entity.getUniqueId());
+                String npcId = extractNpcId(entity);
+                boolean tutorialGuide = isTutorialGuide(entity, name, npcId);
+
+                if (tutorialGuide && hasFinishedTutorial(p)) {
+                    continue;
+                }
+
+                boolean notify = shouldNotifyProximity(playerId, entity.getUniqueId());
                 if (notify) {
                     p.sendMessage(ChatColor.LIGHT_PURPLE + "你靠近了 " + name + "。");
                     if (ruleEvents != null) {
                         ruleEvents.emitNearNpc(p, name, entity.getLocation());
                     }
-                    router.handlePlayerSpeak(p, "我靠近了 " + name);
+                    if (!tutorialMovement && !shouldSuppressNearIntent(p)) {
+                        scheduleNearIntent(p, entity, name);
+                    }
                 }
             }
         }
 
-        maybeTriggerTutorialCheckpoint(p);
+        if (tutorialMovement) {
+            return;
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -107,7 +149,7 @@ public class NearbyNPCListener implements Listener {
         }
         plugin.getLogger().log(Level.INFO,
                 "[NearbyNPCListener] PlayerInteractEntityEvent: {0} -> {1}",
-                new Object[]{event.getPlayer().getName(), event.getRightClicked().getType()});
+                new Object[] { event.getPlayer().getName(), event.getRightClicked().getType() });
         if (handleNpcInteraction(event.getPlayer(), event.getRightClicked())) {
             event.setCancelled(true);
         }
@@ -120,7 +162,7 @@ public class NearbyNPCListener implements Listener {
         }
         plugin.getLogger().log(Level.INFO,
                 "[NearbyNPCListener] PlayerInteractAtEntityEvent: {0} -> {1}",
-                new Object[]{event.getPlayer().getName(), event.getRightClicked().getType()});
+                new Object[] { event.getPlayer().getName(), event.getRightClicked().getType() });
         if (handleNpcInteraction(event.getPlayer(), event.getRightClicked())) {
             event.setCancelled(true);
         }
@@ -137,44 +179,99 @@ public class NearbyNPCListener implements Listener {
         return true;
     }
 
-    private void maybeTriggerTutorialCheckpoint(Player player) {
-        if (player == null || ruleEvents == null) {
+    private void scheduleNearIntent(Player player, Entity entity, String displayName) {
+        if (router == null || player == null) {
             return;
         }
 
-        Location location = player.getLocation();
-        if (!isFlagshipTutorialLevel(player)) {
+        if (shouldIgnoreTutorialListener(player)) {
+            cancelPendingNearIntent(player.getUniqueId());
             return;
         }
 
-        if (sessions != null && sessions.hasCompletedTutorial(player)) {
+        if (isTutorialMovement(player)) {
+            cancelPendingNearIntent(player.getUniqueId());
             return;
         }
 
-        if (!isInTutorialWorld(location)) {
-            return;
+        UUID playerId = player.getUniqueId();
+        BukkitTask existing = pendingNearIntents.remove(playerId);
+        if (existing != null) {
+            existing.cancel();
         }
 
-        if (!isInsideTutorialCheckpoint(location)) {
-            return;
-        }
+        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            pendingNearIntents.remove(playerId);
 
-        if (!consumeTutorialCheckpoint(player.getUniqueId())) {
-            return;
-        }
+            if (!consumeNearIntent(playerId)) {
+                return;
+            }
 
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("source", "trigger_zone");
-        payload.put("zone", "tutorial_checkpoint");
-        String levelId = resolveCurrentLevel(player);
-        if (!levelId.isBlank()) {
-            payload.put("level_id", levelId);
+            Player current = Bukkit.getPlayer(playerId);
+            if (current == null || !current.isOnline()) {
+                return;
+            }
+
+            if (shouldSuppressNearIntent(current)) {
+                return;
+            }
+
+            if (entity != null && entity.isValid()) {
+                Location playerLoc = current.getLocation();
+                Location entityLoc = entity.getLocation();
+                if (entityLoc.getWorld() != playerLoc.getWorld()) {
+                    return;
+                }
+                if (entityLoc.distanceSquared(playerLoc) > 9.0D) {
+                    return;
+                }
+            }
+
+            router.handlePlayerSpeak(current, "我靠近了 " + displayName);
+
+        }, NEAR_INTENT_DEBOUNCE_TICKS);
+
+        pendingNearIntents.put(playerId, task);
+    }
+
+    private void cancelPendingNearIntent(UUID playerId) {
+        BukkitTask pending = pendingNearIntents.remove(playerId);
+        if (pending != null) {
+            pending.cancel();
         }
-        appendLocation(payload, location);
-        ruleEvents.emit(player, TUTORIAL_REACH_CHECKPOINT_EVENT, payload);
-        plugin.getLogger().log(Level.INFO,
-                "[NearbyNPCListener] emit tutorial_reach_checkpoint for {0}",
-                new Object[]{player.getName()});
+    }
+
+    private boolean consumeNearIntent(UUID playerId) {
+        long now = System.currentTimeMillis();
+        Long last = nearIntentCooldown.get(playerId);
+        if (last != null && now - last < NEAR_INTENT_COOLDOWN_MS) {
+            return false;
+        }
+        nearIntentCooldown.put(playerId, now);
+        return true;
+    }
+
+    private boolean shouldSuppressNearIntent(Player player) {
+        if (player == null) {
+            return false;
+        }
+        if (sessions != null && sessions.isTutorial(player)) {
+            return true;
+        }
+        if (sessions == null) {
+            return false;
+        }
+        if (sessions.hasCompletedTutorial(player)) {
+            return false;
+        }
+        return isFlagshipTutorialLevel(player);
+    }
+
+    private boolean isTutorialMovement(Player player) {
+        if (player == null) {
+            return false;
+        }
+        return sessions != null && sessions.isTutorial(player);
     }
 
     private boolean isInTutorialWorld(Location location) {
@@ -189,23 +286,6 @@ public class NearbyNPCListener implements Listener {
             return true;
         }
         return worldName.toLowerCase(Locale.ROOT).contains("tutorial");
-    }
-
-    private boolean isInsideTutorialCheckpoint(Location location) {
-        if (location == null) {
-            return false;
-        }
-        return location.getY() < TUTORIAL_SAFE_Y_THRESHOLD;
-    }
-
-    private boolean consumeTutorialCheckpoint(UUID playerId) {
-        long now = System.currentTimeMillis();
-        Long last = tutorialCheckpointCooldown.get(playerId);
-        if (last != null && now - last < TUTORIAL_CHECKPOINT_COOLDOWN_MS) {
-            return false;
-        }
-        tutorialCheckpointCooldown.put(playerId, now);
-        return true;
     }
 
     private boolean tryConsumeInteract(UUID playerId) {
@@ -226,7 +306,8 @@ public class NearbyNPCListener implements Listener {
             return false;
         }
 
-        if (!tryConsumeInteract(player.getUniqueId())) {
+        UUID playerId = player.getUniqueId();
+        if (!tryConsumeInteract(playerId)) {
             return true;
         }
 
@@ -237,38 +318,47 @@ public class NearbyNPCListener implements Listener {
 
         plugin.getLogger().log(Level.INFO,
                 "[NearbyNPCListener] Handling interaction: player={0}, entity={1}, type={2}",
-                new Object[]{player.getName(), displayName, target.getType()});
-
-        player.sendMessage(ChatColor.LIGHT_PURPLE + "你与【" + displayName + "】交谈。");
-        player.sendActionBar(Component.text("你与【" + displayName + "】交谈", NamedTextColor.LIGHT_PURPLE));
+                new Object[] { player.getName(), displayName, target.getType() });
 
         String npcId = extractNpcId(target);
         String levelId = resolveCurrentLevel(player);
         boolean flagshipTutorial = LevelIds.isFlagshipTutorial(levelId);
         boolean tutorialGuide = isTutorialGuide(target, displayName, npcId);
         boolean tutorialCompleted = sessions != null && sessions.hasCompletedTutorial(player);
+        boolean awaitingFinalize = tutorialCompletionEmitted.containsKey(playerId)
+                || (tutorialManager != null && tutorialManager.hasCompletionEmitted(player));
+        boolean suppressIntent = (tutorialCompleted || awaitingFinalize) && (tutorialGuide || flagshipTutorial);
+        boolean emittedCompletion = false;
+
+        if (tutorialCompleted && (tutorialGuide || flagshipTutorial)) {
+            if (tutorialGuide) {
+                player.sendMessage(ChatColor.GRAY + "你已经完成教程，心悦向导在主线入口等待你。");
+            }
+            return true;
+        }
+
+        if (tutorialGuide && flagshipTutorial && !tutorialCompleted) {
+            if (awaitingFinalize) {
+                player.sendMessage(ChatColor.LIGHT_PURPLE + "你与【" + displayName + "】交谈。");
+                player.sendActionBar(Component.text("你与【" + displayName + "】交谈", NamedTextColor.LIGHT_PURPLE));
+                return true;
+            }
+            emittedCompletion = tryEmitTutorialComplete(player, target, levelId);
+            if (emittedCompletion) {
+                cancelPendingNearIntent(playerId);
+                player.sendMessage(ChatColor.LIGHT_PURPLE + "你与【" + displayName + "】交谈。");
+                player.sendActionBar(Component.text("你与【" + displayName + "】交谈", NamedTextColor.LIGHT_PURPLE));
+                return true;
+            }
+        }
+
+        player.sendMessage(ChatColor.LIGHT_PURPLE + "你与【" + displayName + "】交谈。");
+        player.sendActionBar(Component.text("你与【" + displayName + "】交谈", NamedTextColor.LIGHT_PURPLE));
 
         if (ruleEvents != null) {
-            ruleEvents.emitInteractEntity(player, target, "right_click");
+            if (!(tutorialGuide && flagshipTutorial)) {
+                ruleEvents.emitInteractEntity(player, target, "right_click");
 
-            if (tutorialGuide && flagshipTutorial) {
-                if (tutorialCompleted) {
-                    player.sendMessage(ChatColor.GRAY + "你已经完成教程，心悦向导在主线入口等待你。");
-                    return true;
-                }
-                Map<String, Object> payload = new LinkedHashMap<>();
-                payload.put("source", "npc_interact");
-                payload.put("npc", TUTORIAL_GUIDE_NAME);
-                if (!levelId.isBlank()) {
-                    payload.put("level_id", levelId);
-                }
-                appendLocation(payload, target.getLocation());
-                plugin.getLogger().log(Level.INFO,
-                        "[NearbyNPCListener] FORCE emit tutorial_meet_guide for {0}",
-                        new Object[]{player.getName()});
-                ruleEvents.emit(player, TUTORIAL_MEET_GUIDE_EVENT, payload);
-                player.sendMessage(ChatColor.GOLD + "触发事件: " + TUTORIAL_MEET_GUIDE_EVENT);
-            } else {
                 String questEvent = npcManager.lookupQuestEvent(target);
                 if (questEvent.isBlank() && !npcId.isBlank()) {
                     questEvent = npcManager.lookupQuestEvent(npcId);
@@ -293,24 +383,87 @@ public class NearbyNPCListener implements Listener {
                     player.sendMessage(ChatColor.GOLD + "触发事件: " + eventType);
                     plugin.getLogger().log(Level.INFO,
                             "[NearbyNPCListener] Emitted event {0} for player {1} (npc={2})",
-                            new Object[]{eventType, player.getName(), canonicalNpcName});
+                            new Object[] { eventType, player.getName(), canonicalNpcName });
                 } else {
                     plugin.getLogger().log(Level.INFO,
                             "[NearbyNPCListener] Interaction throttled or unresolved: player={0}, npc={1}, event={2}",
-                            new Object[]{player.getName(), npcId.isBlank() ? displayName : npcId, eventType});
+                            new Object[] { player.getName(), npcId.isBlank() ? displayName : npcId, eventType });
                 }
             }
         }
 
-        if (router != null) {
+        if (router != null && !suppressIntent && !emittedCompletion) {
             router.handlePlayerSpeak(player, "我与 " + displayName + " 互动");
         }
 
         return true;
     }
 
-    // player_like NPCs now spawn as HumanEntity with metadata instead of ArmorStand, so
-    // we must pull the canonical npc_id to ensure quest events fire regardless of display name.
+    // player_like NPCs now spawn as HumanEntity with metadata instead of
+    // ArmorStand, so
+    // we must pull the canonical npc_id to ensure quest events fire regardless of
+    // display name.
+
+    private boolean hasFinishedTutorial(Player player) {
+        if (player == null || sessions == null) {
+            return false;
+        }
+        return sessions.hasCompletedTutorial(player);
+    }
+
+    private boolean shouldIgnoreTutorialListener(Player player) {
+        if (player == null) {
+            return false;
+        }
+        if (tutorialCompletionEmitted.containsKey(player.getUniqueId())
+                || (tutorialManager != null && tutorialManager.hasCompletionEmitted(player))) {
+            return true;
+        }
+        if (!hasFinishedTutorial(player)) {
+            return false;
+        }
+        Location location = player.getLocation();
+        if (isInTutorialWorld(location)) {
+            return true;
+        }
+        return isFlagshipTutorialLevel(player);
+    }
+
+    private boolean tryEmitTutorialComplete(Player player, Entity entity, String levelId) {
+        if (player == null || ruleEvents == null || sessions == null) {
+            return false;
+        }
+        if (!LevelIds.isFlagshipTutorial(levelId)) {
+            return false;
+        }
+        if (sessions.hasCompletedTutorial(player)) {
+            return false;
+        }
+        UUID playerId = player.getUniqueId();
+        if (tutorialManager != null && tutorialManager.hasCompletionEmitted(player)) {
+            tutorialCompletionEmitted.putIfAbsent(playerId, Boolean.TRUE);
+            return false;
+        }
+        if (tutorialCompletionEmitted.putIfAbsent(playerId, Boolean.TRUE) != null) {
+            return false;
+        }
+
+        if (tutorialManager != null) {
+            tutorialManager.markCompletionEmitted(player);
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("source", "tutorial_finalize");
+        payload.put("npc", TUTORIAL_GUIDE_NAME);
+        if (!levelId.isBlank()) {
+            payload.put("level_id", levelId);
+        }
+
+        Location location = entity != null ? entity.getLocation() : player.getLocation();
+        ruleEvents.emitQuestEvent(player, TUTORIAL_COMPLETE_EVENT, location, payload);
+        return true;
+    }
+
     private String extractNpcId(Entity entity) {
         if (entity.hasMetadata(NPC_ID_META)) {
             for (MetadataValue value : entity.getMetadata(NPC_ID_META)) {

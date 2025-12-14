@@ -34,7 +34,18 @@ final class SceneSession {
     static SceneSession create(Player player,
                                Map<String, Object> metadata,
                                Map<String, Object> operations) {
-        String sceneId = metadata != null ? (String) metadata.getOrDefault("beat_id", "scene") : "scene";
+        String sceneId = "scene";
+        if (metadata != null) {
+            Object levelId = metadata.get("level_id");
+            if (levelId instanceof String s && !s.isBlank()) {
+                sceneId = s;
+            } else {
+                Object sceneIdAlt = metadata.get("scene_id");
+                if (sceneIdAlt instanceof String s2 && !s2.isBlank()) {
+                    sceneId = s2;
+                }
+            }
+        }
         double radius = metadata != null && metadata.get("radius") instanceof Number num
                 ? num.doubleValue()
                 : 6.0d;

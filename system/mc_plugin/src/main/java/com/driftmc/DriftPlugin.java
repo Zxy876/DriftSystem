@@ -40,6 +40,7 @@ import com.driftmc.intent2.IntentRouter2;
 import com.driftmc.listeners.NearbyNPCListener;
 import com.driftmc.listeners.PlayerChatListener;
 import com.driftmc.listeners.PlayerJoinListener;
+import com.driftmc.listeners.TutorialSafetyListener;
 import com.driftmc.npc.NPCManager;
 import com.driftmc.scene.RuleEventBridge;
 import com.driftmc.scene.RuleEventListener;
@@ -98,15 +99,21 @@ public class DriftPlugin extends JavaPlugin {
         this.tutorialManager = new TutorialManager(this, backend, sessionManager);
         this.npcManager = new NPCManager(this);
         this.worldPatcher = new SceneAwareWorldPatchExecutor(this, npcManager);
+        this.worldPatcher.attachTutorialStateMachine(tutorialManager.getStateMachine());
+        this.worldPatcher.attachTutorialManager(tutorialManager);
         this.cinematicController = new CinematicController(this, worldPatcher);
         this.worldPatcher.attachCinematicController(cinematicController);
+        this.tutorialManager.attachWorldPatcher(worldPatcher);
+        this.tutorialManager.attachSceneLoader(worldPatcher.getSceneLoader());
         this.dslRegistry = DslRegistry.createDefault(worldPatcher, npcManager, backend);
         this.dslExecutor = new DslExecutor(dslRegistry);
         this.intentRouter = new IntentRouter(this, backend, dslExecutor, npcManager, worldPatcher, sessionManager);
         this.questLogHud = new QuestLogHud(this, backend);
         this.choicePanel = new ChoicePanel(this);
         this.dialoguePanel = new DialoguePanel(this, choicePanel);
-        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher, questLogHud, dialoguePanel, choicePanel, sessionManager);
+        this.ruleEventBridge = new RuleEventBridge(this, backend, worldPatcher, questLogHud, dialoguePanel, choicePanel,
+                sessionManager, tutorialManager);
+        this.tutorialManager.attachRuleEventBridge(ruleEventBridge);
         this.choicePanel.setRuleEventBridge(ruleEventBridge);
         this.recommendationHud = new RecommendationHud(this, backend, storyManager);
 
@@ -121,13 +128,14 @@ public class DriftPlugin extends JavaPlugin {
 
         // 注册聊天监听器（核心：自然语言驱动）
         Bukkit.getPluginManager().registerEvents(
-            new PlayerChatListener(this, intentRouter2, intentDispatcher2, tutorialManager, ruleEventBridge, exitIntentDetector, choicePanel),
-            this);
+                new PlayerChatListener(this, intentRouter2, intentDispatcher2, tutorialManager, ruleEventBridge,
+                        exitIntentDetector, choicePanel),
+                this);
 
         // 注册玩家加入/离开监听器（教学系统）
         Bukkit.getPluginManager().registerEvents(
-            new PlayerJoinListener(this, tutorialManager),
-            this);
+                new PlayerJoinListener(this, tutorialManager),
+                this);
 
         // 注册剧情创造管理器监听器
         Bukkit.getPluginManager().registerEvents(storyCreativeManager, this);
@@ -139,18 +147,22 @@ public class DriftPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(npcManager, this);
 
         // 注册 NPC 临近监听（触发老版 IntentRouter）
-        Bukkit.getPluginManager().registerEvents(new NearbyNPCListener(this, npcManager, intentRouter, ruleEventBridge, sessionManager), this);
+        Bukkit.getPluginManager().registerEvents(
+                new NearbyNPCListener(this, npcManager, intentRouter, ruleEventBridge, sessionManager), this);
+
+        // 注册教学安全守护（教程模式专用）
+        Bukkit.getPluginManager().registerEvents(new TutorialSafetyListener(this, worldPatcher.getSceneLoader()), this);
 
         // 注册命令
         registerCommand("drift", new DriftCommand(backend, storyManager, worldPatcher, tutorialManager));
         registerCommand("storycreative", new StoryCreativeCommand(this, storyCreativeManager, storyManager));
         registerCommand("minimap", new MiniMapCommand(this, url));
         registerCommand("talk", new TalkCommand(intentRouter));
-        registerCommand("saytoai", new SayToAICommand(backend, intentRouter, worldPatcher, sessionManager));
-        registerCommand("advance", new AdvanceCommand(backend, intentRouter, worldPatcher, sessionManager));
-        registerCommand("storynext", new CmdStoryNext(backend, intentRouter, worldPatcher, sessionManager));
+        registerCommand("saytoai", new SayToAICommand(this, backend, intentRouter, worldPatcher, sessionManager));
+        registerCommand("advance", new AdvanceCommand(this, backend, intentRouter, worldPatcher, sessionManager));
+        registerCommand("storynext", new CmdStoryNext(this, backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("heartmenu", new HeartMenuCommand(backend, intentRouter, worldPatcher, sessionManager));
-        registerCommand("level", new LevelCommand(backend, intentRouter, worldPatcher, sessionManager));
+        registerCommand("level", new LevelCommand(this, backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("levels", new LevelsCommand(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("npc", new NpcMasterCommand(npcManager));
         registerCommand("tp2", new CmdTeleport(backend, intentRouter, worldPatcher, sessionManager));

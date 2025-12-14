@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.logging.Level;
 
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -15,19 +16,29 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.cinematic.CinematicController;
 import com.driftmc.npc.NPCManager;
+import com.driftmc.story.LevelIds;
+import com.driftmc.tutorial.TutorialManager;
+import com.driftmc.tutorial.TutorialState;
+import com.driftmc.tutorial.TutorialStateMachine;
 import com.driftmc.world.WorldPatchExecutor;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 /**
- * Wrapper over {@link WorldPatchExecutor} that inspects scene metadata before executing patches.
+ * Wrapper over {@link WorldPatchExecutor} that inspects scene metadata before
+ * executing patches.
  */
 public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
 
     private final SceneLoader sceneLoader;
     private final NPCManager npcManager;
     private Map<String, Object> currentRawOperations;
+    private TutorialStateMachine tutorialStateMachine;
+    private TutorialManager tutorialManager;
+
+    private static final String TUTORIAL_LEVEL_ID = "flagship_tutorial";
+    private static final String PRIMARY_LEVEL_ID = "flagship_03";
 
     public SceneAwareWorldPatchExecutor(JavaPlugin plugin, NPCManager npcManager) {
         super(plugin);
@@ -54,6 +65,14 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
         super.execute(player, patch);
     }
 
+    public void attachTutorialStateMachine(TutorialStateMachine stateMachine) {
+        this.tutorialStateMachine = stateMachine;
+    }
+
+    public void attachTutorialManager(TutorialManager manager) {
+        this.tutorialManager = manager;
+    }
+
     @Override
     public void shutdown() {
         super.shutdown();
@@ -69,8 +88,8 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
     }
 
     private void maybeInjectFeaturedNpc(Map<String, Object> metadata,
-                                        Map<String, Object> operationsView,
-                                        Map<String, Object> rawOperations) {
+            Map<String, Object> operationsView,
+            Map<String, Object> rawOperations) {
         String featuredNpc = cleanString(metadata.get("featured_npc"));
         if (featuredNpc.isEmpty()) {
             return;
@@ -136,8 +155,8 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
     }
 
     private Map<String, Object> buildSpawnDirective(Map<String, Object> metadata,
-                                                    Map<String, Object> skinDefinition,
-                                                    String npcName) {
+            Map<String, Object> skinDefinition,
+            String npcName) {
         Map<String, Object> spawn = new LinkedHashMap<>();
         String type = cleanString(skinDefinition.get("type"));
         if (type.isEmpty()) {
@@ -296,8 +315,8 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
     }
 
     private void ensureNpcTriggerEvents(Map<String, Object> metadata,
-                                        Map<String, Object> operationsView,
-                                        Map<String, Object> rawOperations) {
+            Map<String, Object> operationsView,
+            Map<String, Object> rawOperations) {
         if (rawOperations.containsKey("npc_trigger_events")) {
             return;
         }
@@ -385,23 +404,82 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
         Map<String, Object> rawOperations = (Map<String, Object>) rawCandidate;
 
         boolean sceneHandled = false;
+        boolean tutorialExited = hasExitedTutorial(player);
 
         Object cleanup = operations.get("_scene_cleanup");
         if (cleanup instanceof Map<?, ?> cleanupMap) {
-            sceneLoader.handleSceneCleanup(player, filterStringKeys(cleanupMap));
+            Map<String, Object> cleanupMetadata = filterStringKeys(cleanupMap);
+            if (tutorialExited && isTutorialScene(cleanupMetadata)) {
+                JavaPlugin plugin = getPlugin();
+                if (plugin != null) {
+                    String playerName = player != null ? player.getName() : "<unknown>";
+                    plugin.getLogger().log(Level.FINE,
+                            "[SceneGate] ignore tutorial cleanup for completed player={0}",
+                            playerName);
+                }
+            } else {
+                sceneLoader.handleSceneCleanup(player, cleanupMetadata);
+            }
         }
 
         Object scene = operations.get("_scene");
+        Map<String, Object> sceneMetadata = null;
         if (scene instanceof Map<?, ?> sceneMap) {
-            Map<String, Object> sceneMetadata = filterStringKeys(sceneMap);
-            Map<String, Object> previousRawOps = currentRawOperations;
-            currentRawOperations = rawOperations;
-            try {
-                sceneLoader.handleScenePatch(player, sceneMetadata, operations);
-            } finally {
-                currentRawOperations = previousRawOps;
+            sceneMetadata = filterStringKeys(sceneMap);
+        }
+
+        if (sceneMetadata != null) {
+            String levelId = cleanString(sceneMetadata.get("level_id"));
+            if (tutorialExited && LevelIds.isFlagshipTutorial(levelId)) {
+                sceneMetadata.put("level_id", PRIMARY_LEVEL_ID);
+                sceneMetadata.put("scene_id", PRIMARY_LEVEL_ID);
+                levelId = PRIMARY_LEVEL_ID;
             }
-            sceneHandled = true;
+
+            if (tutorialExited && isTutorialScene(sceneMetadata)) {
+                JavaPlugin plugin = getPlugin();
+                if (plugin != null) {
+                    String playerName = player != null ? player.getName() : "<unknown>";
+                    plugin.getLogger().log(Level.INFO,
+                            "[SceneGate] suppress tutorial scene after completion for player={0}",
+                            playerName);
+                }
+                sceneHandled = true;
+            } else {
+                String previousLevelId = sceneLoader.getActiveSceneId(player);
+                boolean sameScene = !levelId.isEmpty() && previousLevelId != null
+                        && previousLevelId.equalsIgnoreCase(levelId);
+                boolean shouldApplyScene = levelId.isEmpty() || !sceneLoader.isPlayerInScene(player, levelId);
+                if (shouldApplyScene) {
+                    JavaPlugin plugin = getPlugin();
+                    if (plugin != null) {
+                        String playerName = player != null ? player.getName() : "<unknown>";
+                        String fromId = previousLevelId == null || previousLevelId.isBlank() ? "<none>"
+                                : previousLevelId;
+                        String toId = levelId.isEmpty() ? "<unknown>" : levelId;
+                        plugin.getLogger().log(Level.INFO,
+                                "[SceneGate] transition scene; from={0} to={1} player={2}",
+                                new Object[] { fromId, toId, playerName });
+                    }
+
+                    Map<String, Object> previousRawOps = currentRawOperations;
+                    currentRawOperations = rawOperations;
+                    try {
+                        sceneLoader.handleScenePatch(player, sceneMetadata, operations);
+                    } finally {
+                        currentRawOperations = previousRawOps;
+                    }
+                    sceneHandled = true;
+                } else if (sameScene) {
+                    JavaPlugin plugin = getPlugin();
+                    if (plugin != null) {
+                        String playerName = player != null ? player.getName() : "<unknown>";
+                        plugin.getLogger().log(Level.INFO,
+                                "[SceneGate] skip scene patch; same level_id={0} player={1}",
+                                new Object[] { previousLevelId, playerName });
+                    }
+                }
+            }
         }
 
         Object cinematic = operations.get("_cinematic");
@@ -438,36 +516,70 @@ public final class SceneAwareWorldPatchExecutor extends WorldPatchExecutor {
         this.sceneLoader.setCinematicController(controller);
     }
 
+    public SceneLoader getSceneLoader() {
+        return sceneLoader;
+    }
+
+    private boolean hasExitedTutorial(Player player) {
+        if (player == null) {
+            return false;
+        }
+        if (tutorialManager != null) {
+            return tutorialManager.hasExitedTutorial(player);
+        }
+        if (tutorialStateMachine == null) {
+            return false;
+        }
+        return tutorialStateMachine.getState(player) == TutorialState.COMPLETE;
+    }
+
+    private boolean isTutorialScene(Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return false;
+        }
+        String levelId = cleanString(metadata.get("level_id"));
+        if (levelId.isEmpty()) {
+            levelId = cleanString(metadata.get("scene_id"));
+        }
+        return !levelId.isEmpty() && levelId.equalsIgnoreCase(TUTORIAL_LEVEL_ID);
+    }
+
     @Override
     protected void afterSpawn(Player player, Map<String, Object> spawnSpec, Entity entity) {
         super.afterSpawn(player, spawnSpec, entity);
         if (spawnSpec == null || entity == null) {
             return;
         }
-        if (!Boolean.TRUE.equals(spawnSpec.get("_auto_featured"))) {
+        Object npcIdRaw = spawnSpec.get("npc_id");
+        Object npcNameRaw = spawnSpec.get("name");
+        if (npcIdRaw == null && npcNameRaw == null) {
             return;
         }
+
         if (!(entity instanceof LivingEntity living)) {
             return;
         }
 
-        String npcName = cleanString(spawnSpec.get("name"));
-        if (npcName.isEmpty()) {
+        String npcId = cleanString(npcIdRaw);
+        String declaredName = cleanString(npcNameRaw);
+
+        if (declaredName.isEmpty()) {
             Component customName = living.customName();
             if (customName != null) {
-                npcName = cleanString(PlainTextComponentSerializer.plainText().serialize(customName));
+                declaredName = cleanString(PlainTextComponentSerializer.plainText().serialize(customName));
             }
         }
 
-        String npcId = cleanString(spawnSpec.get("id"));
+        if (declaredName.isEmpty() && !npcId.isEmpty()) {
+            declaredName = npcId;
+        }
+
+        living.addScoreboardTag("drift:npc");
         if (!npcId.isEmpty()) {
             living.addScoreboardTag("npc_id:" + npcId);
             living.setMetadata("npc_id", new FixedMetadataValue(getPlugin(), npcId));
-            if (npcName.isEmpty()) {
-                npcName = npcId;
-            }
         }
 
-        npcManager.registerAutoFeaturedNpc(living, npcName);
+        npcManager.registerAutoFeaturedNpc(living, declaredName);
     }
 }

@@ -345,19 +345,11 @@ class QuestRuntimeRuleEventTests(unittest.TestCase):
                 "payload": {"quest_event": "tutorial_meet_guide"},
             },
         )
-        self.runtime.handle_rule_trigger(
-            self.player,
-            {
-                "event_type": "quest_event",
-                "payload": {"quest_event": "tutorial_reach_checkpoint"},
-            },
-        )
-
         completion = self.runtime.handle_rule_trigger(
             self.player,
             {
-                "event_type": "chat",
-                "payload": {"text": "完成教程"},
+                "event_type": "quest_event",
+                "payload": {"quest_event": "tutorial_complete"},
             },
         )
 
@@ -368,17 +360,36 @@ class QuestRuntimeRuleEventTests(unittest.TestCase):
             completion.get("milestones", []),
             "Tutorial milestone should be emitted exactly once",
         )
+        self.assertTrue(
+            completion.get("tutorial_completed"),
+            "Tutorial completion flag should be set",
+        )
+        self.assertEqual(
+            completion.get("next_level"),
+            "flagship_03",
+            "Tutorial completion should nominate flagship_03 as the next level",
+        )
         self.assertEqual(
             completion.get("world_patch"),
             exit_patch,
             "Tutorial exit patch should be forwarded to the caller",
         )
+        level_exit = completion.get("level_exit") or {}
+        self.assertEqual(
+            level_exit.get("next_level"),
+            "flagship_03",
+            "Level exit payload should target flagship_03",
+        )
+        self.assertTrue(
+            level_exit.get("auto"),
+            "Level exit signal should request automatic transition",
+        )
 
         repeat = self.runtime.handle_rule_trigger(
             self.player,
             {
-                "event_type": "chat",
-                "payload": {"text": "再次触发"},
+                "event_type": "quest_event",
+                "payload": {"quest_event": "tutorial_complete"},
             },
         )
         milestones = repeat.get("milestones") if isinstance(repeat, dict) else []
