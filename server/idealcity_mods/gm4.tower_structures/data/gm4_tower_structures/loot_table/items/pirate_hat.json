@@ -1,0 +1,39 @@
+{
+    "pools": [
+        {
+            "rolls": 1,
+            "entries": [
+                {
+                    "type": "minecraft:item",
+                    "name": "minecraft:leather_helmet",
+                    "functions": [
+                        {
+                            "function": "minecraft:set_count",
+                            "count": 1
+                        },
+                        {
+                            "function": "minecraft:set_components",
+                            "components": {
+                                "minecraft:dyed_color": 4013373,
+                                "minecraft:tooltip_display": {
+                                  "hidden_components": [
+                                    "minecraft:dyed_color"
+                                  ]
+                                },
+                                "minecraft:custom_model_data": "item/pirate_hat"
+                            }
+                        },
+                        {
+                            "function": "minecraft:set_name",
+                            "name": {
+                                "translate": "item.gm4.tower_structures.pirate_hat",
+                                "fallback": "Pirate Hat",
+                                "italic": false
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

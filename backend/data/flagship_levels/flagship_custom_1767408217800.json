@@ -1,0 +1,90 @@
+{
+  "id": "flagship_custom_1767408217800",
+  "title": "档案官请求调用 gm4:",
+  "text": [
+    "档案官请求调用 gm4:balloon_animals 模组，在熄灯区入口部署庆典气球，确保夜间导引游客且不破坏道路。 约束： - 不得破坏现有道路 - 遵守熄灯区噪音限制 步骤： 1. 确认入口区域安全并设置警戒 2. 执行 gm4:balloon_animals:init 指令部署气球动物 成功标准： - 入口处布满气球动物装饰 - 居民反馈正向"
+  ],
+  "tags": [],
+  "mood": {
+    "base": "calm",
+    "intensity": 0.5
+  },
+  "choices": [],
+  "meta": {},
+  "npcs": [],
+  "bootstrap_patch": {
+    "variables": {
+      "story_world_generated": true,
+      "story_title": "档案官请求调用 gm4:"
+    },
+    "mc": {
+      "tell": "§6档案官请求调用 gm4:§r\n档案官请求调用 gm4:balloon_animals 模组，在熄灯区入口部署庆典气球，确保夜间导引游客且不破坏道路。 约束： - 不得破坏现有道路 - 遵守熄灯区噪音限制 步骤： 1. 确认入口区域安全并设置警戒 2. 执行 gm4:balloon_animals:init 指令部署气球动物 成功标准： - 入口处布满气球动物装饰 - 居民反馈正向",
+      "spawn": {
+        "x": 0,
+        "y": 70,
+        "z": 0
+      },
+      "time": "night",
+      "weather": "clear",
+      "spawns": [
+        {
+          "type": "villager",
+          "name": "档案官",
+          "x": 2,
+          "y": 70,
+          "z": -5,
+          "dialog": "我已调用gm4:balloon_animals模组，气球动物部署完成，请遵守熄灯区噪音限制。"
+        },
+        {
+          "type": "villager",
+          "name": "居民",
+          "x": -3,
+          "y": 70,
+          "z": 3,
+          "dialog": "这些气球动物真漂亮，夜间导引效果很好！"
+        },
+        {
+          "type": "cow",
+          "name": "奶牛",
+          "x": 5,
+          "y": 70,
+          "z": -2,
+          "dialog": ""
+        }
+      ],
+      "blocks": [
+        {
+          "type": "stone",
+          "x": 0,
+          "y": 69,
+          "z": 0
+        },
+        {
+          "type": "oak_planks",
+          "x": 1,
+          "y": 70,
+          "z": 1
+        },
+        {
+          "type": "glass",
+          "x": -2,
+          "y": 71,
+          "z": 0
+        },
+        {
+          "type": "stone",
+          "x": 3,
+          "y": 69,
+          "z": -3
+        },
+        {
+          "type": "oak_planks",
+          "x": -1,
+          "y": 70,
+          "z": 2
+        }
+      ]
+    }
+  },
+  "tree": null
+}

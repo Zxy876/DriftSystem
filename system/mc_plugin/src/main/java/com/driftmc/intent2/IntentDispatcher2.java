@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.driftmc.backend.BackendClient;
+import com.driftmc.commands.IdealCityCommand;
 import com.driftmc.hud.QuestLogHud;
 import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.hud.dialogue.DialoguePanel;
@@ -42,6 +43,7 @@ public class IntentDispatcher2 {
     private DialoguePanel dialoguePanel;
     private ChoicePanel choicePanel;
     private final Set<UUID> tutorialReentryWarned = ConcurrentHashMap.newKeySet();
+    private IdealCityCommand idealCityCommand;
 
     private static final Gson GSON = new Gson();
     private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {
@@ -68,6 +70,10 @@ public class IntentDispatcher2 {
 
     public void setChoicePanel(ChoicePanel choicePanel) {
         this.choicePanel = choicePanel;
+    }
+
+    public void setIdealCityCommand(IdealCityCommand idealCityCommand) {
+        this.idealCityCommand = idealCityCommand;
     }
 
     private boolean ensureUnlocked(Player player, TutorialState required, String message) {
@@ -113,6 +119,10 @@ public class IntentDispatcher2 {
                 createStory(p, intent);
                 break;
 
+            case IDEAL_CITY_SUBMIT:
+                submitIdealCity(p, intent);
+                break;
+
             case SAY_ONLY:
             case STORY_CONTINUE:
             case UNKNOWN:
@@ -121,6 +131,22 @@ public class IntentDispatcher2 {
 
             default:
                 break;
+        }
+    }
+
+    // ============================================================
+    // 理想之城规格提交 (IDEAL_CITY_SUBMIT)
+    // ============================================================
+    private void submitIdealCity(Player player, IntentResponse2 intent) {
+        if (idealCityCommand == null) {
+            plugin.getLogger().warning("[IntentDispatcher] IdealCityCommand 未绑定，忽略自然语言提交。");
+            player.sendMessage("§c[IdealCity] 功能暂未启用，请联系管理员。");
+            return;
+        }
+
+        String narrative = intent != null ? intent.rawText : null;
+        if (!idealCityCommand.submitNarrative(player, narrative)) {
+            player.sendMessage("§c[IdealCity] 我暂时听不懂，请补充具体建造想法。");
         }
     }
 

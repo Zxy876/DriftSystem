@@ -1,0 +1,36 @@
+{
+  "id": "flagship_story_f47915a5",
+  "title": "理想之城 · 档案陈列",
+  "tags": ["ideal_city", "archive"],
+  "meta": {
+    "chapter": 25,
+    "ideal_city": true,
+    "stage": "archive",
+    "focus": "reflection"
+  },
+  "continuity": {
+    "previous": "flagship_final",
+    "next": null,
+    "emotional_vector": "reflection",
+    "arc_step": 6
+  },
+  "text": [
+    "档案馆并不只保存成功案例。有些记录标注为：‘逻辑充分，但未被采纳。’",
+    "也有档案写着：‘因世界变化而失效。’这些记录向所有人开放。"
+  ],
+  "player_prompt": "翻阅档案，理解过去提案的成功与失效原因，为下一次提交积累线索。",
+  "world_patch": {
+    "mc": {
+      "tell": "§b[档案员]§r 欢迎查阅档案。世界的记忆可以成为下一次回应的起点。",
+      "lighting_shift": "archive_glow",
+      "particle": {
+        "type": "ENCHANTMENT_TABLE",
+        "count": 12
+      }
+    },
+    "variables": {
+      "theme": "ideal_city_archive",
+      "arc_position": "epilogue"
+    }
+  }
+}

@@ -35,6 +35,7 @@ INTENT_PROMPT = """
 - BUILD_STRUCTURE
 - GOTO_LEVEL
 - GOTO_NEXT_LEVEL
+- IDEAL_CITY_SUBMIT
 - STORY_CONTINUE
 - SAY_ONLY
 
@@ -45,6 +46,7 @@ INTENT_PROMPT = """
    “写剧情”“写故事”“编故事”“创造剧情”“生成剧情”“做一个关卡”
 3. 涉及关卡数字必须解析成 level_01 / level_05 形式。
 4. 若 AI 不确定，只输出一个 { "type": "SAY_ONLY" }。
+5. 玩家描述“理想之城 / ideal city”建造设想时输出 { "type": "IDEAL_CITY_SUBMIT", "raw_text": 原话 }。
 
 严格只允许 JSON。
 """
@@ -99,9 +101,32 @@ def ai_parse_multi(text: str) -> Optional[List[Dict[str, Any]]]:
 # ============================================================
 # fallback：返回 list
 # ============================================================
+def _looks_like_ideal_city_request(raw: str) -> bool:
+    if not raw:
+        return False
+
+    lower = raw.lower()
+    topic_keywords_cn = ["理想之城", "理想城市", "理想城", "理想之都"]
+    topic_keywords_en = ["ideal city", "ideal-city", "idealcity"]
+    if any(k in raw for k in topic_keywords_cn) or any(k in lower for k in topic_keywords_en):
+        return True
+
+    action_terms = ["裁决", "提案", "提交", "建造", "建设", "规格", "方案", "设计"]
+    score = sum(term in raw for term in action_terms)
+    return score >= 2
+
+
 def fallback_intents(text: str) -> List[Dict[str, Any]]:
     raw = text.strip()
     intents = []
+
+    if _looks_like_ideal_city_request(raw):
+        intents.append({
+            "type": "IDEAL_CITY_SUBMIT",
+            "raw_text": raw,
+            "narrative": raw,
+        })
+        return intents
 
     # CREATE_STORY
     if ("剧情" in raw or "故事" in raw or "关卡" in raw) and \
@@ -141,9 +166,15 @@ def fallback_intents(text: str) -> List[Dict[str, Any]]:
 # parse_intent → 输出 { status, intents: [] }
 # ============================================================
 def parse_intent(player_id, text, world_state, story_engine):
-
-    ai_list = ai_parse_multi(text)
-    intents = ai_list if ai_list else fallback_intents(text)
+    if _looks_like_ideal_city_request(text.strip()):
+        intents = [{
+            "type": "IDEAL_CITY_SUBMIT",
+            "raw_text": text.strip(),
+            "narrative": text.strip(),
+        }]
+    else:
+        ai_list = ai_parse_multi(text)
+        intents = ai_list if ai_list else fallback_intents(text)
 
     # 修正 level 格式
     for it in intents:

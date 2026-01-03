@@ -204,7 +204,7 @@
     "npc_skins": [
       {
         "id": "园丁",
-        "skin": "skins/gardener.png"
+        "skin": "registry:gardener"
       }
     ]
   },

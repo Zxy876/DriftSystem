@@ -15,6 +15,8 @@ public enum IntentType2 {
     GOTO_LEVEL,
     GOTO_NEXT_LEVEL,
 
+    IDEAL_CITY_SUBMIT,
+
     CREATE_STORY, // 新增：创建剧情
 
     SAY_ONLY,
@@ -36,6 +38,8 @@ public enum IntentType2 {
             case "STORY_CONTINUE" -> STORY_CONTINUE;
             case "GOTO_LEVEL" -> GOTO_LEVEL;
             case "GOTO_NEXT_LEVEL" -> GOTO_NEXT_LEVEL;
+
+            case "IDEAL_CITY_SUBMIT" -> IDEAL_CITY_SUBMIT;
 
             case "CREATE_STORY" -> CREATE_STORY;
 

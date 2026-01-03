@@ -4,7 +4,16 @@ echo "=============================="
 echo "🎮 启动 DriftSystem MC 服务端"
 echo "=============================="
 
-cd "$(dirname "$0")/server"
+set -e
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$ROOT_DIR/.." && pwd)"
+SERVER_DIR="$ROOT_DIR/server"
+AUTO_BUILD_SCRIPT="$PROJECT_DIR/tools/auto_build.py"
+AUTO_BUILD_LOG="$PROJECT_DIR/logs/auto_build.log"
+AUTO_BUILD_PID="$PROJECT_DIR/auto_build.pid"
+
+cd "$SERVER_DIR"
 
 # 清理上一轮遗留的 PID 和世界锁文件，避免 SessionLock 异常
 if [ -f "server.pid" ]; then
@@ -60,5 +69,27 @@ fi
 
 echo "🚀 MC 服务器启动中..."
 echo "（按 Ctrl+C 关闭）"
+
+if [ -f "$AUTO_BUILD_PID" ]; then
+    OLD_AUTO_PID=$(cat "$AUTO_BUILD_PID" 2>/dev/null)
+    if [ -n "$OLD_AUTO_PID" ] && ps -p "$OLD_AUTO_PID" >/dev/null 2>&1; then
+        echo "⚠️ 检测到之前的 auto_build watcher (PID: $OLD_AUTO_PID)，正在停止…"
+        kill "$OLD_AUTO_PID" 2>/dev/null || true
+        sleep 1
+    fi
+    rm -f "$AUTO_BUILD_PID"
+fi
+
+if [ -f "$AUTO_BUILD_SCRIPT" ]; then
+    mkdir -p "$PROJECT_DIR/logs"
+    echo "🛠 重新启动 auto_build watcher…"
+    (
+        cd "$PROJECT_DIR"
+        python3 "$AUTO_BUILD_SCRIPT" --watch --rcon-host localhost --rcon-port 25575 --rcon-password drift_rcon_dev >> "$AUTO_BUILD_LOG" 2>&1 &
+        echo $! > "$AUTO_BUILD_PID"
+    )
+else
+    echo "⚠️ 未找到 $AUTO_BUILD_SCRIPT，跳过 auto_build watcher。"
+fi
 
 java -Xms2G -Xmx4G -jar "$JAR_FILE" nogui

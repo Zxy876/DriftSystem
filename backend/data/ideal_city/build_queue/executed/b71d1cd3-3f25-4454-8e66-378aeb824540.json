@@ -1,0 +1,25 @@
+{
+  "plan_id": "b71d1cd3-3f25-4454-8e66-378aeb824540",
+  "summary": "RCON smoke test",
+  "status": "completed",
+  "commands": [
+    "function gm4_balloon_animals:init"
+  ],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "steps": [
+    {
+      "step_id": "step-1",
+      "title": "Trigger GM4",
+      "description": "Invoke datapack init",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "origin_scenario": null,
+  "logged_at": "2026-01-03T02:07:27.908293+00:00"
+}

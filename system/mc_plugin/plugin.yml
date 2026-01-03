@@ -61,3 +61,7 @@ commands:
   sayc:
     description: 以心悦风格广播一句话
     usage: /sayc <message>
+
+  idealcity:
+    description: 提交理想之城装置规格
+    usage: /idealcity <proposal>

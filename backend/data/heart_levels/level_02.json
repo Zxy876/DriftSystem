@@ -204,7 +204,7 @@
     "npc_skins": [
       {
         "id": "图书管理员",
-        "skin": "skins/librarian.png"
+        "skin": "registry:librarian"
       }
     ]
   },

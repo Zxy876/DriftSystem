@@ -1,0 +1,39 @@
+{
+  "plan_id": "ed11580d-0140-484b-af07-62a11b137ffc",
+  "summary": "在熄灯区入口部署庆典气球动物，用于夜间导引游客，同时确保不破坏道路并遵守噪音限制。",
+  "status": "completed",
+  "commands": [
+    "function gm4_balloon_animals:init"
+  ],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "steps": [
+    {
+      "step_id": "step_1",
+      "title": "确认入口区域安全并设置警戒",
+      "description": "检查熄灯区入口区域，确保没有障碍物或安全隐患，并设置临时警戒线或标识，防止施工期间干扰交通或行人。",
+      "target_region": "熄灯区入口",
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "step_2",
+      "title": "执行 gm4:balloon_animals:init 指令部署气球动物",
+      "description": "调用 gm4:balloon_animals 模组，执行 init 指令，在确认安全的入口区域部署庆典气球动物，确保其夜间发光以导引游客。",
+      "target_region": "熄灯区入口",
+      "required_mod": "gm4:balloon_animals",
+      "dependencies": [
+        "step_1"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "gm4:balloon_animals": "档案官提供"
+  },
+  "risk_notes": [
+    "缺失具体入口坐标和警戒设置细节，需现场确认；需确保气球动物部署不产生超出熄灯区噪音限制的声响。"
+  ],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-03T02:30:46.232160+00:00"
+}

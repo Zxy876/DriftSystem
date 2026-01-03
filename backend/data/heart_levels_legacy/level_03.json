@@ -250,7 +250,7 @@
     "npc_skins": [
       {
         "id": "登山者",
-        "skin": "skins/climber_summit.png"
+        "skin": "registry:climber"
       }
     ]
   },

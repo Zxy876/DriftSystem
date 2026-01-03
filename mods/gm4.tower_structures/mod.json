@@ -1,0 +1,21 @@
+{
+  "mod_id": "gm4:tower_structures",
+  "name": "GM4 Tower Structures",
+  "version": "1.21.1",
+  "description": "Adds procedurally varied tower dungeons with loot and spawners across multiple biomes.",
+  "authors": ["Gamemode 4"],
+  "tags": ["datapack", "gm4", "structures"],
+  "assets": {
+    "schematics": [],
+    "structures": ["data"],
+    "scripts": ["data"],
+    "textures": []
+  },
+  "entry_points": {
+    "build": ["function gm4_tower_structures:init"]
+  },
+  "metadata": {
+    "license": "GPL-3.0-or-later",
+    "source": "https://github.com/Gamemode4Dev/GM4_Datapacks/tree/main/gm4_tower_structures"
+  }
+}

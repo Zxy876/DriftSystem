@@ -1,0 +1,70 @@
+{
+  "plan_id": "c3065cdc-fb66-4681-9ea0-5b5b1b2f9e56",
+  "summary": "在熄灯区通过社区协作建立夜间噪音受控的公共工坊，并制定轮值维护计划以确保可持续运作。",
+  "status": "completed",
+  "commands": [],
+  "mod_hooks": [],
+  "steps": [
+    {
+      "step_id": "step1",
+      "title": "社区协商与空间规划",
+      "description": "组织邻居会议，协商确定工坊选址、分批改造时间表，并收集劳动力资源信息。",
+      "target_region": "熄灯区",
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "step2",
+      "title": "提交市政审批计划",
+      "description": "基于协商结果，起草公开运作计划，包括空间改造方案、噪音控制措施和维护安排，提交市政部门审批。",
+      "target_region": "熄灯区",
+      "required_mod": null,
+      "dependencies": [
+        "step1"
+      ]
+    },
+    {
+      "step_id": "step3",
+      "title": "分批改造工坊空间",
+      "description": "在市政批准后，组织邻居分批进行空间改造，使用隔音材料等资源，确保夜间噪音受限。",
+      "target_region": "熄灯区",
+      "required_mod": null,
+      "dependencies": [
+        "step2"
+      ]
+    },
+    {
+      "step_id": "step4",
+      "title": "实施夜间噪音控制",
+      "description": "安装隔音设备，制定夜间使用时间限制，并分配夜间能源配额以遵守约束。",
+      "target_region": "熄灯区",
+      "required_mod": null,
+      "dependencies": [
+        "step3"
+      ]
+    },
+    {
+      "step_id": "step5",
+      "title": "制定轮值维护计划",
+      "description": "创建维护轮值表，分配居民负责日常检查、维修和工具管理，确保工坊持续运作。",
+      "target_region": "熄灯区",
+      "required_mod": null,
+      "dependencies": [
+        "step4"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "邻居劳动力": "熄灯区居民",
+    "改造材料（如隔音设备、工具）": "社区集资或市政支持",
+    "夜间能源配额": "市政能源部门",
+    "维护轮值表": "社区自我管理"
+  },
+  "risk_notes": [
+    "夜间能源供应有限可能影响工坊运作时间",
+    "居民经济条件薄弱可能导致材料采购延迟",
+    "市政审批流程时间未指定，可能影响项目启动"
+  ],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-03T06:46:29.119348+00:00"
+}

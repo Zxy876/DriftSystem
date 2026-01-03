@@ -1,0 +1,22 @@
+{
+  "plan_id": "18c05a80-8dc2-43b0-b3b8-0334b2d8ac4a",
+  "created_at": "2026-01-03T02:18:55.976233+00:00",
+  "summary": "GM4 Balloon Celebration",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "demo-1",
+      "title": "部署庆典入口",
+      "description": "在城镇广场入口部署气球与引导标识",
+      "target_region": null,
+      "required_mod": "gm4:balloon_animals",
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "origin_scenario": null
+}

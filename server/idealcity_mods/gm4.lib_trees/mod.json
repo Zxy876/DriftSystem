@@ -1,0 +1,21 @@
+{
+  "mod_id": "gm4:lib_trees",
+  "name": "GM4 Library - Trees",
+  "version": "1.21.1",
+  "description": "Framework for saplings, growth, and worldgen hooks used to create custom trees.",
+  "authors": ["Gamemode 4"],
+  "tags": ["datapack", "gm4", "library"],
+  "assets": {
+    "schematics": [],
+    "structures": ["data"],
+    "scripts": ["data"],
+    "textures": []
+  },
+  "entry_points": {
+    "build": "data"
+  },
+  "metadata": {
+    "license": "GPL-3.0-or-later",
+    "source": "https://github.com/Gamemode4Dev/GM4_Datapacks/tree/main/lib_trees"
+  }
+}

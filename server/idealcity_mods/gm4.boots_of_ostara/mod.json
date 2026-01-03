@@ -1,0 +1,21 @@
+{
+  "mod_id": "gm4:boots_of_ostara",
+  "name": "GM4 Boots of Ostara",
+  "version": "1.21.1",
+  "description": "Brighten landscapes by transforming dirt and moss as you walk with enchanted boots.",
+  "authors": ["Gamemode 4"],
+  "tags": ["datapack", "gm4", "movement"],
+  "assets": {
+    "schematics": [],
+    "structures": ["data"],
+    "scripts": ["data"],
+    "textures": ["assets"]
+  },
+  "entry_points": {
+    "build": "data"
+  },
+  "metadata": {
+    "license": "GPL-3.0-or-later",
+    "source": "https://github.com/Gamemode4Dev/GM4_Datapacks/tree/main/gm4_boots_of_ostara"
+  }
+}

@@ -13,6 +13,7 @@ import com.driftmc.commands.AdvanceCommand;
 import com.driftmc.commands.CinematicCommand;
 import com.driftmc.commands.DriftCommand;
 import com.driftmc.commands.HeartMenuCommand;
+import com.driftmc.commands.IdealCityCommand;
 import com.driftmc.commands.LevelCommand;
 import com.driftmc.commands.LevelsCommand;
 import com.driftmc.commands.MiniMapCommand;
@@ -126,6 +127,9 @@ public class DriftPlugin extends JavaPlugin {
         this.intentDispatcher2.setChoicePanel(choicePanel);
         this.exitIntentDetector = new ExitIntentDetector(this, backend, worldPatcher, recommendationHud, questLogHud);
 
+        IdealCityCommand idealCityCommand = new IdealCityCommand(this, backend);
+        this.intentDispatcher2.setIdealCityCommand(idealCityCommand);
+
         // 注册聊天监听器（核心：自然语言驱动）
         Bukkit.getPluginManager().registerEvents(
                 new PlayerChatListener(this, intentRouter2, intentDispatcher2, tutorialManager, ruleEventBridge,
@@ -172,6 +176,7 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("questlog", new QuestLogCommand(questLogHud));
         registerCommand("cinematic", new CinematicCommand(cinematicController));
         registerCommand("taskdebug", new TaskDebugCommand(this, backend, taskDebugToken));
+        registerCommand("idealcity", idealCityCommand);
 
         getLogger().info("======================================");
         getLogger().info("   DriftSystem / 心悦宇宙");
