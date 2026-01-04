@@ -82,11 +82,26 @@ fi
 
 if [ -f "$AUTO_BUILD_SCRIPT" ]; then
     mkdir -p "$PROJECT_DIR/logs"
+    WATCHER_ARGS=("--watch")
+    WATCHER_HOST=${MINECRAFT_RCON_HOST:-localhost}
+    WATCHER_PORT=${MINECRAFT_RCON_PORT:-25575}
+    WATCHER_PASSWORD=${MINECRAFT_RCON_PASSWORD:-drift_rcon_dev}
+    if [ -n "$WATCHER_HOST" ]; then
+        WATCHER_ARGS+=("--rcon-host" "$WATCHER_HOST")
+    fi
+    if [ -n "$WATCHER_PORT" ]; then
+        WATCHER_ARGS+=("--rcon-port" "$WATCHER_PORT")
+    fi
+    if [ -n "$WATCHER_PASSWORD" ]; then
+        WATCHER_ARGS+=("--rcon-password" "$WATCHER_PASSWORD")
+    fi
+
     echo "🛠 重新启动 auto_build watcher…"
     (
-        cd "$PROJECT_DIR"
-        python3 "$AUTO_BUILD_SCRIPT" --watch --rcon-host localhost --rcon-port 25575 --rcon-password drift_rcon_dev >> "$AUTO_BUILD_LOG" 2>&1 &
-        echo $! > "$AUTO_BUILD_PID"
+        cd "$PROJECT_DIR" || exit 1
+        nohup env PYTHONUNBUFFERED=1 python3 "$AUTO_BUILD_SCRIPT" "${WATCHER_ARGS[@]}" >> "$AUTO_BUILD_LOG" 2>&1 &
+        AUTO_PID=$!
+        echo "$AUTO_PID" > "$AUTO_BUILD_PID"
     )
 else
     echo "⚠️ 未找到 $AUTO_BUILD_SCRIPT，跳过 auto_build watcher。"

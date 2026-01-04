@@ -1,0 +1,30 @@
+{
+  "plan_id": "4ed2edbe-1076-4f68-a59d-f425903c6f21",
+  "created_at": "2026-01-04T03:17:44.809804+00:00",
+  "summary": "在北岸新建一座防御塔楼，并为gm4塔楼守军设置巡逻路线。",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：在北岸新建一座防御塔楼，为gm4塔楼守军设置巡逻路线",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "mod_hooks": [
+    "gm4:tower_structures"
+  ],
+  "origin_scenario": "default"
+}

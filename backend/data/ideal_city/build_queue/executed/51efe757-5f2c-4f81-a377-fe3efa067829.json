@@ -1,0 +1,29 @@
+{
+  "plan_id": "51efe757-5f2c-4f81-a377-fe3efa067829",
+  "summary": "我想建一个城堡，里面有滑滑梯",
+  "status": "completed",
+  "commands": [],
+  "mod_hooks": [],
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：我想建一个城堡，里面有滑滑梯",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-03T09:58:48.043533+00:00"
+}

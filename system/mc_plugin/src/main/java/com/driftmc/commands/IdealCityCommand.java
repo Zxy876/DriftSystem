@@ -356,7 +356,7 @@ public class IdealCityCommand implements CommandExecutor {
                             if (planToUse.has("steps") && planToUse.get("steps").isJsonArray()) {
                                 JsonArray steps = planToUse.getAsJsonArray("steps");
                                 for (int i = 0; i < Math.min(steps.size(), 3); i++) {
-                                    player.sendMessage("§3 - " + steps.get(i).getAsString());
+                                    player.sendMessage("§3 - " + formatPlanStep(steps.get(i)));
                                 }
                                 if (steps.size() > 3) {
                                     player.sendMessage("§3 - ... (更多步骤已记录)");
@@ -398,6 +398,44 @@ public class IdealCityCommand implements CommandExecutor {
                 }
             }
         });
+    }
+
+    private String formatPlanStep(JsonElement element) {
+        if (element == null || element.isJsonNull()) {
+            return "(未提供步骤详情)";
+        }
+        if (element.isJsonPrimitive()) {
+            return element.getAsString();
+        }
+        if (element.isJsonObject()) {
+            JsonObject obj = element.getAsJsonObject();
+            String title = getOptionalString(obj, "title");
+            String description = getOptionalString(obj, "description");
+            String stepId = getOptionalString(obj, "step_id");
+            StringBuilder builder = new StringBuilder();
+            if (title != null && !title.isBlank()) {
+                builder.append(title);
+            } else if (stepId != null && !stepId.isBlank()) {
+                builder.append(stepId);
+            }
+            if (description != null && !description.isBlank()) {
+                if (builder.length() > 0) {
+                    builder.append("：");
+                }
+                builder.append(description);
+            }
+            if (builder.length() > 0) {
+                return builder.toString();
+            }
+        }
+        return element.toString();
+    }
+
+    private String getOptionalString(JsonObject obj, String key) {
+        if (obj.has(key) && obj.get(key).isJsonPrimitive()) {
+            return obj.get(key).getAsString();
+        }
+        return null;
     }
 
     private void sendWizardHelp(Player player) {

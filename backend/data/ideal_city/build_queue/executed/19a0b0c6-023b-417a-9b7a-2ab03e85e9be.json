@@ -1,0 +1,29 @@
+{
+  "plan_id": "19a0b0c6-023b-417a-9b7a-2ab03e85e9be",
+  "summary": "我要在熄灯区搭建一个共用工坊，先和邻居组织分批改造，再在夜间控制噪音并安排轮值维护。",
+  "status": "completed",
+  "commands": [],
+  "mod_hooks": [],
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：我要在熄灯区搭建一个共用工坊，先和邻居组织分批改造，再在夜间控制噪音并安排轮值维护",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-03T09:22:56.136845+00:00"
+}

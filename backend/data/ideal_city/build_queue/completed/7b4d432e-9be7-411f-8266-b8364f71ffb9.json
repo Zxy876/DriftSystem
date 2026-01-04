@@ -1,0 +1,36 @@
+{
+  "plan_id": "7b4d432e-9be7-411f-8266-b8364f71ffb9",
+  "created_at": "2026-01-03T13:55:16.644324+00:00",
+  "summary": "在熄灯区入口部署庆典气球以引导夜间访客。",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "step_1",
+      "title": "准备资源",
+      "description": "收集并准备部署庆典气球所需的材料和设备，确保符合市政要求。",
+      "target_region": "熄灯区入口",
+      "required_mod": "gm4_balloon_animals:init",
+      "dependencies": []
+    },
+    {
+      "step_id": "step_2",
+      "title": "社区验证",
+      "description": "在社区内进行验证，确保气球部署不会妨碍道路通行，并符合居民的需求。",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": [
+        "step_1"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "资源清单": "待补充"
+  },
+  "risk_notes": [
+    "缺乏具体的资源清单和能源来源信息，需进一步确认。",
+    "夜间能源供应有限，需确保部署方案符合能源限制。",
+    "需要考虑噪音控制，确保不影响居民生活。"
+  ],
+  "mod_hooks": [],
+  "origin_scenario": "default"
+}

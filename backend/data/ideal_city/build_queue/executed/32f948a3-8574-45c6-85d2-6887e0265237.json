@@ -1,0 +1,29 @@
+{
+  "plan_id": "32f948a3-8574-45c6-85d2-6887e0265237",
+  "summary": "确认执行工坊方案，请求生成建造计划并安排工坊排程",
+  "status": "completed",
+  "commands": [],
+  "mod_hooks": [],
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "生成工坊建造计划",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "安排工坊排程",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-03T09:25:50.096936+00:00"
+}

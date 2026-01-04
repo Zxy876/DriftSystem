@@ -1,0 +1,28 @@
+{
+  "plan_id": "3f602b37-a21a-441a-9096-cadaa91d36bb",
+  "created_at": "2026-01-03T10:07:21.957320+00:00",
+  "summary": "调用 GM4 气球动物模组布置夜间庆典装饰…",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：调用 GM4 气球动物模组布置夜间庆典装饰…",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "mod_hooks": [],
+  "origin_scenario": "default"
+}

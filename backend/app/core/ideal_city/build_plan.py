@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -95,6 +95,97 @@ class BuildPlan(BaseModel):
         )
 
 
+# Keywords captured from typical in-game phrasing so the deterministic
+# fallback can still resolve mod hooks when LLM calls fail. Keep the list
+# small and explicit to avoid false positives.
+_MOD_KEYWORDS: Dict[str, List[str]] = {
+    "gm4:balloon_animals": [
+        "\u6c14\u7403\u52a8\u7269",
+        "\u5e86\u5178\u6c14\u7403",
+        "balloon animal",
+        "gm4_balloon_animals",
+        "gm4:balloon_animals",
+    ],
+    "gm4:better_armour_stands": [
+        "\u76d4\u7532\u67b6",
+        "armour stand",
+        "better armour stand",
+        "gm4_better_armour_stands",
+        "gm4:better_armour_stands",
+    ],
+    "gm4:lively_lily_pads": [
+        "\u7761\u83b2",
+        "lily pad",
+        "lively lily",
+        "gm4_lively_lily_pads",
+        "gm4:lively_lily_pads",
+    ],
+    "gm4:tunnel_bores": [
+        "\u6398\u8fdb\u673a",
+        "tunnel bore",
+        "\u96a7\u9053\u673a\u5668",
+        "gm4_tunnel_bores",
+        "gm4:tunnel_bores",
+    ],
+    "gm4:tower_structures": [
+        "\u5854\u697c",
+        "tower structure",
+        "gm4_tower_structures",
+        "gm4:tower_structures",
+    ],
+    "gm4:boots_of_ostara": [
+        "ostara",
+        "\u6625\u4e4b\u9774",
+        "gm4_boots_of_ostara",
+        "gm4:boots_of_ostara",
+    ],
+    "gm4:lib_custom_crafters": [
+        "\u81ea\u5b9a\u4e49\u5408\u6210\u53f0",
+        "custom crafter",
+        "gm4_custom_crafters",
+        "gm4:lib_custom_crafters",
+    ],
+    "gm4:lib_trades": [
+        "\u6751\u6c11\u4ea4\u6613\u5e93",
+        "trade library",
+        "gm4_trades",
+        "gm4:lib_trades",
+    ],
+    "gm4:lib_trees": [
+        "\u6811\u6728\u5e93",
+        "tree library",
+        "gm4_trees",
+        "gm4:lib_trees",
+    ],
+}
+
+_COMMAND_TO_MOD: Dict[str, str] = {
+    "gm4_balloon_animals:init": "gm4:balloon_animals",
+    "gm4_better_armour_stands:init": "gm4:better_armour_stands",
+    "gm4_lively_lily_pads:init": "gm4:lively_lily_pads",
+    "gm4_tunnel_bores:init": "gm4:tunnel_bores",
+    "gm4_tower_structures:init": "gm4:tower_structures",
+    "gm4_boots_of_ostara:init": "gm4:boots_of_ostara",
+    "gm4_custom_crafters:load": "gm4:lib_custom_crafters",
+    "gm4_trades:load": "gm4:lib_trades",
+    "gm4_trees:load": "gm4:lib_trees",
+}
+
+
+def _derive_mod_hooks(spec_intent: str, logic_outline: List[str]) -> List[str]:
+    haystack = "\n".join(filter(None, [spec_intent, *logic_outline])).lower()
+    found: Set[str] = set()
+    for command, mod_id in _COMMAND_TO_MOD.items():
+        if command in haystack:
+            found.add(mod_id)
+    for mod_id, keywords in _MOD_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword.lower() in haystack:
+                found.add(mod_id)
+                break
+    return sorted(found)
+
+
 def build_plan_from_spec(spec_intent: str, logic_outline: List[str], scenario_id: Optional[str]) -> BuildPlan:
     """Fallback deterministic plan derived from logic outline."""
 
@@ -119,4 +210,10 @@ def build_plan_from_spec(spec_intent: str, logic_outline: List[str], scenario_id
                 description="按照裁决说明执行任务，并在完成后回报档案馆。",
             )
         )
-    return BuildPlan(summary=summary.strip(), steps=steps, origin_scenario=scenario_id)
+    mod_hooks = _derive_mod_hooks(spec_intent or "", logic_outline or [])
+    return BuildPlan(
+        summary=summary.strip(),
+        steps=steps,
+        origin_scenario=scenario_id,
+        mod_hooks=mod_hooks,
+    )

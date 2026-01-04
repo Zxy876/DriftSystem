@@ -26,8 +26,8 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-CONNECT_TIMEOUT = float(os.getenv("DEEPSEEK_CONNECT_TIMEOUT", "10"))
-READ_TIMEOUT = float(os.getenv("DEEPSEEK_READ_TIMEOUT", "30"))
+CONNECT_TIMEOUT = float(os.getenv("DEEPSEEK_CONNECT_TIMEOUT", "6"))
+READ_TIMEOUT = float(os.getenv("DEEPSEEK_READ_TIMEOUT", "12"))
 MAX_RETRIES = int(os.getenv("DEEPSEEK_MAX_RETRIES", "2"))
 RETRY_BACKOFF = float(os.getenv("DEEPSEEK_RETRY_BACKOFF", "1.5"))
 
@@ -37,10 +37,10 @@ AI_RETRY_ON_TIMEOUT = os.getenv("IDEAL_CITY_AI_RETRY_ON_TIMEOUT", "0").lower() i
     "yes",
     "on",
 }
-AI_TIMEOUT_DEADLINE = float(os.getenv("IDEAL_CITY_AI_TIMEOUT_DEADLINE", "18"))
+AI_TIMEOUT_DEADLINE = float(os.getenv("IDEAL_CITY_AI_TIMEOUT_DEADLINE", "12"))
 
 AI_DISABLED = os.getenv("IDEAL_CITY_AI_DISABLE", "").lower() in {"1", "true", "yes", "on"}
-AI_FAILURE_THRESHOLD = max(1, int(os.getenv("IDEAL_CITY_AI_FAILURE_THRESHOLD", "3")))
+AI_FAILURE_THRESHOLD = max(1, int(os.getenv("IDEAL_CITY_AI_FAILURE_THRESHOLD", "1")))
 AI_CIRCUIT_SECONDS = float(os.getenv("IDEAL_CITY_AI_CIRCUIT_SECONDS", "120"))
 
 _lock = threading.Lock()
@@ -297,13 +297,20 @@ def _call_deepseek_api_sync(
     last_error: Exception | None = None
     failure_recorded = False
     start_time = time.monotonic()
+    effective_connect_timeout = connect_timeout
+    effective_read_timeout = read_timeout
+    if AI_TIMEOUT_DEADLINE > 0:
+        # Keep per-request timeouts bounded by the overall deadline so we fail fast.
+        effective_connect_timeout = min(connect_timeout, max(1.0, AI_TIMEOUT_DEADLINE * 0.5))
+        effective_read_timeout = min(read_timeout, max(2.0, AI_TIMEOUT_DEADLINE))
+
     for attempt in range(MAX_RETRIES + 1):
         try:
             resp = requests.post(
                 f"{BASE_URL}/chat/completions",
                 headers=HEADERS,
                 json=payload,
-                timeout=(connect_timeout, read_timeout),
+                timeout=(effective_connect_timeout, effective_read_timeout),
             )
             resp.raise_for_status()
             body = resp.json()

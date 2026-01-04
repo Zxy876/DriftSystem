@@ -1,0 +1,29 @@
+{
+  "plan_id": "881056c9-0404-4487-be97-73320b53325a",
+  "summary": "在熄灯区入口布置庆典气球动物，用彩色气球标出夜间导引路线，保持道路通畅并控制噪音。/idealcity submit",
+  "status": "completed",
+  "commands": [],
+  "mod_hooks": [],
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：在熄灯区入口布置庆典气球动物，用彩色气球标出夜间导引路线，保持道路通畅并控制噪音",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：/idealcity submit",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-03T09:49:02.962353+00:00"
+}
