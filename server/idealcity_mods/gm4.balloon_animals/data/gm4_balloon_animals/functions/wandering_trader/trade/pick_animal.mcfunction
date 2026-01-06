@@ -1,0 +1,20 @@
+execute store result score $animal_id gm4_balloon_animals_data run loot spawn ~ ~-4096 ~ loot gm4_balloon_animals:technical/random/enumeration_value
+execute if score $animal_id gm4_balloon_animals_data matches 2 summon minecraft:cow run function gm4_balloon_animals:wandering_trader/trade/init_farm
+execute if score $animal_id gm4_balloon_animals_data matches 6 summon minecraft:pig run function gm4_balloon_animals:wandering_trader/trade/init_farm
+execute if score $animal_id gm4_balloon_animals_data matches 8 summon minecraft:sheep run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 4 summon minecraft:horse run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 7 summon minecraft:rabbit run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 9 summon minecraft:wolf run function gm4_balloon_animals:wandering_trader/trade/init_wolf
+execute if score $animal_id gm4_balloon_animals_data matches 5 summon minecraft:llama run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 3 summon minecraft:frog run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 0 summon minecraft:trader_llama run function gm4_balloon_animals:wandering_trader/trade/add_bee_nest
+execute if score $animal_id gm4_balloon_animals_data matches 1 summon minecraft:trader_llama run function gm4_balloon_animals:wandering_trader/trade/add_chicken_egg
+execute if score $animal_id gm4_balloon_animals_data matches 13 summon minecraft:fox run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 17 summon minecraft:parrot run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 12 summon minecraft:donkey run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 16 summon minecraft:panda run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 11 summon minecraft:camel run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 14 summon minecraft:goat run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 15 summon minecraft:ocelot run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 10 summon minecraft:armadillo run function gm4_balloon_animals:wandering_trader/trade/init_animal
+execute if score $animal_id gm4_balloon_animals_data matches 18 summon minecraft:trader_llama run function gm4_balloon_animals:wandering_trader/trade/add_turtle_egg

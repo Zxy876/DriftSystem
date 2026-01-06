@@ -242,6 +242,15 @@ def build_level_prompt(level: Level) -> str:
 
     text_block = "\n".join(level.text)
 
+    structured_guidance = """
+【CityPhone 结构化摘要指引】
+- 无论剧情如何展开，每次给玩家文字回复时都要在结尾追加一段结构化摘要。
+- 将摘要写成多行，每行以中文标签开头，顺序建议为：构想：、执行步骤：、材料：、限制：、地点：、成功：、风险：。
+- 若当前信息不足，请在对应行标注“待补充”，而不是留空。
+- 如果你知道坐标或玩家提供了坐标，请在“地点”行中追加“world x=… y=… z=… (可选 yaw=… pitch=…)”格式，便于 CityPhone 自动定位。
+- 摘要内容需简洁，突出可以交给建造 Agent 的关键信息。
+""".strip()
+
     prompt = f"""
 【关卡ID】{level.level_id}
 【关卡标题】{level.title}
@@ -256,6 +265,8 @@ def build_level_prompt(level: Level) -> str:
 - 你必须让剧情与原文情绪、人物关系一致，但允许玩家干预与分支。
 - 玩家可选择“接受/拒绝/折中”你的剧情推进；你要给出清晰的 option 与 node。
 - 如果本关 meta/choices 给了固定出口，也可以用它当作“主线终点”参考。
+
+{structured_guidance}
 """.strip()
 
     return prompt

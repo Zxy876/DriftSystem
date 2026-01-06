@@ -1,0 +1,10 @@
+[beet]
+autoload=beet.contrib.default
+commands=beet.toolchain.commands
+
+[console_scripts]
+beet=beet.toolchain.cli:main
+
+[pytest11]
+beet=beet.pytest_plugin
+

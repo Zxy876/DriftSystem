@@ -1,0 +1,9 @@
+{
+  "values": [
+    {
+      "id": "#load:gm4_trades",
+      "required": false
+    },
+    "gm4_balloon_animals:load"
+  ]
+}

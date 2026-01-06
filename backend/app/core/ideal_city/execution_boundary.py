@@ -15,6 +15,14 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from .adjudication_contract import AdjudicationRecord, VerdictEnum
+from .build_plan import PlayerPose
+
+
+class PlanLocation(BaseModel):
+	world: str
+	x: float
+	y: float
+	z: float
 
 
 class BuildPlanSnapshot(BaseModel):
@@ -22,6 +30,8 @@ class BuildPlanSnapshot(BaseModel):
 	summary: Optional[str] = None
 	steps: List[str] = Field(default_factory=list)
 	mod_hooks: List[str] = Field(default_factory=list)
+	player_pose: Optional[PlayerPose] = None
+	location_hint: Optional[PlanLocation] = None
 
 
 class BroadcastSnapshot(BaseModel):

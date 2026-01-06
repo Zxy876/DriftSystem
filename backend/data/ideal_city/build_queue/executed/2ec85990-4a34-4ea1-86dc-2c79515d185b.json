@@ -1,0 +1,50 @@
+{
+  "plan_id": "2ec85990-4a34-4ea1-86dc-2c79515d185b",
+  "summary": "在熄灯区部署GM4气球动物展台并点亮入口的建造计划",
+  "status": "completed",
+  "commands": [
+    "function gm4_balloon_animals:init",
+    "execute in world positioned 0.00 64.00 0.00 rotated -22.65 0 positioned ^ ^ ^6 run function gm4_balloon_animals:build/setup_showcase",
+    "execute in world positioned 0.00 64.00 0.00 rotated -22.65 0 positioned ^ ^ ^6 run function gm4_balloon_animals:build/populate_showcase"
+  ],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "steps": [
+    {
+      "step_id": "step_1",
+      "title": "准备资源",
+      "description": "制定详细的资源清单，列出所需的材料和工具，并明确其来源，以便于后续的部署和维护。",
+      "target_region": "熄灯区",
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "step_2",
+      "title": "社区验证",
+      "description": "在准备好资源后，进行社区验证，确保展台的部署符合居民的需求，并进行必要的调整。",
+      "target_region": "熄灯区",
+      "required_mod": null,
+      "dependencies": [
+        "step_1"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "材料和工具": "待确定"
+  },
+  "risk_notes": [
+    "缺乏详细的资源清单和来源信息，可能影响后续步骤的执行。",
+    "需要制定维护计划和公用资源调度方案，以确保资源合理分配和设施安全。"
+  ],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-04T10:06:46.037465+00:00",
+  "player_pose": {
+    "world": "world",
+    "x": 0.0,
+    "y": 64.0,
+    "z": 0.0,
+    "yaw": -22.649994,
+    "pitch": 30.59999
+  }
+}

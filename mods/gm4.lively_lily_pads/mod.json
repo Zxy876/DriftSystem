@@ -12,7 +12,16 @@
     "textures": ["images"]
   },
   "entry_points": {
-    "build": ["function gm4_lively_lily_pads:init"]
+    "build": [
+      "function gm4_lively_lily_pads:init",
+      "execute in {world} positioned {x} {y} {z} run fill ~-2 ~ ~-2 ~2 ~ ~2 minecraft:air",
+      "execute in {world} positioned {x} {y} {z} run fill ~-2 ~-1 ~-2 ~2 ~-1 ~2 minecraft:water",
+      "execute in {world} positioned {x} {y} {z} run setblock ~ ~-1 ~ minecraft:lily_pad",
+      "execute in {world} positioned {x} {y} {z} run setblock ~1 ~-1 ~ minecraft:lily_pad",
+      "execute in {world} positioned {x} {y} {z} run setblock ~-1 ~-1 ~ minecraft:lily_pad",
+      "execute in {world} positioned {x} {y} {z} run setblock ~ ~-1 ~1 minecraft:lily_pad",
+      "execute in {world} positioned {x} {y} {z} run setblock ~ ~-1 ~-1 minecraft:lily_pad"
+    ]
   },
   "metadata": {
     "license": "GPL-3.0-or-later",

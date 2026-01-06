@@ -12,7 +12,10 @@
     "textures": []
   },
   "entry_points": {
-    "build": ["function gm4_tower_structures:init"]
+    "build": [
+      "function gm4_tower_structures:init",
+      "execute in {world} positioned {x} {y} {z} run place structure gm4_tower_structures:tower/diorite_dark ~ ~ ~"
+    ]
   },
   "metadata": {
     "license": "GPL-3.0-or-later",

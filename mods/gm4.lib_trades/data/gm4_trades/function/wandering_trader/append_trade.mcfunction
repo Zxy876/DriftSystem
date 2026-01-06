@@ -7,7 +7,10 @@
 data modify storage gm4_trades:temp/wandering_trader/unprocessed_trade_data llama_data set from entity @e[type=trader_llama,tag=gm4_pooled_trade_option,limit=1,sort=random] {}
 
 # interpret trade data (equipment.body: metadata; Items[{Slot:0b}]: sell; Items[{Slot:1b}]: buy; Items[{Slot:2b}]: buyB)
-data modify storage gm4_trades:temp/wandering_trader/next_trade trade set from storage gm4_trades:temp/wandering_trader/unprocessed_trade_data llama_data.equipment.body.components."minecraft:custom_data".gm4_trades.options
+scoreboard players set $use_components gm4_trades_data 0
+execute if data storage gm4_trades:temp/wandering_trader/unprocessed_trade_data llama_data.equipment.body.components."minecraft:custom_data".gm4_trades.options run scoreboard players set $use_components gm4_trades_data 1
+execute if score $use_components gm4_trades_data matches 1 run data modify storage gm4_trades:temp/wandering_trader/next_trade trade set from storage gm4_trades:temp/wandering_trader/unprocessed_trade_data llama_data.equipment.body.components."minecraft:custom_data".gm4_trades.options
+execute unless score $use_components gm4_trades_data matches 1 if data storage gm4_trades:temp/wandering_trader/unprocessed_trade_data llama_data.DecorItem.tag.gm4_trades.options run data modify storage gm4_trades:temp/wandering_trader/next_trade trade set from storage gm4_trades:temp/wandering_trader/unprocessed_trade_data llama_data.DecorItem.tag.gm4_trades.options
 data modify storage gm4_trades:temp/wandering_trader/next_trade trade.sell set from storage gm4_trades:temp/wandering_trader/unprocessed_trade_data llama_data.Items[{Slot:0b}]
 data modify storage gm4_trades:temp/wandering_trader/next_trade trade.buy set from storage gm4_trades:temp/wandering_trader/unprocessed_trade_data llama_data.Items[{Slot:1b}]
 data modify storage gm4_trades:temp/wandering_trader/next_trade trade.buyB set from storage gm4_trades:temp/wandering_trader/unprocessed_trade_data llama_data.Items[{Slot:2b}]

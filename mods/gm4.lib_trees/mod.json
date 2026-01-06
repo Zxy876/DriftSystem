@@ -12,7 +12,11 @@
     "textures": []
   },
   "entry_points": {
-    "build": ["function gm4_trees:load"]
+    "build": [
+      "function gm4_trees:load",
+      "execute in {world} positioned {x} {y} {z} run place feature minecraft:oak",
+      "execute in {world} positioned {x} {y} {z} run place feature minecraft:birch"
+    ]
   },
   "metadata": {
     "license": "GPL-3.0-or-later",

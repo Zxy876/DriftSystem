@@ -1,0 +1,30 @@
+{
+  "plan_id": "edc41bd2-c864-4ce2-b754-adb5b3102f2b",
+  "created_at": "2026-01-04T06:55:13.538742+00:00",
+  "summary": "在正前方6格部署GM4气球动物展示区并初始化",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：请在我正前方 6 格部署 GM4 气球动物展示区，并执行 gm4_balloon_animals:init",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "origin_scenario": "default"
+}

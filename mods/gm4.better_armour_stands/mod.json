@@ -12,7 +12,11 @@
     "textures": ["images"]
   },
   "entry_points": {
-    "build": ["function gm4_better_armour_stands:init"]
+    "build": [
+      "function gm4_better_armour_stands:init",
+      "execute in {world} positioned {x} {y} {z} run summon armor_stand ~ ~ ~ {NoGravity:1b,ShowArms:1b,DisabledSlots:4144959,CustomName:'{\"text\":\"Pose Dummy\"}',Tags:[\"gm4_demo\",\"gm4_better_armour_stands_demo\"]}",
+      "execute in {world} positioned {x} {y} {z} run data merge entity @e[type=armor_stand,tag=gm4_better_armour_stands_demo,limit=1,sort=nearest] {Pose:{RightArm:[-45f,0f,0f],LeftArm:[30f,0f,0f]}}"
+    ]
   },
   "metadata": {
     "license": "GPL-3.0-or-later",

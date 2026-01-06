@@ -60,33 +60,38 @@ class SpecNormalizer:
         ai_payload = self._run_ai_parser(submission, scenario, intent_summary)
         heuristic_payload = self._heuristic_projection(narrative, scenario, intent_summary)
 
+        player_structured_any = any(base_lists[field] for field in base_lists)
+
+        heuristic_world = heuristic_payload.get("world_constraints") if not player_structured_any else None
+        heuristic_logic = heuristic_payload.get("logic_outline") if not player_structured_any else None
+        heuristic_success = heuristic_payload.get("success_criteria") if not player_structured_any else None
+        heuristic_risk = heuristic_payload.get("risk_register") if not player_structured_any else None
+        heuristic_resources = heuristic_payload.get("resource_ledger") if not player_structured_any else None
+
         world_constraints = self._pick_nonempty(
             base_lists["world_constraints"],
             ai_payload.get("world_constraints"),
-            heuristic_payload.get("world_constraints"),
+            heuristic_world,
         )
-        logic_outline = self._ensure_logic_depth(
-            self._pick_nonempty(
-                base_lists["logic_outline"],
-                ai_payload.get("logic_outline"),
-                heuristic_payload.get("logic_outline"),
-            ),
-            narrative,
+        logic_outline = self._pick_nonempty(
+            base_lists["logic_outline"],
+            ai_payload.get("logic_outline"),
+            heuristic_logic,
         )
         success_criteria = self._pick_nonempty(
             base_lists["success_criteria"],
             ai_payload.get("success_criteria"),
-            heuristic_payload.get("success_criteria"),
+            heuristic_success,
         )
         risk_register = self._pick_nonempty(
             base_lists["risk_register"],
             ai_payload.get("risk_register"),
-            heuristic_payload.get("risk_register"),
+            heuristic_risk,
         )
         resource_ledger = self._pick_nonempty(
             base_lists["resource_ledger"],
             ai_payload.get("resource_ledger"),
-            heuristic_payload.get("resource_ledger"),
+            heuristic_resources,
         )
 
         if ai_payload.get("intent_summary"):
@@ -292,17 +297,4 @@ class SpecNormalizer:
         return []
 
     def _ensure_logic_depth(self, logic_outline: List[str], narrative: str) -> List[str]:
-        if len(logic_outline) >= 2:
-            return logic_outline
-        sentences = self._split_sentences(narrative)
-        if sentences:
-            goal = sentences[0]
-            execution = " ".join(sentences[1:]).strip()
-            if not execution:
-                execution = "分成准备与执行两个阶段，由工坊与居民共建。"
-            augmented = [f"目标：{goal}"]
-            augmented.append(f"执行：{execution}")
-            return sanitize_lines(augmented)
-        if logic_outline:
-            return logic_outline
-        return ["目标：明确城中需要回应的矛盾", "执行：在落地前提交两步验证计划"]
+        return logic_outline

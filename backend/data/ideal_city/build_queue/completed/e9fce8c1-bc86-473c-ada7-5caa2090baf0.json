@@ -1,0 +1,46 @@
+{
+  "plan_id": "e9fce8c1-bc86-473c-ada7-5caa2090baf0",
+  "created_at": "2026-01-04T11:28:04.617749+00:00",
+  "summary": "展台放在熄灯区旧电车站旁，夜市摊主愿意提供气球和灯串，社区学校负责宣传。",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：想在熄灯区做一个气球动物展台，让居民晚上也有热闹的景点",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-3",
+      "title": "阶段 3",
+      "description": "目标：展台放在熄灯区旧电车站旁，夜市摊主愿意提供气球和灯串，社区学校负责宣传",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "origin_scenario": "default",
+  "player_pose": {
+    "world": "world",
+    "x": 4.0,
+    "y": 64.0,
+    "z": 7.0,
+    "yaw": 0.0,
+    "pitch": 0.0
+  }
+}

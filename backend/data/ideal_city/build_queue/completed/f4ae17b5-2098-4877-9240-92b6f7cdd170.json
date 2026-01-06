@@ -1,0 +1,55 @@
+{
+  "plan_id": "f4ae17b5-2098-4877-9240-92b6f7cdd170",
+  "created_at": "2026-01-06T09:56:09.372805+00:00",
+  "summary": "想建一个气球展台",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "phase-resources",
+      "title": "协调资源",
+      "description": "想建一个气球展台材料 - 熄灯区居民委员会；灯光设备 - 熄灯区居民委员会",
+      "target_region": "default",
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "phase-success",
+      "title": "验收标准",
+      "description": "达成标准：居民可以按周使用工坊且不发生事故；城市档案馆记录到新的协作项目",
+      "target_region": "default",
+      "required_mod": null,
+      "dependencies": [
+        "phase-resources"
+      ]
+    },
+    {
+      "step_id": "phase-execution",
+      "title": "执行建造",
+      "description": "在 熄灯区的公共工坊附近 落地 GM4 气球展台并点亮周边。",
+      "target_region": "熄灯区的公共工坊附近",
+      "required_mod": "gm4:balloon_animals",
+      "dependencies": [
+        "phase-success"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "想建一个气球展台材料": "熄灯区居民委员会",
+    "灯光设备": "熄灯区居民委员会"
+  },
+  "risk_notes": [
+    "风险: 夜间安全不足 / 安排志愿者巡查"
+  ],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "origin_scenario": "default",
+  "player_pose": {
+    "world": "world",
+    "x": -0.5924522565641896,
+    "y": 63.2,
+    "z": -2.3043777925843134,
+    "yaw": -104.85013,
+    "pitch": 36.300056
+  }
+}

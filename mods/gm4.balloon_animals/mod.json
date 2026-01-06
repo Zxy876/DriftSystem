@@ -12,7 +12,11 @@
     "textures": []
   },
   "entry_points": {
-    "build": ["function gm4_balloon_animals:init"]
+    "build": [
+      "function gm4_balloon_animals:init",
+      "execute in {world} positioned {forward_x_6_f} {y_f} {forward_z_6_f} rotated {yaw} 0 run function gm4_balloon_animals:build/setup_showcase",
+      "execute in {world} positioned {forward_x_6_f} {y_f} {forward_z_6_f} rotated {yaw} 0 run function gm4_balloon_animals:build/populate_showcase"
+    ]
   },
   "metadata": {
     "license": "GPL-3.0-or-later",

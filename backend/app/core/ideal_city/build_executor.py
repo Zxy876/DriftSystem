@@ -8,6 +8,8 @@ a command dispatcher (for example an RCON client) is configured.
 from __future__ import annotations
 
 import json
+import math
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +36,27 @@ class CommandLogWriter:
     def __init__(self, output_dir: Path) -> None:
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _prune_empty(self, value: object) -> Optional[object]:
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            cleaned: Dict[str, object] = {}
+            for key, raw in value.items():
+                pruned = self._prune_empty(raw)
+                if pruned is None:
+                    continue
+                cleaned[key] = pruned
+            return cleaned or None
+        if isinstance(value, list):
+            cleaned_list: List[object] = []
+            for item in value:
+                pruned = self._prune_empty(item)
+                if pruned is None:
+                    continue
+                cleaned_list.append(pruned)
+            return cleaned_list or None
+        return value
 
     def write(
         self,
@@ -64,8 +87,11 @@ class CommandLogWriter:
             "origin_scenario": plan.origin_scenario,
             "logged_at": datetime.now(timezone.utc).isoformat(),
         }
+        if plan.player_pose is not None:
+            payload["player_pose"] = plan.player_pose.model_dump(mode="json")
         if extra:
             payload["notes"] = extra
+        payload = self._prune_empty(payload) or {}
         path = self.output_dir / f"{plan.plan_id}.json"
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
@@ -107,14 +133,18 @@ class BuildExecutor:
                 continue
             explicit = self._mod_manager.build_commands(mod_id)
             if explicit:
-                for command in explicit:
-                    if command not in commands:
-                        commands.append(command)
+                for raw_command in explicit:
+                    prepared = self._prepare_command(raw_command, plan)
+                    if not prepared:
+                        continue
+                    if prepared not in commands:
+                        commands.append(prepared)
                 continue
             fallback = self._fallback_command(mod_id)
             if fallback:
-                if fallback not in commands:
-                    commands.append(fallback)
+                prepared = self._prepare_command(fallback, plan)
+                if prepared and prepared not in commands:
+                    commands.append(prepared)
                 fallback_mods.append(mod_id)
 
         if fallback_mods:
@@ -187,3 +217,64 @@ class BuildExecutor:
             if candidate.exists():
                 return command
         return None
+
+    def _prepare_command(self, raw_command: str, plan: BuildPlan) -> Optional[str]:
+        if not raw_command:
+            return None
+        command = raw_command.strip()
+        if not command:
+            return None
+        command = self._apply_pose_placeholders(command, plan)
+        if not command:
+            return None
+        return command
+
+    def _apply_pose_placeholders(self, command: str, plan: BuildPlan) -> Optional[str]:
+        pose = plan.player_pose
+        tokens = (
+            "{world}",
+            "{x}",
+            "{y}",
+            "{z}",
+            "{x_f}",
+            "{y_f}",
+            "{z_f}",
+            "{yaw}",
+            "{pitch}",
+        )
+        if not any(token in command for token in tokens):
+            return command
+        if pose is None:
+            return None
+        replacements = {
+            "{world}": pose.world,
+            "{x}": str(int(round(pose.x))),
+            "{y}": str(int(round(pose.y))),
+            "{z}": str(int(round(pose.z))),
+            "{x_f}": f"{pose.x:.2f}",
+            "{y_f}": f"{pose.y:.2f}",
+            "{z_f}": f"{pose.z:.2f}",
+            "{yaw}": f"{pose.yaw:.2f}",
+            "{pitch}": f"{pose.pitch:.2f}",
+        }
+        forward_matches = list(re.finditer(r"\{forward_([xyz])_(-?\d+(?:\.\d+)?)_?(f)?\}", command))
+        if forward_matches:
+            yaw_rad = math.radians(pose.yaw)
+            cos_yaw = math.cos(yaw_rad)
+            sin_yaw = math.sin(yaw_rad)
+            for match in forward_matches:
+                axis = match.group(1)
+                distance = float(match.group(2))
+                float_flag = match.group(3) is not None
+                if axis == "x":
+                    value = pose.x - sin_yaw * distance
+                elif axis == "z":
+                    value = pose.z + cos_yaw * distance
+                else:  # 'y'
+                    value = pose.y
+                formatted = f"{value:.2f}" if float_flag else str(int(round(value)))
+                replacements[match.group(0)] = formatted
+        result = command
+        for token, value in replacements.items():
+            result = result.replace(token, value)
+        return result

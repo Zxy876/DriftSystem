@@ -1,0 +1,74 @@
+{
+  "state": {
+    "player_id": "test",
+    "scenario_id": "default",
+    "goals": [
+      "建造一个气球展台",
+      "为居民提供安全、共享的工坊空间",
+      "建造气球展台",
+      "询问新建的气球展台的坐标"
+    ],
+    "logic_outline": [
+      "目标：我想建一个气球展台",
+      "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "执行：准备资源并落地社区验证",
+      "目标：我想建气球展台",
+      "新建的气球展台在哪？告诉我坐标",
+      "我想建一个气球展台"
+    ],
+    "resources": [
+      "建造气球展台材料 - 熄灯区居民委员会",
+      "灯光设备 - 熄灯区居民委员会"
+    ],
+    "community_requirements": [
+      "居民可以按周使用工坊且不发生事故",
+      "城市档案馆记录到新的协作项目"
+    ],
+    "success_criteria": [
+      "居民可以按周使用工坊且不发生事故",
+      "城市档案馆记录到新的协作项目"
+    ],
+    "world_constraints": [
+      "夜间能源供应有限，噪音需受限",
+      "居民经济条件薄弱，需要公用资源调度",
+      "市政要求所有新设施公开运作计划"
+    ],
+    "risk_register": [
+      "风险: 夜间安全不足 / 安排志愿者巡查"
+    ],
+    "risk_notes": [
+      "若能源调度失衡，可能影响核心城区供电",
+      "若维护计划缺失，工坊或成为安全隐患"
+    ],
+    "location_hint": "world @ (-0.6, 63.2, -2.3)",
+    "player_pose": {
+      "world": "world",
+      "x": -0.5924522565641896,
+      "y": 63.2,
+      "z": -2.3043777925843134,
+      "yaw": 85.198975,
+      "pitch": 28.200064
+    },
+    "notes": [
+      "我想建一个气球展台",
+      "我想建气球展台",
+      "新建的气球展台在哪？告诉我坐标"
+    ],
+    "ready_for_build": true,
+    "open_questions": [],
+    "blocking": [],
+    "coverage": {
+      "logic_outline": true,
+      "world_constraints": true,
+      "resource_ledger": true,
+      "success_criteria": true,
+      "risk_register": true
+    },
+    "motivation_score": 80,
+    "logic_score": 100,
+    "build_capability": 180,
+    "version": 10,
+    "updated_at": "2026-01-06T11:30:54.201644Z"
+  },
+  "frozen_at": "2026-01-06T11:30:54.201660Z"
+}

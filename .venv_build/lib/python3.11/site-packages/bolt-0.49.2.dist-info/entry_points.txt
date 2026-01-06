@@ -1,0 +1,3 @@
+[beet]
+commands=bolt.commands
+

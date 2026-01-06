@@ -10,12 +10,14 @@ and execution notices while strictly upholding guardrails:
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -31,23 +33,40 @@ from .device_spec import (
     freeze_for_history as freeze_spec,
     sanitize_lines,
 )
-from .build_plan import BuildPlan
+from .build_plan import BuildPlan, BuildPlanStatus, PlayerPose
 from .build_plan_agent import BuildPlanAgent, BuildPlanContext
 from .build_scheduler import BuildScheduler, BuildSchedulerConfig
 from .execution_boundary import (
     BroadcastSnapshot,
     BuildPlanSnapshot,
+    PlanLocation,
     ExecutionNotice,
     build_notice,
 )
 from .intent_recognizer import IntentKind, detect_intent
 from .spec_normalizer import SpecNormalizer
 from .guidance_agent import GuidanceAgent, GuidanceContext, GuidanceItem, render_guidance_text
+from .narrative_ingestion import (
+    NarrativeChatEvent,
+    NarrativeChatIngestor,
+    NarrativeIngestionResponse,
+)
 from .scenario_repository import ScenarioContext, ScenarioRepository
 from .worldview import WorldviewContext, load_worldview
 from .world_narrator import NarrationContext, WorldNarration, WorldNarratorAgent
 from .adjudication_explainer import AdjudicationExplainer
 from app.core.mods import ModManager
+from .story_state import StoryState
+from .story_state_repository import StoryStateRepository
+from .story_state_manager import StoryStateManager
+from .story_state_agent import StoryStateAgent
+from .story_state_phase import determine_phase
+
+
+_EXECUTE_LOCATION_PATTERN = re.compile(
+    r"execute\s+in\s+(?P<world>[^\s]+)\s+positioned\s+(?P<x>-?\d+(?:\.\d+)?)\s+(?P<y>-?\d+(?:\.\d+)?)\s+(?P<z>-?\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
 
 
 if TYPE_CHECKING:
@@ -66,6 +85,7 @@ class DeviceSpecSubmission(BaseModel):
     success_criteria: Optional[List[str]] = None
     risk_register: Optional[List[str]] = None
     resource_ledger: Optional[List[str]] = None
+    player_pose: Optional[PlayerPose] = None
 
     def to_spec(
         self,
@@ -126,6 +146,102 @@ class SubmissionResult:
     guidance: List[GuidanceItem]
     build_plan: Optional[BuildPlan]
     narration: Optional[WorldNarration]
+
+
+@dataclass
+class ExecutedPlanRecord:
+    plan_id: str
+    summary: str
+    status: str
+    commands: List[str]
+    mod_hooks: List[str]
+    logged_at: Optional[str]
+    player_pose: Optional[PlayerPose]
+    location: Optional[PlanLocation]
+    log_path: Path
+    missing_mods: List[str]
+
+    def to_payload(self) -> Dict[str, Any]:
+        return {
+            "plan_id": self.plan_id,
+            "summary": self.summary,
+            "status": self.status,
+            "commands": self.commands,
+            "mod_hooks": self.mod_hooks,
+            "logged_at": self.logged_at,
+            "player_pose": self.player_pose.model_dump(mode="json") if self.player_pose else None,
+            "location": self.location.model_dump(mode="json") if self.location else None,
+            "log_path": str(self.log_path),
+            "missing_mods": self.missing_mods,
+        }
+
+
+class CityPhoneVisionPanel(BaseModel):
+    goals: List[str] = Field(default_factory=list)
+    logic_outline: List[str] = Field(default_factory=list)
+    open_questions: List[str] = Field(default_factory=list)
+    notes: List[str] = Field(default_factory=list)
+    coverage: Dict[str, bool] = Field(default_factory=dict)
+
+
+class CityPhoneResourcesPanel(BaseModel):
+    items: List[str] = Field(default_factory=list)
+    pending: bool = True
+    risk_register: List[str] = Field(default_factory=list)
+    risk_pending: bool = True
+
+
+class CityPhoneLocationPanel(BaseModel):
+    location_hint: Optional[str] = None
+    player_pose: Optional[PlayerPose] = None
+    pending: bool = True
+    location_quality: Optional[str] = None
+
+
+class CityPhonePlanPanel(BaseModel):
+    available: bool = False
+    summary: Optional[str] = None
+    steps: List[str] = Field(default_factory=list)
+    mod_hooks: List[str] = Field(default_factory=list)
+    plan_id: Optional[str] = None
+    status: str = "pending"
+    pending_reasons: List[str] = Field(default_factory=list)
+
+
+class CityPhonePanels(BaseModel):
+    vision: CityPhoneVisionPanel
+    resources: CityPhoneResourcesPanel
+    location: CityPhoneLocationPanel
+    plan: CityPhonePlanPanel
+
+
+class CityPhoneStatePayload(BaseModel):
+    player_id: str
+    scenario_id: str
+    phase: str
+    ready_for_build: bool
+    build_capability: int = 0
+    motivation_score: int = 0
+    logic_score: int = 0
+    blocking: List[str] = Field(default_factory=list)
+    panels: CityPhonePanels
+
+
+class CityPhoneAction(BaseModel):
+    player_id: str
+    action: str
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    scenario_id: Optional[str] = None
+
+
+class CityPhoneActionResult(BaseModel):
+    status: str
+    state: CityPhoneStatePayload
+    notice: Optional[dict] = None
+    build_plan: Optional[dict] = None
+    guidance: Optional[List[dict]] = None
+    error: Optional[str] = None
+    message: Optional[str] = None
 
 
 class IdealCityRepository:
@@ -322,6 +438,7 @@ class IdealCityPipeline:
         else:
             backend_root = Path(__file__).resolve().parents[3]
             data_dir = backend_root / "data" / "ideal_city"
+        self._data_dir = data_dir
         self._repository = IdealCityRepository(data_dir)
         self._worldview = load_worldview()
         self._scenario_repo = ScenarioRepository()
@@ -334,6 +451,179 @@ class IdealCityPipeline:
         scheduler_root = data_dir / "build_queue"
         self._scheduler = BuildScheduler(BuildSchedulerConfig(root_dir=scheduler_root))
         self._spec_normalizer = SpecNormalizer()
+        story_state_root = data_dir / "story_state"
+        self._story_repository = StoryStateRepository(story_state_root)
+        self._story_state_agent = StoryStateAgent()
+        self._story_manager = StoryStateManager(self._story_repository, agent=self._story_state_agent)
+        self._narrative_ingestor = NarrativeChatIngestor()
+
+    def fetch_executed_plan(self, plan_id: str) -> Optional[ExecutedPlanRecord]:
+        try:
+            normalized = self._normalize_plan_id(plan_id)
+        except ValueError:
+            return None
+
+        executed_dir = self._scheduler.config.root_dir / "executed"
+        path = executed_dir / f"{normalized}.json"
+        if not path.exists():
+            return None
+
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+        commands: List[str] = []
+        raw_commands = payload.get("commands")
+        if isinstance(raw_commands, list):
+            commands = [str(entry) for entry in raw_commands if isinstance(entry, str) and entry.strip()]
+
+        mod_hooks: List[str] = []
+        raw_mods = payload.get("mod_hooks")
+        if isinstance(raw_mods, list):
+            mod_hooks = [str(entry) for entry in raw_mods if isinstance(entry, str) and entry.strip()]
+
+        player_pose: Optional[PlayerPose] = None
+        raw_pose = payload.get("player_pose")
+        if isinstance(raw_pose, dict):
+            try:
+                player_pose = PlayerPose.model_validate(raw_pose)
+            except Exception:
+                player_pose = None
+
+        location = self._extract_plan_location(commands, player_pose)
+
+        notes_payload = payload.get("notes") if isinstance(payload.get("notes"), dict) else None
+        missing_mods: List[str] = []
+        if isinstance(notes_payload, dict):
+            raw_missing = notes_payload.get("missing_mods")
+            if isinstance(raw_missing, list):
+                missing_mods = [str(entry) for entry in raw_missing if isinstance(entry, str) and entry.strip()]
+        logged_at_value = payload.get("logged_at")
+        return ExecutedPlanRecord(
+            plan_id=normalized,
+            summary=str(payload.get("summary") or ""),
+            status=str(payload.get("status") or "unknown"),
+            commands=commands,
+            mod_hooks=mod_hooks,
+            logged_at=logged_at_value if isinstance(logged_at_value, str) else None,
+            player_pose=player_pose,
+            location=location,
+            log_path=path,
+            missing_mods=missing_mods,
+        )
+
+    def _normalize_plan_id(self, plan_id: str) -> str:
+        cleaned = (plan_id or "").strip()
+        if not cleaned:
+            raise ValueError("plan_id is required")
+        if cleaned.lower().endswith(".json"):
+            cleaned = cleaned[:-5]
+        if not cleaned:
+            raise ValueError("plan_id is required")
+        return cleaned
+
+    def _extract_plan_location(
+        self,
+        commands: List[str],
+        player_pose: Optional[PlayerPose],
+    ) -> Optional[PlanLocation]:
+        for command in commands:
+            match = _EXECUTE_LOCATION_PATTERN.search(command)
+            if match:
+                try:
+                    world = match.group("world")
+                    x = float(match.group("x"))
+                    y = float(match.group("y"))
+                    z = float(match.group("z"))
+                except Exception:
+                    continue
+                return PlanLocation(world=world, x=x, y=y, z=z)
+        if player_pose is not None:
+            return PlanLocation(
+                world=player_pose.world,
+                x=player_pose.x,
+                y=player_pose.y,
+                z=player_pose.z,
+            )
+        return None
+
+    def ingest_narrative_event(self, event: NarrativeChatEvent) -> NarrativeIngestionResponse:
+        scenario_id = event.scenario_id or "default"
+        extraction = self._narrative_ingestor.process(event)
+
+        response_status = "accepted"
+        message: Optional[str] = None
+
+        if not extraction.has_core_fields:
+            first_paragraph = event.message.strip().splitlines()[0].strip() if event.message.strip() else ""
+            is_meaningful = len(first_paragraph) >= 8
+            if is_meaningful:
+                submission = DeviceSpecSubmission(
+                    player_id=event.player_id,
+                    narrative=event.message.strip(),
+                    scenario_id=scenario_id,
+                    is_draft=True,
+                    logic_outline=[first_paragraph],
+                )
+                result = self.submit(submission)
+                return NarrativeIngestionResponse(
+                    status="needs_review",
+                    confidence=extraction.confidence,
+                    missing_fields=[field for field in extraction.missing_fields if field in {"vision", "actions", "resources", "location"}],
+                    message="未找到结构化标签，已作为草稿保送，请在 CityPhone 完善字段。",
+                    source_fields=extraction.raw_fields,
+                    submission=submission.model_dump(mode="json"),
+                    ruling=result.ruling.model_dump(mode="json"),
+                    notice=result.notice.model_dump(mode="json"),
+                    guidance=[item.model_dump(mode="json") for item in result.guidance],
+                    build_plan=result.build_plan.model_dump(mode="json") if result.build_plan else None,
+                    state=self.cityphone_state(event.player_id, scenario_id).model_dump(mode="json"),
+                )
+            response_status = "rejected"
+            message = "缺少愿景或行动，未提交裁决。"
+            return NarrativeIngestionResponse(
+                status=response_status,
+                confidence=extraction.confidence,
+                missing_fields=extraction.missing_fields,
+                message=message,
+                source_fields=extraction.raw_fields,
+            )
+
+        submission = DeviceSpecSubmission(
+            player_id=event.player_id,
+            narrative=event.message.strip(),
+            scenario_id=scenario_id,
+            is_draft=extraction.needs_manual_review,
+            world_constraints=extraction.constraints,
+            logic_outline=extraction.actions,
+            success_criteria=extraction.success,
+            risk_register=extraction.risks,
+            resource_ledger=extraction.resources,
+            player_pose=extraction.pose,
+        )
+
+        result = self.submit(submission)
+
+        if extraction.needs_manual_review:
+            response_status = "needs_review"
+            message = "已作为草稿提交，建议使用 CityPhone 补齐缺失字段。"
+        else:
+            message = "已自动提交裁决。"
+
+        return NarrativeIngestionResponse(
+            status=response_status,
+            confidence=extraction.confidence,
+            missing_fields=extraction.missing_fields,
+            message=message,
+            source_fields=extraction.raw_fields,
+            submission=submission.model_dump(mode="json"),
+            ruling=result.ruling.model_dump(mode="json"),
+            notice=result.notice.model_dump(mode="json"),
+            guidance=[item.model_dump(mode="json") for item in result.guidance],
+            build_plan=result.build_plan.model_dump(mode="json") if result.build_plan else None,
+            state=self.cityphone_state(event.player_id, scenario_id).model_dump(mode="json"),
+        )
 
     def submit(self, submission: DeviceSpecSubmission) -> SubmissionResult:
         intent_match = detect_intent(submission.narrative)
@@ -344,6 +634,15 @@ class IdealCityPipeline:
         spec = submission.to_spec(self._spec_normalizer, scenario)
         if spec.scenario_id != scenario.scenario_id:
             scenario = self._scenario_repo.load(spec.scenario_id)
+        story_outcome = self._story_manager.process(
+            player_id=submission.player_id,
+            scenario_id=scenario.scenario_id,
+            scenario=scenario,
+            spec=spec,
+            narrative=submission.narrative,
+            player_pose=submission.player_pose,
+        )
+        spec = story_outcome.enriched_spec
         envelope = DeviceSpecEnvelope(spec=spec, submitted_by_session=submission.player_id)
         submission_hints = self._submission_hints(submission)
         # Envelope is currently audit-only; stored via freeze call for traceability.
@@ -360,26 +659,44 @@ class IdealCityPipeline:
             worldview=self._worldview,
         )
         guidance_items = self._guidance_agent.generate(guidance_ctx)
+        guidance_items = self._merge_guidance(guidance_items, story_outcome.guidance)
         guidance_lines = render_guidance_text(guidance_items)
 
         explanation_line = self._explainer.build_explanation(ruling.verdict, guidance_lines)
         if explanation_line and explanation_line not in ruling.reasoning:
             ruling.reasoning.append(explanation_line)
 
-        plan_ctx = BuildPlanContext(spec=envelope.spec, ruling=ruling, scenario=scenario)
-        plan = self._build_plan_agent.generate(plan_ctx)
+        plan: Optional[BuildPlan] = None
         plan_snapshot: Optional[BuildPlanSnapshot] = None
-        if plan is not None:
-            if plan.mod_hooks:
-                valid_mods = [hook for hook in plan.mod_hooks if self._mod_manager.has_mod(hook)]
-                plan = plan.model_copy(update={"mod_hooks": valid_mods})
-            plan_snapshot = BuildPlanSnapshot(
-                plan_id=str(plan.plan_id),
-                summary=plan.summary,
-                steps=[f"{step.step_id}: {step.title}" for step in plan.steps],
-                mod_hooks=plan.mod_hooks,
+        if story_outcome.ready_for_build:
+            plan_ctx = BuildPlanContext(
+                spec=envelope.spec,
+                ruling=ruling,
+                scenario=scenario,
+                story_state=story_outcome.state,
             )
-            self._scheduler.enqueue(plan)
+            plan = self._build_plan_agent.generate(plan_ctx)
+            if plan is not None:
+                if plan.mod_hooks:
+                    valid_mods = [hook for hook in plan.mod_hooks if self._mod_manager.has_mod(hook)]
+                    plan = plan.model_copy(update={"mod_hooks": valid_mods})
+                pose = submission.player_pose or story_outcome.state.player_pose
+                if pose is not None:
+                    plan.player_pose = pose
+                location_hint = self._estimate_location(plan)
+                plan_snapshot = BuildPlanSnapshot(
+                    plan_id=str(plan.plan_id),
+                    summary=plan.summary,
+                    steps=[f"{step.step_id}: {step.title}" for step in plan.steps],
+                    mod_hooks=plan.mod_hooks,
+                    player_pose=plan.player_pose,
+                    location_hint=location_hint,
+                )
+                self._scheduler.enqueue(plan)
+        else:
+            if story_outcome.missing_slots:
+                waiting_hint = "建造排程暂缓：等待补齐→ " + "；".join(story_outcome.missing_slots.values())
+                context_notes.append(waiting_hint)
 
         narration: Optional[WorldNarration] = None
         if plan is not None or guidance_lines:
@@ -420,6 +737,283 @@ class IdealCityPipeline:
             build_plan=plan,
             narration=narration,
         )
+
+    def cityphone_state(self, player_id: str, scenario_id: Optional[str] = None) -> CityPhoneStatePayload:
+        scenario_id = scenario_id or "default"
+        state = self._story_repository.load(player_id, scenario_id)
+        if state is None:
+            state = StoryState(player_id=player_id, scenario_id=scenario_id)
+
+        latest_entry = self._repository.latest_for_player(player_id)
+        plan_obj: Optional[BuildPlan] = None
+        executed_record: Optional[ExecutedPlanRecord] = None
+        if latest_entry:
+            _, notice = latest_entry
+            if notice.build_plan and notice.build_plan.plan_id:
+                plan_obj = self._repository.get_plan(notice.build_plan.plan_id)
+                if plan_obj:
+                    executed_record = self.fetch_executed_plan(str(plan_obj.plan_id))
+                    if executed_record is not None:
+                        state = self._story_manager.sync_execution_feedback(
+                            player_id=player_id,
+                            scenario_id=scenario_id,
+                            plan_id=str(plan_obj.plan_id),
+                            status=executed_record.status,
+                            command_count=len(executed_record.commands or []),
+                            missing_mods=executed_record.missing_mods,
+                            summary=plan_obj.summary,
+                            log_path=str(executed_record.log_path) if executed_record.log_path else None,
+                        )
+
+        phase = determine_phase(state)
+        ready = state.ready_for_build
+
+        def _plan_status_label(raw: str) -> str:
+            mapping = {
+                "completed": "已完成",
+                "running": "执行中",
+                "queued": "已入队",
+                "pending": "待处理",
+                "blocked": "受阻",
+            }
+            key = (raw or "").lower()
+            return mapping.get(key, raw or "未知")
+
+        notes_tail = state.notes[-4:]
+        vision_panel = CityPhoneVisionPanel(
+            goals=state.goals,
+            logic_outline=state.logic_outline,
+            open_questions=state.open_questions,
+            notes=notes_tail,
+            coverage=state.coverage or {},
+        )
+
+        resources_panel = CityPhoneResourcesPanel(
+            items=state.resources,
+            pending=not bool(state.resources),
+            risk_register=state.risk_register or [],
+            risk_pending=not bool(state.risk_register),
+        )
+
+        location_quality: Optional[str]
+        if state.player_pose is not None:
+            location_quality = "坐标已同步"
+        elif state.location_hint:
+            location_quality = "已有地标提示，待同步坐标"
+        else:
+            location_quality = "缺少地标提示"
+
+        location_panel = CityPhoneLocationPanel(
+            location_hint=state.location_hint,
+            player_pose=state.player_pose,
+            pending=state.player_pose is None,
+            location_quality=location_quality,
+        )
+
+        plan_panel = CityPhonePlanPanel(
+            available=False,
+            summary=None,
+            steps=[],
+            mod_hooks=[],
+            plan_id=str(plan_obj.plan_id) if plan_obj else None,
+            status=_plan_status_label("blocked" if not ready else "pending"),
+            pending_reasons=state.blocking if not ready else [],
+        )
+        if plan_obj:
+            plan_status_raw = plan_obj.status.value
+            plan_notes: List[str] = []
+            if executed_record is not None:
+                if executed_record.status:
+                    plan_status_raw = executed_record.status
+                command_count = len(executed_record.commands or [])
+                if command_count:
+                    plan_notes.append(f"建造指令已派发 {command_count} 条。")
+                else:
+                    plan_notes.append("发现建造记录但未写入具体指令，检查执行器日志。")
+                if executed_record.missing_mods:
+                    mods_text = ", ".join(sorted(executed_record.missing_mods))
+                    plan_notes.append(f"缺少模组：{mods_text}。")
+                if executed_record.status and executed_record.status != "completed":
+                    plan_notes.append(f"建造状态：{_plan_status_label(executed_record.status)}。")
+                if executed_record.log_path:
+                    plan_notes.append(f"日志文件：{executed_record.log_path.name}")
+            else:
+                if plan_obj.status == BuildPlanStatus.queued:
+                    plan_notes.append("计划已排队，等待建造执行器处理。")
+            if not ready and state.blocking:
+                plan_notes.extend(state.blocking)
+            if plan_notes:
+                deduped: List[str] = []
+                seen_notes: set[str] = set()
+                for entry in plan_notes:
+                    text = str(entry).strip()
+                    if not text or text in seen_notes:
+                        continue
+                    seen_notes.add(text)
+                    deduped.append(text)
+                plan_notes = deduped
+            plan_panel = CityPhonePlanPanel(
+                available=True,
+                summary=plan_obj.summary,
+                steps=[f"{step.step_id}: {step.title}" for step in plan_obj.steps],
+                mod_hooks=plan_obj.mod_hooks,
+                plan_id=str(plan_obj.plan_id),
+                status=_plan_status_label(plan_status_raw),
+                pending_reasons=plan_notes,
+            )
+        elif ready:
+            plan_panel = CityPhonePlanPanel(
+                available=False,
+                summary=None,
+                steps=[],
+                mod_hooks=[],
+                plan_id=None,
+                status=_plan_status_label("pending"),
+                pending_reasons=["档案馆未能找到最近的建造计划，请重新提交叙述。"],
+            )
+
+        panels = CityPhonePanels(
+            vision=vision_panel,
+            resources=resources_panel,
+            location=location_panel,
+            plan=plan_panel,
+        )
+
+        return CityPhoneStatePayload(
+            player_id=player_id,
+            scenario_id=scenario_id,
+            phase=phase,
+            ready_for_build=ready,
+            build_capability=state.build_capability,
+            motivation_score=state.motivation_score,
+            logic_score=state.logic_score,
+            blocking=state.blocking or [],
+            panels=panels,
+        )
+
+    def handle_cityphone_action(self, payload: CityPhoneAction) -> CityPhoneActionResult:
+        scenario_id = payload.scenario_id or "default"
+        player_id = payload.player_id
+        action = payload.action.lower().strip()
+
+        if action in {"request_state", "state"}:
+            state = self.cityphone_state(player_id, scenario_id)
+            return CityPhoneActionResult(status="ok", state=state, message="已同步当前状态。")
+
+        if action == "submit_narrative":
+            narrative = str(payload.payload.get("narrative") or "").strip()
+            if not narrative:
+                state = self.cityphone_state(player_id, scenario_id)
+                return CityPhoneActionResult(
+                    status="error",
+                    state=state,
+                    error="missing_narrative",
+                    message="请先填写要记录的内容。",
+                )
+            pose_data = payload.payload.get("pose")
+            player_pose: Optional[PlayerPose] = None
+            if isinstance(pose_data, dict):
+                try:
+                    player_pose = PlayerPose.model_validate(pose_data)
+                except Exception:
+                    player_pose = None
+            submission = DeviceSpecSubmission(
+                player_id=player_id,
+                narrative=narrative,
+                scenario_id=scenario_id,
+                player_pose=player_pose,
+            )
+            result = self.submit(submission)
+            state = self.cityphone_state(player_id, scenario_id)
+            notice_payload = result.notice.model_dump(mode="json")
+            plan_payload = result.build_plan.model_dump(mode="json") if result.build_plan else None
+            guidance_payload = [item.model_dump(mode="json") for item in result.guidance]
+            return CityPhoneActionResult(
+                status="ok",
+                state=state,
+                notice=notice_payload,
+                build_plan=plan_payload,
+                guidance=guidance_payload,
+                message="已记录新的叙述。",
+            )
+
+        if action == "push_pose":
+            pose_data = payload.payload.get("pose")
+            if not isinstance(pose_data, dict):
+                state = self.cityphone_state(player_id, scenario_id)
+                return CityPhoneActionResult(
+                    status="error",
+                    state=state,
+                    error="missing_pose",
+                    message="未提供坐标信息。",
+                )
+            try:
+                pose = PlayerPose.model_validate(pose_data)
+            except Exception:
+                state = self.cityphone_state(player_id, scenario_id)
+                return CityPhoneActionResult(
+                    status="error",
+                    state=state,
+                    error="invalid_pose",
+                    message="坐标格式无法识别。",
+                )
+            location_hint = payload.payload.get("location_hint")
+            if isinstance(location_hint, str):
+                location_hint = location_hint.strip() or None
+            else:
+                location_hint = None
+            self._story_manager.apply_pose_update(
+                player_id=player_id,
+                scenario_id=scenario_id,
+                pose=pose,
+                location_hint=location_hint,
+            )
+            state = self.cityphone_state(player_id, scenario_id)
+            return CityPhoneActionResult(
+                status="ok",
+                state=state,
+                message="坐标已同步。",
+            )
+
+        if action == "apply_template":
+            template_value = payload.payload.get("template") if isinstance(payload.payload, dict) else None
+            template_key = str(template_value).strip() if template_value is not None else ""
+            result = self._story_manager.apply_template(
+                player_id=player_id,
+                scenario_id=scenario_id,
+                template_key=template_key,
+            )
+            state = self.cityphone_state(player_id, scenario_id)
+            if result.applied:
+                return CityPhoneActionResult(
+                    status="ok",
+                    state=state,
+                    message=result.message,
+                )
+            return CityPhoneActionResult(
+                status="error",
+                state=state,
+                error=result.reason or "template_failed",
+                message=result.message,
+            )
+
+        state = self.cityphone_state(player_id, scenario_id)
+        return CityPhoneActionResult(
+            status="error",
+            state=state,
+            error="unknown_action",
+            message="暂不支持该动作。",
+        )
+
+    def _estimate_location(self, plan: BuildPlan) -> Optional[PlanLocation]:
+        pose = plan.player_pose
+        if pose is None:
+            return None
+        distance = 6.0
+        yaw_rad = math.radians(pose.yaw)
+        x = pose.x - math.sin(yaw_rad) * distance
+        z = pose.z + math.cos(yaw_rad) * distance
+        return PlanLocation(world=pose.world, x=x, y=pose.y, z=z)
 
     def _process_mod_refresh(self, submission: DeviceSpecSubmission) -> SubmissionResult:
         self._mod_manager.reload()
@@ -497,6 +1091,22 @@ class IdealCityPipeline:
 
     def refresh_mods(self) -> None:
         self._mod_manager.reload()
+
+    @staticmethod
+    def _merge_guidance(
+        existing: List[GuidanceItem],
+        additions: List[GuidanceItem],
+    ) -> List[GuidanceItem]:
+        if not additions:
+            return existing
+        merged: List[GuidanceItem] = list(existing)
+        seen = {item.text for item in existing}
+        for item in additions:
+            if item.text in seen:
+                continue
+            merged.append(item)
+            seen.add(item.text)
+        return merged
 
     @staticmethod
     def _submission_hints(submission: DeviceSpecSubmission) -> Dict[str, bool]:

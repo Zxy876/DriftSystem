@@ -32,6 +32,7 @@ import com.google.gson.reflect.TypeToken;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class IntentDispatcher2 {
 
@@ -444,6 +445,8 @@ public class IntentDispatcher2 {
 
         plugin.getLogger().info("[剧情推进] 玩家: " + fp.getName() + ", 文本: " + ftext);
 
+        forwardToNarrativeIngestion(fp, ftext);
+
         // 不再使用 Map.of() —— 改为 HashMap 全兼容安全版
         Map<String, Object> body = new HashMap<>();
         body.put("player_id", fp.getName());
@@ -513,6 +516,98 @@ public class IntentDispatcher2 {
                         world.execute(fp, patch);
                     }
                 });
+            }
+        });
+    }
+
+    private void forwardToNarrativeIngestion(Player player, String text) {
+        if (text == null) {
+            return;
+        }
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("player_id", player.getName());
+        payload.put("message", trimmed);
+        payload.put("channel", "storyline");
+
+        String json = GSON.toJson(payload);
+        UUID playerId = player.getUniqueId();
+
+        backend.postJsonAsync("/ideal-city/narrative/ingest", json, new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                plugin.getLogger().warning("[CityPhone] 叙事采集失败: " + e.getMessage());
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                try (response) {
+                    if (!response.isSuccessful()) {
+                        plugin.getLogger().warning("[CityPhone] 叙事采集返回 HTTP " + response.code());
+                        return;
+                    }
+                    ResponseBody responseBody = response.body();
+                    if (responseBody == null) {
+                        return;
+                    }
+                    String body = responseBody.string();
+                    if (body.isEmpty()) {
+                        return;
+                    }
+                    JsonObject root;
+                    try {
+                        root = JsonParser.parseString(body).getAsJsonObject();
+                    } catch (Exception parseError) {
+                        plugin.getLogger().warning("[CityPhone] 叙事采集解析失败: " + parseError.getMessage());
+                        return;
+                    }
+                    String status = root.has("status") && !root.get("status").isJsonNull()
+                            ? root.get("status").getAsString()
+                            : "";
+                    if (!"needs_review".equalsIgnoreCase(status) && !"accepted".equalsIgnoreCase(status)) {
+                        return;
+                    }
+
+                    String serverMessage = root.has("message") && root.get("message").isJsonPrimitive()
+                            ? root.get("message").getAsString()
+                            : ("needs_review".equalsIgnoreCase(status) ? "解析为草稿，请在 CityPhone 补齐要素。" : "已自动提交裁决。");
+
+                    String missingSummary = null;
+                    if (root.has("missing_fields") && root.get("missing_fields").isJsonArray()) {
+                        JsonArray arr = root.getAsJsonArray("missing_fields");
+                        if (arr.size() > 0) {
+                            StringBuilder builder = new StringBuilder();
+                            int limit = Math.min(arr.size(), 3);
+                            for (int i = 0; i < limit; i++) {
+                                if (i > 0) {
+                                    builder.append("、");
+                                }
+                                builder.append(arr.get(i).getAsString());
+                            }
+                            if (arr.size() > limit) {
+                                builder.append("…");
+                            }
+                            missingSummary = builder.toString();
+                        }
+                    }
+
+                    String display = "§b[CityPhone] " + serverMessage;
+                    if (missingSummary != null && !missingSummary.isEmpty()) {
+                        display += " 待补: " + missingSummary;
+                    }
+
+                    String finalDisplay = display;
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        Player target = Bukkit.getPlayer(playerId);
+                        if (target != null) {
+                            target.sendMessage(finalDisplay);
+                        }
+                    });
+                }
             }
         });
     }

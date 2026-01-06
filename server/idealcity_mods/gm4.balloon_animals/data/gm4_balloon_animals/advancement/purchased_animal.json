@@ -1,33 +1,65 @@
 {
-    "criteria": {
-      "primary_animal": {
-        "trigger": "minecraft:villager_trade",
-        "conditions": {
-          "item": {
-            "predicates": {
-              "minecraft:custom_data": "{gm4_balloon_animals:{trade:1b}}"
+  "criteria": {
+    "primary_animal": {
+      "trigger": "minecraft:villager_trade",
+      "conditions": {
+        "item": {
+          "predicates": {
+            "minecraft:custom_data": "{gm4_balloon_animals:{trade:1b}}"
+          }
+        },
+        "player": [
+          {
+            "condition": "minecraft:value_check",
+            "value": {
+              "type": "minecraft:score",
+              "target": {
+                "type": "minecraft:fixed",
+                "name": "gm4_balloon_animals"
+              },
+              "score": "load.status"
+            },
+            "range": {
+              "min": 1
             }
           }
-        }
-      },
-      "secondary_animal": {
-        "trigger": "minecraft:villager_trade",
-        "conditions": {
-          "item": {
-            "predicates": {
-              "minecraft:custom_data": "{gm4_balloon_animals:{trade:2b}}"
-            }
-          }
-        }
+        ]
       }
     },
-    "requirements": [
-      [
-        "primary_animal",
-        "secondary_animal"
-      ]
-    ],
-    "rewards": {
-      "function": "gm4_balloon_animals:purchased_animal"
+    "secondary_animal": {
+      "trigger": "minecraft:villager_trade",
+      "conditions": {
+        "item": {
+          "predicates": {
+            "minecraft:custom_data": "{gm4_balloon_animals:{trade:2b}}"
+          }
+        },
+        "player": [
+          {
+            "condition": "minecraft:value_check",
+            "value": {
+              "type": "minecraft:score",
+              "target": {
+                "type": "minecraft:fixed",
+                "name": "gm4_balloon_animals"
+              },
+              "score": "load.status"
+            },
+            "range": {
+              "min": 1
+            }
+          }
+        ]
+      }
     }
+  },
+  "requirements": [
+    [
+      "primary_animal",
+      "secondary_animal"
+    ]
+  ],
+  "rewards": {
+    "function": "gm4_balloon_animals:purchased_animal"
   }
+}

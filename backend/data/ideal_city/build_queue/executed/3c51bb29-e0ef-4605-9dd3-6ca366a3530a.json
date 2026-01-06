@@ -1,0 +1,42 @@
+{
+  "plan_id": "3c51bb29-e0ef-4605-9dd3-6ca366a3530a",
+  "summary": "在正前方6格部署GM4气球动物展示区并初始化",
+  "status": "completed",
+  "commands": [
+    "function gm4_balloon_animals:init",
+    "execute in world positioned -172 69 -99 run function gm4_balloon_animals:debug/summon_trader_with_llamas"
+  ],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：请在我正前方 6 格部署 GM4 气球动物展示区，并执行 gm4_balloon_animals:init",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-04T07:30:54.952820+00:00",
+  "player_pose": {
+    "world": "world",
+    "x": -172.29787005736668,
+    "y": 69.0,
+    "z": -98.77110728132801,
+    "yaw": 4.199737,
+    "pitch": 0.44995987
+  }
+}

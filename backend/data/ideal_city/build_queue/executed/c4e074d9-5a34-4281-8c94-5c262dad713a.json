@@ -1,0 +1,43 @@
+{
+  "plan_id": "c4e074d9-5a34-4281-8c94-5c262dad713a",
+  "summary": "执行位于2 64 6的世界中，运行函数gm4_balloon_animals:build/setup_showcase。",
+  "status": "completed",
+  "commands": [
+    "function gm4_balloon_animals:init",
+    "execute in world positioned 2.54 64.00 5.93 rotated -96.00 0 positioned ^ ^ ^6 run function gm4_balloon_animals:build/setup_showcase",
+    "execute in world positioned 2.54 64.00 5.93 rotated -96.00 0 positioned ^ ^ ^6 run function gm4_balloon_animals:build/populate_showcase"
+  ],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：execute in world positioned 2 64 6 run function gm4_balloon_animals:build/setup_showcase",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-04T10:17:45.765229+00:00",
+  "player_pose": {
+    "world": "world",
+    "x": 2.540410289959772,
+    "y": 64.0,
+    "z": 5.927738409568844,
+    "yaw": -95.9998,
+    "pitch": 40.199932
+  }
+}

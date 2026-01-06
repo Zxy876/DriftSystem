@@ -9,6 +9,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import com.driftmc.backend.BackendClient;
 import com.driftmc.cinematic.CinematicController;
+import com.driftmc.cityphone.CityPhoneCommand;
+import com.driftmc.cityphone.CityPhoneInventoryListener;
+import com.driftmc.cityphone.CityPhoneListener;
+import com.driftmc.cityphone.CityPhoneManager;
 import com.driftmc.commands.AdvanceCommand;
 import com.driftmc.commands.CinematicCommand;
 import com.driftmc.commands.DriftCommand;
@@ -24,6 +28,7 @@ import com.driftmc.commands.SayToAICommand;
 import com.driftmc.commands.StoryCreativeCommand;
 import com.driftmc.commands.TalkCommand;
 import com.driftmc.commands.TaskDebugCommand;
+import com.driftmc.commands.custom.CmdPlanJump;
 import com.driftmc.commands.custom.CmdSay;
 import com.driftmc.commands.custom.CmdStoryNext;
 import com.driftmc.commands.custom.CmdTeleport;
@@ -74,6 +79,7 @@ public class DriftPlugin extends JavaPlugin {
     private ChoicePanel choicePanel;
     private CinematicController cinematicController;
     private String taskDebugToken;
+    private CityPhoneManager cityPhoneManager;
 
     @Override
     public void onEnable() {
@@ -129,6 +135,7 @@ public class DriftPlugin extends JavaPlugin {
 
         IdealCityCommand idealCityCommand = new IdealCityCommand(this, backend);
         this.intentDispatcher2.setIdealCityCommand(idealCityCommand);
+        this.cityPhoneManager = new CityPhoneManager(this, backend);
 
         // 注册聊天监听器（核心：自然语言驱动）
         Bukkit.getPluginManager().registerEvents(
@@ -156,6 +163,8 @@ public class DriftPlugin extends JavaPlugin {
 
         // 注册教学安全守护（教程模式专用）
         Bukkit.getPluginManager().registerEvents(new TutorialSafetyListener(this, worldPatcher.getSceneLoader()), this);
+        Bukkit.getPluginManager().registerEvents(new CityPhoneListener(cityPhoneManager), this);
+        Bukkit.getPluginManager().registerEvents(new CityPhoneInventoryListener(cityPhoneManager), this);
 
         // 注册命令
         registerCommand("drift", new DriftCommand(backend, storyManager, worldPatcher, tutorialManager));
@@ -172,11 +181,13 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("tp2", new CmdTeleport(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("time2", new CmdTime(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("sayc", new CmdSay(backend, intentRouter, worldPatcher, sessionManager));
+        registerCommand("planjump", new CmdPlanJump(this, backend));
         registerCommand("recommend", new RecommendCommand(recommendationHud));
         registerCommand("questlog", new QuestLogCommand(questLogHud));
         registerCommand("cinematic", new CinematicCommand(cinematicController));
         registerCommand("taskdebug", new TaskDebugCommand(this, backend, taskDebugToken));
         registerCommand("idealcity", idealCityCommand);
+        registerCommand("cityphone", new CityPhoneCommand(cityPhoneManager));
 
         getLogger().info("======================================");
         getLogger().info("   DriftSystem / 心悦宇宙");

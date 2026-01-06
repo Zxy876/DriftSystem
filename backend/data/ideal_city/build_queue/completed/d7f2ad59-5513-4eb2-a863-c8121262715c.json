@@ -1,0 +1,30 @@
+{
+  "plan_id": "d7f2ad59-5513-4eb2-a863-c8121262715c",
+  "created_at": "2026-01-04T06:34:25.983368+00:00",
+  "summary": "在原点附近建造 GM4 气球动物展示区，高度保持 6 格。",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：请在原点附近建造 GM4 气球动物展示区，高度保持 6 格",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "origin_scenario": "default"
+}

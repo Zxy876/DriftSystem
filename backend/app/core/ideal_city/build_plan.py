@@ -10,6 +10,15 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
 
 
+class PlayerPose(BaseModel):
+    world: str
+    x: float
+    y: float
+    z: float
+    yaw: float
+    pitch: float
+
+
 class BuildPlanStatus(str, Enum):
     pending = "pending"
     queued = "queued"
@@ -37,6 +46,7 @@ class BuildPlan(BaseModel):
     risk_notes: List[str] = Field(default_factory=list)
     mod_hooks: List[str] = Field(default_factory=list)
     origin_scenario: Optional[str] = None
+    player_pose: Optional[PlayerPose] = None
 
     def to_storage_dict(self) -> Dict[str, object]:
         data = self.model_dump(mode="json")
@@ -85,7 +95,7 @@ class BuildPlan(BaseModel):
         origin_scenario = response.get("origin_scenario")
         if origin_scenario is not None:
             origin_scenario = str(origin_scenario)
-        return cls(
+        plan = cls(
             summary=summary.strip(),
             steps=steps,
             resource_ledger=resource_ledger,
@@ -93,6 +103,14 @@ class BuildPlan(BaseModel):
             risk_notes=risk_notes,
             origin_scenario=origin_scenario,
         )
+        pose_payload = response.get("player_pose")
+        if isinstance(pose_payload, dict):
+            try:
+                plan.player_pose = PlayerPose.model_validate(pose_payload)
+            except Exception:
+                pass
+        augment_mod_hooks(plan)
+        return plan
 
 
 # Keywords captured from typical in-game phrasing so the deterministic
@@ -186,6 +204,45 @@ def _derive_mod_hooks(spec_intent: str, logic_outline: List[str]) -> List[str]:
     return sorted(found)
 
 
+def _normalize_mod_identifier(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+    value = str(raw).strip()
+    if not value:
+        return None
+    if value.lower().startswith("function "):
+        value = value.split(None, 1)[1]
+    if value in _COMMAND_TO_MOD:
+        return _COMMAND_TO_MOD[value]
+    if value in _MOD_KEYWORDS:
+        return value
+    if value.count(":") == 1:
+        namespace, identifier = value.split(":", 1)
+        if namespace and identifier:
+            return value
+    return None
+
+
+def augment_mod_hooks(plan: BuildPlan, extra_text: Optional[List[str]] = None) -> None:
+    inferred: Set[str] = set(plan.mod_hooks or [])
+    clues: List[str] = []
+    if extra_text:
+        clues.extend([str(entry) for entry in extra_text if entry])
+    for step in plan.steps:
+        if step.title:
+            clues.append(str(step.title))
+        if step.description:
+            clues.append(str(step.description))
+        if step.required_mod:
+            clues.append(str(step.required_mod))
+            normalized = _normalize_mod_identifier(step.required_mod)
+            if normalized:
+                inferred.add(normalized)
+    derived = _derive_mod_hooks(plan.summary or "", clues)
+    inferred.update(derived)
+    plan.mod_hooks = sorted(inferred)
+
+
 def build_plan_from_spec(spec_intent: str, logic_outline: List[str], scenario_id: Optional[str]) -> BuildPlan:
     """Fallback deterministic plan derived from logic outline."""
 
@@ -210,10 +267,10 @@ def build_plan_from_spec(spec_intent: str, logic_outline: List[str], scenario_id
                 description="按照裁决说明执行任务，并在完成后回报档案馆。",
             )
         )
-    mod_hooks = _derive_mod_hooks(spec_intent or "", logic_outline or [])
-    return BuildPlan(
+    plan = BuildPlan(
         summary=summary.strip(),
         steps=steps,
         origin_scenario=scenario_id,
-        mod_hooks=mod_hooks,
     )
+    augment_mod_hooks(plan, [spec_intent] + list(logic_outline or []))
+    return plan

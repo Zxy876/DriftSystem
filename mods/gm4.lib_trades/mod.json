@@ -12,7 +12,11 @@
     "textures": ["assets"]
   },
   "entry_points": {
-    "build": ["function gm4_trades:load"]
+    "build": [
+      "function gm4_trades:load",
+      "execute in {world} positioned {x} {y} {z} run summon villager ~ ~ ~ {VillagerData:{profession:farmer,level:5,type:plains},Offers:{},Tags:[\"gm4_demo\",\"gm4_trades_stall\"]}",
+      "execute in {world} positioned {x} {y} {z} run setblock ~ ~-1 ~ emerald_block"
+    ]
   },
   "metadata": {
     "license": "GPL-3.0-or-later",

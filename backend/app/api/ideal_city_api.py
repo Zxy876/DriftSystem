@@ -10,9 +10,11 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.core.ideal_city.pipeline import (
+    CityPhoneAction,
     DeviceSpecSubmission,
     IdealCityPipeline,
 )
+from app.core.ideal_city.narrative_ingestion import NarrativeChatEvent
 
 router = APIRouter(prefix="/ideal-city", tags=["IdealCity"])
 _pipeline = IdealCityPipeline()
@@ -78,3 +80,29 @@ def list_mods():
 def refresh_mods():
     _pipeline.refresh_mods()
     return {"status": "ok", "mods": _pipeline.list_mods()}
+
+
+@router.get("/cityphone/state/{player_id}")
+def cityphone_state(player_id: str, scenario_id: str = "default"):
+    state = _pipeline.cityphone_state(player_id, scenario_id)
+    return {"status": "ok", "state": state.model_dump(mode="json")}
+
+
+@router.post("/cityphone/action")
+def cityphone_action(payload: CityPhoneAction):
+    result = _pipeline.handle_cityphone_action(payload)
+    return result.model_dump(mode="json")
+
+
+@router.post("/narrative/ingest")
+def narrative_ingest(payload: NarrativeChatEvent):
+    result = _pipeline.ingest_narrative_event(payload)
+    return result.model_dump(mode="json")
+
+
+@router.get("/build-plans/executed/{plan_id}")
+def get_executed_plan(plan_id: str):
+    record = _pipeline.fetch_executed_plan(plan_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Executed build plan not found")
+    return {"status": "ok", "plan": record.to_payload()}

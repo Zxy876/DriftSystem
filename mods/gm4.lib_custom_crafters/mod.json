@@ -12,7 +12,10 @@
     "textures": ["assets"]
   },
   "entry_points": {
-    "build": ["function gm4_custom_crafters:load"]
+    "build": [
+      "function gm4_custom_crafters:load",
+      "execute in {world} positioned {x} {y} {z} run place structure gm4_custom_crafters:test_platform ~ ~ ~"
+    ]
   },
   "metadata": {
     "license": "GPL-3.0-or-later",

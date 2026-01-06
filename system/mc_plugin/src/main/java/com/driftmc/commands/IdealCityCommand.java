@@ -5,12 +5,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -61,6 +63,7 @@ public class IdealCityCommand implements CommandExecutor {
         Map<String, Object> payload = new HashMap<>();
         payload.put("player_id", player.getUniqueId().toString());
         payload.put("narrative", trimmed);
+        attachPlayerPose(player, payload);
 
         submitPayload(player, payload);
         return true;
@@ -270,6 +273,7 @@ public class IdealCityCommand implements CommandExecutor {
         if (!draft.getResources().isEmpty()) {
             payload.put("resource_ledger", new ArrayList<>(draft.getResources()));
         }
+        attachPlayerPose(player, payload);
 
         if (mode == SubmissionMode.MANUAL) {
             player.sendMessage("§7[IdealCity] 草稿已提交，等待裁决…");
@@ -287,8 +291,7 @@ public class IdealCityCommand implements CommandExecutor {
             @Override
             public void onFailure(Call call, IOException e) {
                 plugin.getLogger().log(Level.WARNING, "[IdealCityCommand] backend error", e);
-                Bukkit.getScheduler().runTask(plugin, () ->
-                        player.sendMessage("§c[IdealCity] 后端暂时不可用，请稍后再试。"));
+                Bukkit.getScheduler().runTask(plugin, () -> player.sendMessage("§c[IdealCity] 后端暂时不可用，请稍后再试。"));
             }
 
             @Override
@@ -299,20 +302,23 @@ public class IdealCityCommand implements CommandExecutor {
                         plugin.getLogger().log(Level.WARNING,
                                 "[IdealCityCommand] backend replied HTTP {0} payload {1}",
                                 new Object[] { response.code(), body });
-                        Bukkit.getScheduler().runTask(plugin, () ->
-                                player.sendMessage("§c[IdealCity] 提交失败，请联系管理员。"));
+                        Bukkit.getScheduler().runTask(plugin, () -> player.sendMessage("§c[IdealCity] 提交失败，请联系管理员。"));
                         return;
                     }
 
                     JsonObject root = JsonParser.parseString(body).getAsJsonObject();
                     JsonObject specJson = root.has("spec") && root.get("spec").isJsonObject()
-                            ? root.getAsJsonObject("spec") : null;
+                            ? root.getAsJsonObject("spec")
+                            : null;
                     JsonObject noticeJson = root.has("notice") && root.get("notice").isJsonObject()
-                            ? root.getAsJsonObject("notice") : null;
+                            ? root.getAsJsonObject("notice")
+                            : null;
                     JsonObject planJson = root.has("build_plan") && root.get("build_plan").isJsonObject()
-                            ? root.getAsJsonObject("build_plan") : null;
+                            ? root.getAsJsonObject("build_plan")
+                            : null;
                     JsonObject narrationJson = root.has("narration") && root.get("narration").isJsonObject()
-                            ? root.getAsJsonObject("narration") : null;
+                            ? root.getAsJsonObject("narration")
+                            : null;
 
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         JsonObject noticeToUse = noticeJson;
@@ -328,8 +334,8 @@ public class IdealCityCommand implements CommandExecutor {
                                 player.sendMessage("§e" + noticeToUse.get("headline").getAsString());
                             }
                             if (noticeToUse.has("body") && noticeToUse.get("body").isJsonArray()) {
-                                noticeToUse.getAsJsonArray("body").forEach(element ->
-                                        player.sendMessage("§7 - " + element.getAsString()));
+                                noticeToUse.getAsJsonArray("body")
+                                        .forEach(element -> player.sendMessage("§7 - " + element.getAsString()));
                             }
                             if (noticeToUse.has("guidance") && noticeToUse.get("guidance").isJsonArray()) {
                                 player.sendMessage("§6后续指导：");
@@ -375,6 +381,18 @@ public class IdealCityCommand implements CommandExecutor {
                                     player.sendMessage("§d关联模组: " + builder);
                                 }
                             }
+                            if (planToUse.has("location_hint") && planToUse.get("location_hint").isJsonObject()) {
+                                JsonObject locationHint = planToUse.getAsJsonObject("location_hint");
+                                String worldName = locationHint.has("world") ? locationHint.get("world").getAsString()
+                                        : "world";
+                                double targetX = locationHint.has("x") ? locationHint.get("x").getAsDouble() : 0.0;
+                                double targetY = locationHint.has("y") ? locationHint.get("y").getAsDouble() : 0.0;
+                                double targetZ = locationHint.has("z") ? locationHint.get("z").getAsDouble() : 0.0;
+                                player.sendMessage(String.format(Locale.ROOT, "§a预计落点: %s (%.1f, %.1f, %.1f)",
+                                        worldName, targetX, targetY, targetZ));
+                                player.sendMessage(String.format(Locale.ROOT, "§7传送指令: /tp %s %.1f %.1f %.1f",
+                                        player.getName(), targetX, targetY, targetZ));
+                            }
                         }
 
                         if (narrationToUse != null) {
@@ -393,11 +411,28 @@ public class IdealCityCommand implements CommandExecutor {
                     });
                 } catch (Exception ex) {
                     plugin.getLogger().log(Level.WARNING, "[IdealCityCommand] parse failure", ex);
-                    Bukkit.getScheduler().runTask(plugin, () ->
-                            player.sendMessage("§c[IdealCity] 返回结果读取失败。"));
+                    Bukkit.getScheduler().runTask(plugin, () -> player.sendMessage("§c[IdealCity] 返回结果读取失败。"));
                 }
             }
         });
+    }
+
+    private void attachPlayerPose(Player player, Map<String, Object> payload) {
+        if (player == null) {
+            return;
+        }
+        Location location = player.getLocation();
+        if (location == null || location.getWorld() == null) {
+            return;
+        }
+        Map<String, Object> pose = new HashMap<>();
+        pose.put("world", location.getWorld().getName());
+        pose.put("x", location.getX());
+        pose.put("y", location.getY());
+        pose.put("z", location.getZ());
+        pose.put("yaw", location.getYaw());
+        pose.put("pitch", location.getPitch());
+        payload.put("player_pose", pose);
     }
 
     private String formatPlanStep(JsonElement element) {

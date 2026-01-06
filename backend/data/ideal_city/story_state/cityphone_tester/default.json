@@ -1,0 +1,45 @@
+{
+  "state": {
+    "player_id": "cityphone_tester",
+    "scenario_id": "default",
+    "goals": [
+      "测试一次 CityPhone 叙事流。",
+      "测试一次 CityPhone 叙事流",
+      "准备资源并落地社区验证"
+    ],
+    "logic_outline": [
+      "目标：测试一次 CityPhone 叙事流",
+      "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "执行：围绕目标拆解两步执行：准备资源并落地社区验证"
+    ],
+    "resources": [],
+    "community_requirements": [
+      "居民可以按周使用工坊且不发生事故",
+      "城市档案馆记录到新的协作项目"
+    ],
+    "world_constraints": [
+      "夜间能源供应有限，噪音需受限",
+      "居民经济条件薄弱，需要公用资源调度",
+      "市政要求所有新设施公开运作计划"
+    ],
+    "risk_notes": [
+      "若能源调度失衡，可能影响核心城区供电",
+      "若维护计划缺失，工坊或成为安全隐患"
+    ],
+    "location_hint": null,
+    "player_pose": null,
+    "notes": [
+      "测试一次 CityPhone 叙事流。"
+    ],
+    "ready_for_build": false,
+    "open_questions": [
+      "列出展台所需的材料及来源（例如谁筹备或向谁借用）。",
+      "提供预期建造位置的坐标（或在现场定位后提交 /taskdebug pose），档案馆才能定位施工点。",
+      "您希望在社区验证中使用哪些具体资源？",
+      "您对成功的具体标准是什么？"
+    ],
+    "version": 2,
+    "updated_at": "2026-01-05T07:39:15.756109Z"
+  },
+  "frozen_at": "2026-01-05T07:39:15.756129Z"
+}

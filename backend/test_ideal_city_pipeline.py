@@ -12,6 +12,7 @@ import pytest
 from app.core.ideal_city import scenario_repository as scenario_module
 from app.core.ideal_city import worldview as worldview_module
 from app.core.ideal_city.adjudication_contract import VerdictEnum
+from app.core.ideal_city.build_plan import PlayerPose
 from app.core.ideal_city.pipeline import DeviceSpecSubmission, IdealCityPipeline
 
 
@@ -83,26 +84,37 @@ def test_single_sentence_submission_auto_structures():
     assert any("熄灯区" in line for line in result.notice.body)
     assert result.notice.guidance  # fallback guidance strings should exist
     assert result.narration is not None
+    state = pipeline.cityphone_state("tester", "default")
+    assert state.ready_for_build is True
+    assert state.panels.plan.available is True
+    assert state.blocking == []
+    assert result.build_plan is not None
 
 
 def test_acceptance_mentions_affirmation():
     pipeline = IdealCityPipeline()
     submission = DeviceSpecSubmission(
         player_id="tester",
-        narrative="我要搭建一个工坊",
+        narrative="我要搭建一个工坊，为熄灯区提供安全的夜间维修空间，并安排志愿者轮值守护，确保居民可以安心使用。",
         scenario_id="default",
         world_constraints=["遵守夜间能源限制"],
-        logic_outline=["整理材料", "邀请邻里"],
-        risk_register=["噪音扰民"],
-        success_criteria=["居民按周排班使用"],
+        logic_outline=["整理材料", "邀请邻里", "布置安全检查"],
+        resource_ledger=["木材与工具 - 社区工坊", "照明设备 - 夜间供电站"],
+        risk_register=["风险: 夜间噪音扰民 / 安装隔音帘"],
+        success_criteria=["居民按周排班使用", "夜间事故为零"],
+        player_pose=PlayerPose(world="world", x=10.0, y=65.0, z=-4.0, yaw=0.0, pitch=0.0),
+        location_hint="工坊南侧平台",
     )
     result = pipeline.submit(submission)
     assert result.ruling.verdict == VerdictEnum.ACCEPT
     assert any("工坊长老们认可" in line for line in result.notice.body)
     assert any(line.startswith(" ~ 世界精神") for line in result.notice.body)
-    assert result.notice.build_plan is not None
+    state = pipeline.cityphone_state("tester", "default")
+    assert state.ready_for_build is True
+    assert state.panels.plan.available is True
+    assert state.blocking == []
+    assert state.build_capability >= 120
     assert result.build_plan is not None
-    assert result.build_plan.summary
     data_root = Path(os.environ["IDEAL_CITY_DATA_ROOT"])  # provided by fixture
     queue_file = data_root / "build_queue" / "build_queue.jsonl"
     assert queue_file.exists()
@@ -147,7 +159,7 @@ def test_missing_structure_falls_back_to_rule_based_reject(monkeypatch):
     pipeline = IdealCityPipeline()
     submission = DeviceSpecSubmission(
         player_id="tester",
-        narrative="我想建设一个社区中心",
+        narrative="我想建设一个社区中心，提供夜间自习和手工活动，但目前还没有准备详细计划。",
         scenario_id="default",
         world_constraints=[],
         logic_outline=["只有一个想法"],
@@ -158,7 +170,60 @@ def test_missing_structure_falls_back_to_rule_based_reject(monkeypatch):
     assert result.ruling.verdict == VerdictEnum.REJECT
     body_text = "\n".join(result.notice.body)
     assert "缺少必要结构" in body_text
-    assert any("档案员说明" in line for line in result.notice.body)
+    assert any("需补" in line or "阻塞" in line for line in result.notice.body)
+
+
+def test_single_turn_high_logic_unlocks_plan(ideal_city_data_root):
+    pipeline = IdealCityPipeline()
+    submission = DeviceSpecSubmission(
+        player_id="logic_master",
+        narrative=(
+            "我将协调社区工匠与供电站搭建一个夜间工坊，"
+            "确保先整理旧工具、安装隔音装置，再引导居民试运行。"
+        ),
+        scenario_id="default",
+        world_constraints=["遵守夜间能源限制", "夜间噪音控制"],
+        logic_outline=["整理旧工具", "搭设主体结构", "安排试运行"],
+        resource_ledger=["木材与隔音材料 - 社区工坊", "照明设备 - 夜间供电站"],
+        success_criteria=["居民按周排班使用", "夜间事故为零"],
+        risk_register=["风险: 夜间照明不足 / 增配移动灯带"],
+        player_pose=PlayerPose(world="world", x=20.0, y=70.0, z=5.0, yaw=45.0, pitch=0.0),
+        location_hint="熄灯区广场东侧",
+    )
+    pipeline.submit(submission)
+    state = pipeline.cityphone_state("logic_master", "default")
+    assert state.ready_for_build is True
+    assert state.build_capability >= 120
+    assert state.logic_score == 100
+    assert state.blocking == []
+    assert state.panels.plan.available is True
+    assert not state.panels.plan.pending_reasons
+
+
+def test_single_turn_high_motivation_missing_logic_blocks_plan(ideal_city_data_root):
+    pipeline = IdealCityPipeline()
+    long_story = (
+        "我太想马上建设社区中心了，居民们一直在夜里找我希望有个安全的地方，"
+        "所以我准备亲自筹划活动、号召邻里、联系志愿者，还会拍摄记录分享，"
+        "只要大家愿意参加，我就会一直更新计划，绝不让这个梦想落空。"
+    )
+    submission = DeviceSpecSubmission(
+        player_id="motivation_only",
+        narrative=long_story,
+        scenario_id="default",
+        world_constraints=[],
+        logic_outline=["整理旧物"],
+        risk_register=[],
+    )
+    pipeline.submit(submission)
+    state = pipeline.cityphone_state("motivation_only", "default")
+    assert state.ready_for_build is False
+    assert state.logic_score < 100
+    assert state.build_capability < 120
+    assert state.blocking
+    assert any("风险登记" in item for item in state.blocking)
+    assert state.panels.plan.available is False
+    assert state.panels.plan.pending_reasons
 
 
 def test_draft_submission_requests_manual_review(monkeypatch):

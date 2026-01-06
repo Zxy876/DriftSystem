@@ -1,0 +1,36 @@
+{
+  "plan_id": "53a7de59-284b-4af8-a4f8-e9030e298d57",
+  "created_at": "2026-01-04T10:46:55.949106+00:00",
+  "summary": "准备资源",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "fallback-1",
+      "title": "阶段 1",
+      "description": "目标：step_1\", \"title\": \"准备资源\", \"description\": \"制定详细的资源清单，列出所需的材料和工具，并明确其来源，以便于后续的部署和维护",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "fallback-2",
+      "title": "阶段 2",
+      "description": "执行：\",",
+      "target_region": null,
+      "required_mod": null,
+      "dependencies": []
+    }
+  ],
+  "resource_ledger": {},
+  "risk_notes": [],
+  "mod_hooks": [],
+  "origin_scenario": "default",
+  "player_pose": {
+    "world": "world",
+    "x": 2.540410289959772,
+    "y": 64.0,
+    "z": 5.927738409568844,
+    "yaw": 157.50188,
+    "pitch": 18.599916
+  }
+}

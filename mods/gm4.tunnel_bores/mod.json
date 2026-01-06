@@ -12,7 +12,12 @@
     "textures": []
   },
   "entry_points": {
-    "build": ["function gm4_tunnel_bores:init"]
+    "build": [
+      "function gm4_tunnel_bores:init",
+      "execute in {world} positioned {x} {y} {z} run fill ~ ~-1 ~ ~6 ~-1 ~ polished_andesite",
+      "execute in {world} positioned {x} {y} {z} run fill ~ ~ ~ ~6 ~ ~ powered_rail",
+      "execute in {world} positioned {x} {y} {z} run summon furnace_minecart ~ ~0.1 ~ {CustomName:'{\"text\":\"Tunnel Bore\"}',Tags:[\"gm4_demo\",\"gm4_tunnel_bores_machine\"]}"
+    ]
   },
   "metadata": {
     "license": "GPL-3.0-or-later",

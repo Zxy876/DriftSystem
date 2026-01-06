@@ -12,7 +12,11 @@
     "textures": ["assets"]
   },
   "entry_points": {
-    "build": ["function gm4_boots_of_ostara:init"]
+    "build": [
+      "function gm4_boots_of_ostara:init",
+      "execute in {world} positioned {x} {y} {z} run loot give @p[distance=..6] loot gm4_boots_of_ostara:items/boots_of_ostara",
+      "execute in {world} positioned {x} {y} {z} run fill ~-2 ~-1 ~-2 ~2 ~-1 ~2 moss_block replace dirt"
+    ]
   },
   "metadata": {
     "license": "GPL-3.0-or-later",

@@ -19,7 +19,25 @@
   "parent": "gm4:root",
   "criteria": {
     "balloon_animals": {
-      "trigger": "minecraft:impossible"
+      "trigger": "minecraft:impossible",
+      "conditions": {
+        "player": [
+          {
+            "condition": "minecraft:value_check",
+            "value": {
+              "type": "minecraft:score",
+              "target": {
+                "type": "minecraft:fixed",
+                "name": "gm4_balloon_animals"
+              },
+              "score": "load.status"
+            },
+            "range": {
+              "min": 1
+            }
+          }
+        ]
+      }
     }
   }
 }

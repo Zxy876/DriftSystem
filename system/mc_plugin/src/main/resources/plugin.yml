@@ -63,6 +63,11 @@ commands:
     description: "以心悦风格广播一句话"
     usage: "/sayc <message>"
 
+  planjump:
+    description: "跳转到已执行建造计划的记录坐标"
+    usage: "/planjump <plan_id>"
+    permission: "drift.planjump"
+
   recommend:
     description: "显示 StoryGraph 推荐章节"
     usage: "/recommend"
@@ -84,7 +89,14 @@ commands:
     description: "提交理想之城装置规格"
     usage: "/idealcity <叙述 | start [叙述] | narrative <叙述> | constraint/step/success/resource <文本> | show | submit | cancel>"
 
+  cityphone:
+    description: "管理 CityPhone 终端"
+    usage: "/cityphone <give|open|say|pose>"
+
 permissions:
   drift.taskdebug:
     description: "访问任务调试工具"
+    default: op
+  drift.planjump:
+    description: "使用 planjump 命令"
     default: op

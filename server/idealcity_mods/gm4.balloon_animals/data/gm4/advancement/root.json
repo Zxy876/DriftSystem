@@ -1,0 +1,30 @@
+{
+  "display": {
+    "icon": {
+      "id": "command_block",
+      "components": {
+        "minecraft:custom_model_data": {
+          "floats": [
+            3420001
+          ]
+        }
+      }
+    },
+    "title": {
+      "translate": "advancement.gm4.root.title",
+      "fallback": "Gamemode 4"
+    },
+    "description": {
+      "translate": "advancement.gm4.root.description",
+      "fallback": "Semi-funny blurb about GM4",
+      "color": "gray"
+    },
+    "background": "block/light_blue_concrete_powder",
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "automatic": {
+      "trigger": "minecraft:tick"
+    }
+  }
+}

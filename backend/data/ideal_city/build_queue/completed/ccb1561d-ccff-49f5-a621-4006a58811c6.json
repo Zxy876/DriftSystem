@@ -1,0 +1,57 @@
+{
+  "plan_id": "ccb1561d-ccff-49f5-a621-4006a58811c6",
+  "created_at": "2026-01-05T07:22:48.154367+00:00",
+  "summary": "我们规划在河岸观景台靠近南侧阶梯的空地安装装置，先整理地面再摆放气球骨架。我会让阿南负责物资汇总，琳带两名志愿者布线，文学社负责循环广播。",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "phase-resources",
+      "title": "协调资源",
+      "description": "协调夜市与社区志愿者提供气球、灯光与音响；物资汇总由我会让阿南筹备；循环广播由文学社筹备",
+      "target_region": "default",
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "phase-community",
+      "title": "社区共创",
+      "description": "确认展台满足居民期待：居民可以按周使用工坊且不发生事故；城市档案馆记录到新的协作项目",
+      "target_region": "default",
+      "required_mod": null,
+      "dependencies": [
+        "phase-resources"
+      ]
+    },
+    {
+      "step_id": "phase-execution",
+      "title": "执行建造",
+      "description": "在 这附近 落地 GM4 气球展台并点亮周边。",
+      "target_region": "这附近",
+      "required_mod": "gm4:balloon_animals",
+      "dependencies": [
+        "phase-community"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "资源1": "协调夜市与社区志愿者提供气球、灯光与音响",
+    "资源2": "物资汇总由我会让阿南筹备",
+    "资源3": "循环广播由文学社筹备"
+  },
+  "risk_notes": [
+    "若能源调度失衡，可能影响核心城区供电",
+    "若维护计划缺失，工坊或成为安全隐患"
+  ],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "origin_scenario": "default",
+  "player_pose": {
+    "world": "world",
+    "x": 128.4,
+    "y": 65.0,
+    "z": -212.7,
+    "yaw": 32.0,
+    "pitch": 5.0
+  }
+}

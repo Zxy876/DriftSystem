@@ -1,0 +1,6 @@
+[beet]
+commands=mecha.commands
+
+[console_scripts]
+mecha=mecha.cli:main
+
