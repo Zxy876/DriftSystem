@@ -61,6 +61,7 @@ from .story_state_repository import StoryStateRepository
 from .story_state_manager import StoryStateManager
 from .story_state_agent import StoryStateAgent
 from .story_state_phase import determine_phase
+from .social_feedback import SocialFeedbackRepository, SocialAtmospherePayload
 
 
 _EXECUTE_LOCATION_PATTERN = re.compile(
@@ -456,6 +457,7 @@ class IdealCityPipeline:
         self._story_state_agent = StoryStateAgent()
         self._story_manager = StoryStateManager(self._story_repository, agent=self._story_state_agent)
         self._narrative_ingestor = NarrativeChatIngestor()
+        self._social_repo = SocialFeedbackRepository(data_dir / "protocol")
 
     def fetch_executed_plan(self, plan_id: str) -> Optional[ExecutedPlanRecord]:
         try:
@@ -624,6 +626,9 @@ class IdealCityPipeline:
             build_plan=result.build_plan.model_dump(mode="json") if result.build_plan else None,
             state=self.cityphone_state(event.player_id, scenario_id).model_dump(mode="json"),
         )
+
+    def social_atmosphere(self, limit: int = 5) -> SocialAtmospherePayload:
+        return self._social_repo.load_atmosphere(limit=limit)
 
     def submit(self, submission: DeviceSpecSubmission) -> SubmissionResult:
         intent_match = detect_intent(submission.narrative)

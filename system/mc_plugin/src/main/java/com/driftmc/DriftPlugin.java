@@ -7,6 +7,8 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import com.driftmc.atmosphere.SocialAtmosphereListener;
+import com.driftmc.atmosphere.SocialAtmosphereManager;
 import com.driftmc.backend.BackendClient;
 import com.driftmc.cinematic.CinematicController;
 import com.driftmc.cityphone.CityPhoneCommand;
@@ -80,6 +82,7 @@ public class DriftPlugin extends JavaPlugin {
     private CinematicController cinematicController;
     private String taskDebugToken;
     private CityPhoneManager cityPhoneManager;
+    private SocialAtmosphereManager socialAtmosphereManager;
 
     @Override
     public void onEnable() {
@@ -136,6 +139,7 @@ public class DriftPlugin extends JavaPlugin {
         IdealCityCommand idealCityCommand = new IdealCityCommand(this, backend);
         this.intentDispatcher2.setIdealCityCommand(idealCityCommand);
         this.cityPhoneManager = new CityPhoneManager(this, backend);
+        this.socialAtmosphereManager = new SocialAtmosphereManager(this, backend);
 
         // 注册聊天监听器（核心：自然语言驱动）
         Bukkit.getPluginManager().registerEvents(
@@ -165,6 +169,7 @@ public class DriftPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new TutorialSafetyListener(this, worldPatcher.getSceneLoader()), this);
         Bukkit.getPluginManager().registerEvents(new CityPhoneListener(cityPhoneManager), this);
         Bukkit.getPluginManager().registerEvents(new CityPhoneInventoryListener(cityPhoneManager), this);
+        Bukkit.getPluginManager().registerEvents(new SocialAtmosphereListener(socialAtmosphereManager), this);
 
         // 注册命令
         registerCommand("drift", new DriftCommand(backend, storyManager, worldPatcher, tutorialManager));

@@ -106,3 +106,9 @@ def get_executed_plan(plan_id: str):
     if record is None:
         raise HTTPException(status_code=404, detail="Executed build plan not found")
     return {"status": "ok", "plan": record.to_payload()}
+
+
+@router.get("/social-feedback/atmosphere")
+def social_feedback_atmosphere(limit: int = 5):
+    atmosphere = _pipeline.social_atmosphere(limit=limit)
+    return {"status": "ok", "atmosphere": atmosphere.model_dump(mode="json")}
