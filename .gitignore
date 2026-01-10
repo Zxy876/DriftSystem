@@ -19,6 +19,8 @@ backend/backend.log
 backend/backend.pid
 backend.log
 *.pid
+backend/.env
+.env
 
 # Temp directories from autoreload / coverage
 .pytest_cache/
