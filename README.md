@@ -1,132 +1,112 @@
 [![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/Zxy876/DriftSystem)
 # DriftSystem · 心悦宇宙
-> Fully natural-language-driven AI adventure system for Minecraft
 
-## Overview
-DriftSystem (心悦宇宙) 将 Minecraft 服务器与 AI 故事引擎融合，玩家只需自然语言即可驱动剧情、改造世界、创建关卡并推进多人协同冒险。Java 插件负责即时反馈与世界渲染，Python FastAPI 后端提供意图识别、剧情编排、DSL 注入和教程/任务逻辑。
+最低摩擦的 AI 冒险体验：玩家进入 Minecraft 后只需自然语言对话，即可调度剧情、生成建造计划、触发社会反馈并让世界实时响应。
 
-## Core Highlights
-- 多意图自然语言管线：`IntentRouter2` + `IntentDispatcher2` 实现聊天驱动的一发多命令解析。
-- Heart Levels 剧情引擎：内置 30+ 章节，支持剧情分支、推荐、故事创作与小地图导航。
-- 世界/镜头系统：`SceneAwareWorldPatchExecutor`、HUD、CinematicController 与 NPC 管理器联动完成动态渲染。
-- 教学与创作体验：TutorialManager 保护新手流程，StoryCreativeManager 支持玩家即兴 DSL 注入。
-- FastAPI 后端：结构化 API 覆盖意图、世界、剧情、NPC、教程、提示、树形 DSL、MiniMap PNG。
+当前分支 **scienceline** 针对「紫水晶企划 × 双向通信」玩法做了以下整合：
+- CityPhone UI 读取档案馆状态、收集叙述并在提交后自动触发裁决流程。
+- Forge 侧写回的 `cityphone/social-feed` 事件映射为「城市气氛」，玩家上线即看到粒子/天气/音效反馈。
+- 理想城市流水线（Ideal City Pipeline）统一承接叙述、裁决、建造、社会反馈与技术状态，维持审计可追踪性。
 
-## Architecture
+## 目录解剖
+
 ```
-              ┌──────────────┐
-              │ Minecraft    │
-              │ Paper 1.20.x │
-              └──────┬───────┘
-                     │ Bukkit API
-        ┌────────────▼────────────┐
-        │ DriftSystem Plugin      │
-        │ Java 17 + Maven         │
-        │ - 聊天监听 + 意图路由   │
-        │ - 世界/剧情/教程引擎    │
-        │ - HUD + Cinematic + NPC │
-        └────────────┬────────────┘
-                     │ HTTP/JSON
-        ┌────────────▼────────────┐
-        │ FastAPI Backend         │
-        │ Python 3.10+            │
-        │ - AI Intent / Story DSL │
-        │ - Heart Levels 数据      │
-        │ - 世界/地图 REST 接口    │
-        └─────────────────────────┘
+backend/                  FastAPI 后端，含 Ideal City 管线、Heart Levels 数据、社会反馈解析
+system/mc_plugin/         Paper 1.20 插件源码，负责玩家交互、世界渲染、CityPhone、气氛播发
+docs/                     设计稿与操作手册（CityPhone、Ideal City、Cinematic 等）
+phases/, scripts/, tools/ 迭代规划、调试脚本、自动化入口
+server/, backend/server   内嵌 Paper 测试服（构建产物，勿提交）
+tmp_protocol_run/         临时导出的 Forge 协议样本（开发期缓存）
 ```
 
-## Repository Layout
+## 端到端回路
+
+1. **玩家叙述**：聊天监听器将自然语言交给 `IntentRouter2` 与 `IntentDispatcher2`，必要时写入 CityPhone。
+2. **后端裁决**：`/ideal-city/cityphone/action` 接口将叙述包装成 DeviceSpec，执行语义归一化 → 审裁 → 建造计划 → 叙事播报。
+3. **Forge 回写**：阶段推进后 Forge 生成 `cityphone/social-feed/events.jsonl` 与 `metrics.json`。
+4. **城市气氛**：`SocialFeedbackRepository` 解析社会反馈并派生粒子/天气/音效，插件通过新接口 `/ideal-city/social-feedback/atmosphere` 拉取。
+5. **上线播报**：`SocialAtmosphereListener` 在玩家加入时调用 `SocialAtmosphereManager`，展示标题、发送摘要、播放粒子与临时天气，默认 10 秒后恢复天气。
+
 ```
-backend/               FastAPI 服务、核心剧情/世界引擎与数据集
-system/mc_plugin/      Minecraft 插件源码、构建脚本、插件元数据
-docs/                  系统设计、剧情、关卡 DSL 说明
-phases/                Heart Universe 项目阶段规划
-tools/, scripts        构建、修复、部署自动化脚本
-server/, backend/server 内置 Paper 服务器与占位资源（忽略产物）
+玩家 -> Paper Plugin -> FastAPI -> Ideal City Pipeline
+   ^                  |            |
+   |                  |            v
+ 社会气氛 <- Forge <- 数据协议 <- Build/Social Writers
 ```
 
-## Quick Start
-1. 安装 Python 3.10+, Java 17+, Maven 3.6+, Paper 1.20.x。
-2. 在项目根执行：
-   ```bash
-   ./start_all.sh
-   ```
-   脚本会创建 venv、安装后端依赖、启动 FastAPI、编译插件并复制到嵌入式服务器。
-3. 进入 `backend/server` 启动 Paper：
-   ```bash
-   java -Xmx4G -Xms2G -jar paper-*.jar
-   ```
-4. 游戏内执行 `/drift status` 检查联通，然后直接用自然语言对话。
+## 快速启动
 
-## Manual Workflow
-**后端**
 ```bash
+# 后端
 cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
 
-**插件**
-```bash
-cd system/mc_plugin
+# 插件
+cd ../system/mc_plugin
 mvn clean package
-```
-生成的 `target/DriftSystem-*.jar` 复制到服务器 `plugins/` 目录。
+cp target/mc_plugin-1.0-SNAPSHOT.jar ../../server/plugins/DriftSystem.jar
 
-**服务器配置**
-编辑 `backend/server/plugins/DriftSystem/config.yml`：
+# Paper 服务器（首次需接受 EULA）
+cd ../../server
+java -Xmx4G -Xms2G -jar paper-1.20.1.jar
+```
+
+配置 `server/plugins/DriftSystem/config.yml`，确保：
+
 ```yaml
 backend_url: "http://127.0.0.1:8000"
-system:
-  debug: false
-story:
-  start_level: "level_01"
-world:
-  allow_world_modification: true
+debug:
+  task_token: "<optional-token>"
 ```
 
-## Configuration & Secrets
-- `backend/.env` (不随仓库提交)：`DEEPSEEK_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`。
-- Paper 服务器属性：`backend/server/server.properties`、`eula.txt` 等按需自定。
-- 插件调试：`debug.task_token` 允许 `/taskdebug` 命令访问受限接口。
+游戏内验证：
 
-## Development & Testing
-- 运行后端测试：`cd backend && pytest` 或 `./test_all.sh`。
-- 构建插件：`cd system/mc_plugin && mvn package`，可配合 `./build.sh` 快捷脚本。
-- 集成脚本：`test_all.sh`, `test_integration.sh`, `test_story.sh`, `test_tutorial.sh` 等覆盖剧情、任务、自愈流程。
-- 自检：`drift_backend_selftest.py` / `backend/drift_backend_selftest.py` 提供快速回归。
+```text
+/drift status            # 检查后端连通
+/cityphone give          # 获取 CityPhone 终端
+/cityphone open          # 打开档案界面
+聊天描述愿景/行动       # 触发 Ideal City 裁决
+重新登录                # 查看城市气氛播报（粒子/天气/音效 + 摘要）
+```
 
-## Content & Docs
-- Heart Levels 内容位于 `backend/data/heart_levels/` 与 `backend/data/flagship_levels/`。
-- DSL、剧情、情绪系统等详见 `docs/*.md`、`NPC_BEHAVIORS_TESTING.md`、`TUTORIAL_SYSTEM.md`。
-- `phases/` 保存项目路线图与阶段性叙事设计。
+## 关键后端接口
 
-## Minecraft Commands
-- `/drift status|sync|debug`：核心状态与同步。
-- `/storycreative`, `/recommend`, `/questlog`：HUD、推荐与创作入口。
-- `/taskdebug <token>`：意图任务调试命令（需要配置令牌）。
-- 自定义命令 `tp2`, `time2`, `sayc`, `npc`, `cinematic` 等对应世界调度与 NPC 管理。
+- `POST /ideal-city/cityphone/action`：CityPhone 提交、姿态同步、模板操作。
+- `GET  /ideal-city/cityphone/state/{player}`：UI 状态快照。
+- `GET  /ideal-city/social-feedback/atmosphere`：返回社会反馈快照 + 气氛推导（新功能）。
+- `POST /ideal-city/narrative/ingest`：自然语言事件自动归档为草稿或正式提案。
+- `GET  /ideal-city/build-plans/executed/{plan}`：建造执行记录审计。
 
-## Tooling & Automation
-- `start_all.sh`：一键构建启动。
-- `build_plugin.sh`, `build_and_deploy_plugin.sh`, `make_plugin.sh`：部署流水线。
-- `fix_*.sh` 与 `tools/`：自动修复/结构化脚本，辅助调试或迁移。
+## 开发提示
 
-## Troubleshooting
-- 后端连通：`curl http://127.0.0.1:8000/`，日志位于 `backend/backend.log`。
-- 插件配置：确保 `config.yml` backend_url 与实际端口一致。
-- 世界无响应：启用 `system.debug: true`，关注服务器控制台与 `/taskdebug` 输出。
-- 清理教程状态：`/reload` 前执行 `TutorialManager.cleanupPlayer`，或重启服务器重置。
+- **测试**：`cd backend && python3 -m pytest test_social_feedback.py` 覆盖社会反馈解析；`./test_all.sh` 运行完整后端自测。
+- **插件构建**：`cd system/mc_plugin && mvn -q package -DskipTests`，生成物位于 `target/mc_plugin-1.0-SNAPSHOT.jar`。
+- **CityPhone 协议样本**：Forge 样本位于 `tmp_protocol_run/cityphone/social-feed/`，如需重置可运行 `rm -rf tmp_protocol_run && mkdir -p tmp_protocol_run`。
+- **Secrets**：`backend/.env` 持久化 OpenAI/Deepseek 等密钥。模板见 `backend/.env.example`（已忽略版本控制）。
 
-## Contributing
-欢迎通过 Issue、Pull Request、剧情内容或 DSL 样例参与。提交前请跑通后端测试并确认 `system/mc_plugin/target/`、`backend/venv/` 等产物未纳入版本控制。
+## 常用命令速查
 
-## License
-本项目以 [MIT License](./LICENSE) 授权发布，可自由使用、修改与分发。详见仓库中的 `LICENSE` 文件。
+| 命令                  | 用途                                   |
+|-----------------------|----------------------------------------|
+| `/drift status`       | 查看后端状态、场景联通                |
+| `/taskdebug <token>`  | 手动触发任务调试，需要 config 令牌     |
+| `/cityphone open`     | 打开档案馆 CityPhone                   |
+| `/cinematic <dsl>`    | 执行镜头 DSL（配合 CityPhone mod hooks）|
+| `/storycreative`      | 进入剧情创作模式                       |
 
-**让剧情在Minecraft中自然生长** 🌱
+## 故障排查
 
-**体验完全由对话驱动的冒险之旅** 🚀
+- **气氛缺失**：确认后端 `protocol/cityphone/social-feed/` 目录存在有效事件；可运行 `python backend/scripts/check_protocol_end_to_end.py` 检验 Forge 回路。
+- **CityPhone 不更新**：检查 `backend/logs` 与 `/ideal-city/cityphone/state` 响应，必要时删除 `backend/data/ideal_city/story_state` 对应玩家缓存。
+- **建造计划无效**：`backend/data/ideal_city/build_queue/executed` 内文件可追踪执行指令和缺失模组。
+- **意图无响应**：服务器日志查看 `IntentDispatcher2` 输出，确保 Paper 端未丢失与后端通信。
+
+## 许可证
+
+项目沿用 [MIT License](./LICENSE)。代码、剧情与工具可自由复用，引用时请注明来源。
+
+> 让剧情在 Minecraft 中自然生长，
+> 让城市的每一次呼吸都回应玩家行动。
