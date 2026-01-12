@@ -30,6 +30,7 @@ class StoryState(BaseModel):
     location_hint: Optional[str] = None
     player_pose: Optional[PlayerPose] = None
     notes: List[str] = Field(default_factory=list)
+    exhibit_instances: List[str] = Field(default_factory=list)
     ready_for_build: bool = False
     open_questions: List[str] = Field(default_factory=list)
     blocking: List[str] = Field(default_factory=list)

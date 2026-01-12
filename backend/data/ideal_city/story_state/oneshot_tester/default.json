@@ -1,0 +1,72 @@
+{
+  "state": {
+    "player_id": "oneshot_tester",
+    "scenario_id": "default",
+    "goals": [
+      "夜间人气低迷似乎不只是缺展台,而是能源配给和巡夜节奏错配。我想先记录不同摊主与居民的聚集时间,看看15x15的限制是否迫使大家分散,或许先根据人流密度重新安排灯光点位,再决定要不要扩建。"
+    ],
+    "logic_outline": [],
+    "resources": [],
+    "community_requirements": [],
+    "success_criteria": [],
+    "world_constraints": [],
+    "risk_register": [],
+    "risk_notes": [],
+    "location_hint": null,
+    "player_pose": null,
+    "notes": [
+      "夜间人气低迷似乎不只是缺展台,而是能源配给和巡夜节奏错配。我想先记录不同摊主与居民的聚集时间,看看15x15的限制是否迫使大家分散,或许先根据人流密度重新安排灯光点位,再决定要不要扩建。"
+    ],
+    "ready_for_build": false,
+    "open_questions": [
+      "需补：执行逻辑，请至少写 1 步（可用模板按钮补齐）。",
+      "需补：世界约束，请列出关键限制（模板按钮可快速添加）。",
+      "需补：资源清单，可描述“物料 - 负责人”（模板按钮可补齐）。",
+      "需补：成功标准，写出验收方式（模板按钮可补齐）。",
+      "需补：风险登记，写出风险/缓解（模板按钮可补齐）。",
+      "同步一次坐标（/cityphone pose）以便定位施工点。",
+      "补充至少两步执行顺序，我们才能安排建造。",
+      "写明关键世界约束（如噪音、能耗），方便档案馆审核。",
+      "列出资源与责任人（格式：资源项 - 责任人）。",
+      "写下至少一个成功标准，让我们评估成效。",
+      "请列出至少一个风险点，格式如：风险: 描述 / 缓解。",
+      "补齐核心字段后才能生成计划"
+    ],
+    "blocking": [
+      "补齐核心字段后才能生成计划",
+      "需补：执行逻辑，请至少写 1 步（可用模板按钮补齐）。",
+      "需补：世界约束，请列出关键限制（模板按钮可快速添加）。",
+      "需补：资源清单，可描述“物料 - 负责人”（模板按钮可补齐）。",
+      "需补：成功标准，写出验收方式（模板按钮可补齐）。",
+      "需补：风险登记，写出风险/缓解（模板按钮可补齐）。"
+    ],
+    "coverage": {
+      "logic_outline": false,
+      "world_constraints": false,
+      "resource_ledger": false,
+      "success_criteria": false,
+      "risk_register": false
+    },
+    "motivation_score": 18,
+    "logic_score": 60,
+    "build_capability": 78,
+    "last_plan_id": null,
+    "last_plan_status": null,
+    "last_plan_synced_at": null,
+    "milestones": {},
+    "coverage_delta": {
+      "completed": [],
+      "regressed": []
+    },
+    "last_coverage_snapshot": {
+      "logic_outline": false,
+      "world_constraints": false,
+      "resource_ledger": false,
+      "success_criteria": false,
+      "risk_register": false
+    },
+    "version": 5,
+    "updated_at": "2026-01-09T09:04:26.427457Z"
+  },
+  "frozen_at": "2026-01-09T09:04:26.427471Z"
+}

@@ -1,0 +1,112 @@
+diff --git a/src/main/java/com/crystaltech/event/ModLifecycleEvents.java b/src/main/java/com/crystaltech/event/ModLifecycleEvents.java
+index 3d2af09..a4b912c 100644
+--- a/src/main/java/com/crystaltech/event/ModLifecycleEvents.java
++++ b/src/main/java/com/crystaltech/event/ModLifecycleEvents.java
+@@ -58,6 +58,11 @@ public final class ModLifecycleEvents {
+         event.enqueueWork(() -> {
+             ProtocolFileLayout layout = ProtocolFileLayout.resolve(FMLPaths.GAMEDIR.get());
+             ManifestationIntentService.getInstance().configure(new ManifestationIntentService.Configuration(
+                     new FileManifestationIntentInbox(layout.inboxRoot()),
+                     IntentSignatureValidatorFactory.fromEnvironment(),
+                     ManifestationEventWriter.forFile(layout.eventLogFile()),
+                     List.of("0.1.0")));
++            ProtocolOutputs.install(
++                    SocialFeedWriter.forDirectory(layout.socialFeedDir()),
++                    TechnologyStatusWriter.forFile(layout.technologyStatusFile()));
+         });
+     }
+ }
+
+diff --git a/src/main/java/com/crystaltech/protocol/ManifestationIntentService.java b/src/main/java/com/crystaltech/protocol/ManifestationIntentService.java
+index 5d1fd5f..c14a740 100644
+--- a/src/main/java/com/crystaltech/protocol/ManifestationIntentService.java
++++ b/src/main/java/com/crystaltech/protocol/ManifestationIntentService.java
+@@ -182,7 +182,12 @@ public final class ManifestationIntentService {
+             String scenarioVersion = capability.getScenarioVersion().orElse(null);
+             capability.markConsumed(reachedStage, now);
+             eventWriter.recordStageManifested(player.getUUID(), player.getGameProfile().getName(), intentId, scenarioId, scenarioVersion, reachedStage, now);
+             ProtocolOutputs.socialFeedWriter().recordStageAdvance(player.getUUID(), player.getGameProfile().getName(), scenarioId, scenarioVersion, reachedStage, now);
+-            ProtocolOutputs.technologyStatusWriter().updateStage(reachedStage, scenarioId, scenarioVersion, now);
++            TechnologyStatusWriter statusWriter = ProtocolOutputs.technologyStatusWriter();
++            statusWriter.updateStage(reachedStage, scenarioId, scenarioVersion, now);
++            statusWriter.recordStageManifest(
++                    player.getUUID(),
++                    player.getGameProfile().getName(),
++                    scenarioId, scenarioVersion, reachedStage, now);
+         });
+     }
+ }
+
+diff --git a/src/main/java/com/crystaltech/protocol/TechnologyStatusWriter.java b/src/main/java/com/crystaltech/protocol/TechnologyStatusWriter.java
+index 0fa35dc..f2ba149 100644
+--- a/src/main/java/com/crystaltech/protocol/TechnologyStatusWriter.java
++++ b/src/main/java/com/crystaltech/protocol/TechnologyStatusWriter.java
+@@ -46,6 +46,53 @@ public final class TechnologyStatusWriter {
+             CrystalTech.LOGGER.error("Failed to write technology status", ex);
+         } finally {
+             lock.unlock();
+         }
+     }
++
++    public void updateEnergy(String status,
++                             int level,
++                             Double generation,
++                             Double consumption,
++                             Double reserve,
++                             Instant timestamp) {
++        if (!enabled) {
++            return;
++        }
++        lock.lock();
++        try {
++            TechnologyStatus current = ensureSnapshot();
++            snapshot = current.withEnergy(
++                    Energy.fromSnapshot(status, level, generation, consumption, reserve, timestamp),
++                    timestamp);
++            writeSnapshot(snapshot);
++        } catch (IOException ex) {
++            CrystalTech.LOGGER.error("Failed to write technology energy snapshot", ex);
++        } finally {
++            lock.unlock();
++        }
++    }
++
++    public void replaceRisks(List<RiskEntry> riskEntries, Instant timestamp) {
++        if (!enabled) {
++            return;
++        }
++        lock.lock();
++        try {
++            TechnologyStatus current = ensureSnapshot();
++            snapshot = current.withRisks(riskEntries, timestamp);
++            writeSnapshot(snapshot);
++        } catch (IOException ex) {
++            CrystalTech.LOGGER.error("Failed to write technology risks", ex);
++        } finally {
++            lock.unlock();
++        }
++    }
++
++    public void recordStageManifest(UUID playerId,
++                                    String playerName,
++                                    String scenarioId,
++                                    String scenarioVersion,
++                                    int stage,
++                                    Instant timestamp) {
++        if (!enabled) {
++            return;
++        }
++        lock.lock();
++        try {
++            TechnologyStatus current = ensureSnapshot();
++            snapshot = current.withEvent(
++                    RecentEvent.stageManifest(playerId, playerName, scenarioId, scenarioVersion, stage, timestamp),
++                    MAX_RECENT_EVENTS,
++                    timestamp);
++            writeSnapshot(snapshot);
++        } catch (IOException ex) {
++            CrystalTech.LOGGER.error("Failed to append technology status event", ex);
++        } finally {
++            lock.unlock();
++        }
++    }

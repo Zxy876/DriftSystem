@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-01-10T05:51:11.891480+00:00",
+  "updated_at": "2026-01-10T05:51:11.891480+00:00",
+  "stage": {
+    "current": 1,
+    "level": 1,
+    "label": "materialization",
+    "scenario_id": "default",
+    "scenario_version": "2026.01",
+    "updated_at": "2026-01-10T05:51:11.891480+00:00",
+    "source": "protocol-simulator"
+  },
+  "energy": {
+    "status": "stable",
+    "level": 75,
+    "updated_at": "2026-01-10T05:51:11.891480+00:00",
+    "generation": 120.0,
+    "consumption": 95.0,
+    "reserve": 40.0
+  },
+  "risks": [],
+  "alerts": [],
+  "recent_events": [
+    {
+      "type": "stage_manifested",
+      "stage": 1,
+      "label": "materialization",
+      "scenario_id": "default",
+      "scenario_version": "2026.01",
+      "player_id": "00000000-0000-0000-0000-000000000000",
+      "player_name": "00000000-0000-0000-0000-000000000000",
+      "summary": "Stage 1 manifested by simulator",
+      "occurred_at": "2026-01-10T05:51:11.891480+00:00"
+    }
+  ]
+}

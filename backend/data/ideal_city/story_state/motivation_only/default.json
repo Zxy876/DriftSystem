@@ -7,7 +7,8 @@
     ],
     "logic_outline": [
       "目标：我太想马上建设社区中心了，居民们一直在夜里找我希望有个安全的地方，所以我准备亲自筹划活动、号召邻里、联系志愿者，还会拍摄记录分享，只要大家愿意参加，我就会一直更新计划，绝不让这个梦想落空",
-      "执行：分成准备与执行两个阶段，由工坊与居民共建。"
+      "执行：分成准备与执行两个阶段，由工坊与居民共建。",
+      "整理旧物"
     ],
     "resources": [
       "亲自筹划活动、号召邻里、联系志愿者 - 所以我筹备"
@@ -24,36 +25,36 @@
       "居民经济条件薄弱，需要公用资源调度",
       "市政要求所有新设施公开运作计划"
     ],
-    "risk_register": [],
+    "risk_register": [
+      "风险: 待补风险 / 待补措施"
+    ],
     "risk_notes": [],
     "location_hint": "夜附近",
     "player_pose": null,
     "notes": [
       "我太想马上建设社区中心了，居民们一直在夜里找我希望有个安全的地方，所以我准备亲自筹划活动、号召邻里、联系志愿者，还会拍摄记录分享，只要大家愿意参加，我就会一直更新计划，绝不让这个梦想落空。"
     ],
-    "ready_for_build": false,
+    "ready_for_build": true,
     "open_questions": [
-      "需补：风险登记（风险: 描述 / 缓解）。",
       "同步一次坐标（/cityphone pose）以便定位施工点。",
-      "请列出至少一个风险点，格式如：风险: 描述 / 缓解。",
-      "补齐核心字段后才能生成计划"
+      "有空的话把现场坐标贴给我（/taskdebug pose 就可以），这样工坊更好落位。"
     ],
-    "blocking": [
-      "补齐核心字段后才能生成计划",
-      "需补：风险登记（风险: 描述 / 缓解）。"
-    ],
+    "blocking": [],
     "coverage": {
       "logic_outline": true,
       "world_constraints": true,
       "resource_ledger": true,
       "success_criteria": true,
-      "risk_register": false
+      "risk_register": true
     },
     "motivation_score": 48,
-    "logic_score": 80,
-    "build_capability": 128,
-    "version": 3,
-    "updated_at": "2026-01-05T19:14:20.578018Z"
+    "logic_score": 100,
+    "build_capability": 148,
+    "last_plan_id": null,
+    "last_plan_status": null,
+    "last_plan_synced_at": null,
+    "version": 6,
+    "updated_at": "2026-01-11T10:05:49.846954Z"
   },
-  "frozen_at": "2026-01-05T19:14:20.578036Z"
+  "frozen_at": "2026-01-11T10:05:49.846977Z"
 }

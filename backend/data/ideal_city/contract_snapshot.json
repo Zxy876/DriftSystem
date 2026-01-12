@@ -1,0 +1,357 @@
+{
+  "state_snapshot": {
+    "player_id": "contract_probe",
+    "scenario_id": "default",
+    "phase": "vision",
+    "ready_for_build": false,
+    "build_capability": 0,
+    "motivation_score": 0,
+    "logic_score": 0,
+    "blocking": [],
+    "interpretation_delays": [],
+    "open_questions": [],
+    "panels": {
+      "vision": {
+        "goals": [],
+        "logic_outline": [],
+        "open_questions": [],
+        "notes": [],
+        "coverage": {}
+      },
+      "resources": {
+        "items": [],
+        "pending": true,
+        "risk_register": [],
+        "risk_pending": true
+      },
+      "location": {
+        "location_hint": null,
+        "player_pose": null,
+        "pending": true,
+        "location_quality": "缺少地标提示"
+      },
+      "plan": {
+        "available": false,
+        "summary": null,
+        "steps": [],
+        "mod_hooks": [],
+        "plan_id": null,
+        "status": "受阻",
+        "pending_reasons": []
+      }
+    },
+    "technology_status": {
+      "stage": {
+        "label": "Crystal Growth",
+        "level": 1,
+        "progress": 0.35
+      },
+      "energy": {
+        "generation": 120.0,
+        "consumption": 85.0,
+        "capacity": 200.0,
+        "storage": 64.0
+      },
+      "risk_alerts": [
+        {
+          "risk_id": "energy_spike",
+          "level": "low",
+          "summary": "Monitor generator load variance"
+        }
+      ],
+      "recent_events": [
+        {
+          "event_id": "stage_advance_notice",
+          "category": "stage_update",
+          "description": "Forge advanced crystal technology to stage 1",
+          "occurred_at": "2026-01-10T10:56:30Z",
+          "impact": "positive"
+        }
+      ],
+      "updated_at": "2026-01-10T10:57:00Z"
+    },
+    "exhibit_mode": {
+      "mode": "archive",
+      "label": "看展模式 · Archive",
+      "description": [
+        "技术状态离线约 22 小时，暂以档案模式展示。",
+        "当前展馆阶段：Crystal Growth。",
+        "能源装置维持运行，展馆具备布展能力。",
+        "近期技术事件：Forge advanced crystal technology to stage 1。",
+        "展馆以档案方式开放，重在回顾历史与未解问题。"
+      ],
+      "updated_at": "2026-01-10T10:57:00Z",
+      "source": "technology_status"
+    },
+    "narrative": {
+      "mode": "看展模式 · Archive",
+      "title": "熄灯区公共工坊 · 展馆总览",
+      "timeframe": "熄灯区纪元 · 第17周",
+      "last_event": "2026-01-10 10:56 · Forge advanced crystal technology to stage 1",
+      "sections": [
+        {
+          "slot": "exhibit_mode",
+          "title": "展馆模式",
+          "body": [
+            "看展模式 · Archive",
+            "技术状态离线约 22 小时，暂以档案模式展示。",
+            "当前展馆阶段：Crystal Growth。",
+            "能源装置维持运行，展馆具备布展能力。",
+            "近期技术事件：Forge advanced crystal technology to stage 1。",
+            "展馆以档案方式开放，重在回顾历史与未解问题。"
+          ],
+          "accent": "collecting"
+        },
+        {
+          "slot": "archive_overview",
+          "title": "展馆档案",
+          "body": [
+            "熄灯区临时工坊的外立面修复完成，社区志愿者已接管夜间守护。",
+            "城市档案馆收录首批居民修缮记录，等待后续口述材料。",
+            "展馆主题聚焦“能源受限中的协作”，陈列夜间协作工具与故事。",
+            "展馆注记：档案仍在整理，城市等待补齐关键字段。",
+            "建造排程：受阻"
+          ],
+          "accent": "collecting"
+        },
+        {
+          "slot": "risk_watch",
+          "title": "风险观察",
+          "body": [
+            "夜间能源调度仍在试运行，备用线路尚未正式备案。",
+            "社区轮值制度尚未形成书面档案，存在执行空档。",
+            "工坊安全巡检记录缺口，待补充责任人签字。",
+            "技术告警[low]：Monitor generator load variance"
+          ],
+          "accent": null
+        },
+        {
+          "slot": "history_log",
+          "title": "历史注记",
+          "body": [
+            "2056-06-12：熄灯区居民委员会提交“公共工坊”企划草案。",
+            "2056-06-18：城市工坊联盟捐赠首批工具包，记录入档。",
+            "2056-06-20：巡夜护卫队批准工坊夜间开放试点。",
+            "2026-01-10 10:56 · Forge advanced crystal technology to stage 1"
+          ],
+          "accent": null
+        },
+        {
+          "slot": "city_interpretation",
+          "title": "城市解读",
+          "body": [
+            "城市守护者将该企划视为“记忆修复”，期待居民自述如何使用工坊。",
+            "城市希望看到能源调度的详尽叙写，以保障主电网稳定。",
+            "档案官提醒策展组补齐“风险登记”与“执行步骤”的口述记录。",
+            "城市评分：动机 0 · 逻辑 0 · 建造成熟度 0。",
+            "城市解读：叙述仍在扩展，鼓励补充风险与执行步骤。"
+          ],
+          "accent": null
+        },
+        {
+          "slot": "appendix",
+          "title": "附录",
+          "body": [
+            "附录线索: 推荐档案素材：夜间能源调度表、志愿者口述录音。",
+            "附录线索: 展示建议：加入工坊工具借用流程手绘图。",
+            "建造状态：受阻"
+          ],
+          "accent": null
+        }
+      ]
+    }
+  },
+  "action_snapshot": {
+    "status": "error",
+    "state": {
+      "player_id": "contract_probe",
+      "scenario_id": "default",
+      "phase": "vision",
+      "ready_for_build": false,
+      "build_capability": 0,
+      "motivation_score": 0,
+      "logic_score": 0,
+      "blocking": [],
+      "interpretation_delays": [],
+      "open_questions": [],
+      "panels": {
+        "vision": {
+          "goals": [],
+          "logic_outline": [],
+          "open_questions": [],
+          "notes": [],
+          "coverage": {}
+        },
+        "resources": {
+          "items": [],
+          "pending": true,
+          "risk_register": [],
+          "risk_pending": true
+        },
+        "location": {
+          "location_hint": null,
+          "player_pose": null,
+          "pending": true,
+          "location_quality": "缺少地标提示"
+        },
+        "plan": {
+          "available": false,
+          "summary": null,
+          "steps": [],
+          "mod_hooks": [],
+          "plan_id": null,
+          "status": "受阻",
+          "pending_reasons": []
+        }
+      },
+      "technology_status": {
+        "stage": {
+          "label": "Crystal Growth",
+          "level": 1,
+          "progress": 0.35
+        },
+        "energy": {
+          "generation": 120.0,
+          "consumption": 85.0,
+          "capacity": 200.0,
+          "storage": 64.0
+        },
+        "risk_alerts": [
+          {
+            "risk_id": "energy_spike",
+            "level": "low",
+            "summary": "Monitor generator load variance"
+          }
+        ],
+        "recent_events": [
+          {
+            "event_id": "stage_advance_notice",
+            "category": "stage_update",
+            "description": "Forge advanced crystal technology to stage 1",
+            "occurred_at": "2026-01-10T10:56:30Z",
+            "impact": "positive"
+          }
+        ],
+        "updated_at": "2026-01-10T10:57:00Z"
+      },
+      "exhibit_mode": {
+        "mode": "archive",
+        "label": "看展模式 · Archive",
+        "description": [
+          "技术状态离线约 22 小时，暂以档案模式展示。",
+          "当前展馆阶段：Crystal Growth。",
+          "能源装置维持运行，展馆具备布展能力。",
+          "近期技术事件：Forge advanced crystal technology to stage 1。",
+          "展馆以档案方式开放，重在回顾历史与未解问题。"
+        ],
+        "updated_at": "2026-01-10T10:57:00Z",
+        "source": "technology_status"
+      },
+      "narrative": {
+        "mode": "看展模式 · Archive",
+        "title": "熄灯区公共工坊 · 展馆总览",
+        "timeframe": "熄灯区纪元 · 第17周",
+        "last_event": "2026-01-10 10:56 · Forge advanced crystal technology to stage 1",
+        "sections": [
+          {
+            "slot": "exhibit_mode",
+            "title": "展馆模式",
+            "body": [
+              "看展模式 · Archive",
+              "技术状态离线约 22 小时，暂以档案模式展示。",
+              "当前展馆阶段：Crystal Growth。",
+              "能源装置维持运行，展馆具备布展能力。",
+              "近期技术事件：Forge advanced crystal technology to stage 1。",
+              "展馆以档案方式开放，重在回顾历史与未解问题。"
+            ],
+            "accent": "collecting"
+          },
+          {
+            "slot": "archive_overview",
+            "title": "展馆档案",
+            "body": [
+              "熄灯区临时工坊的外立面修复完成，社区志愿者已接管夜间守护。",
+              "城市档案馆收录首批居民修缮记录，等待后续口述材料。",
+              "展馆主题聚焦“能源受限中的协作”，陈列夜间协作工具与故事。",
+              "展馆注记：档案仍在整理，城市等待补齐关键字段。",
+              "建造排程：受阻"
+            ],
+            "accent": "collecting"
+          },
+          {
+            "slot": "risk_watch",
+            "title": "风险观察",
+            "body": [
+              "夜间能源调度仍在试运行，备用线路尚未正式备案。",
+              "社区轮值制度尚未形成书面档案，存在执行空档。",
+              "工坊安全巡检记录缺口，待补充责任人签字。",
+              "技术告警[low]：Monitor generator load variance"
+            ],
+            "accent": null
+          },
+          {
+            "slot": "history_log",
+            "title": "历史注记",
+            "body": [
+              "2056-06-12：熄灯区居民委员会提交“公共工坊”企划草案。",
+              "2056-06-18：城市工坊联盟捐赠首批工具包，记录入档。",
+              "2056-06-20：巡夜护卫队批准工坊夜间开放试点。",
+              "2026-01-10 10:56 · Forge advanced crystal technology to stage 1"
+            ],
+            "accent": null
+          },
+          {
+            "slot": "city_interpretation",
+            "title": "城市解读",
+            "body": [
+              "城市守护者将该企划视为“记忆修复”，期待居民自述如何使用工坊。",
+              "城市希望看到能源调度的详尽叙写，以保障主电网稳定。",
+              "档案官提醒策展组补齐“风险登记”与“执行步骤”的口述记录。",
+              "城市评分：动机 0 · 逻辑 0 · 建造成熟度 0。",
+              "城市解读：叙述仍在扩展，鼓励补充风险与执行步骤。"
+            ],
+            "accent": null
+          },
+          {
+            "slot": "appendix",
+            "title": "附录",
+            "body": [
+              "附录线索: 推荐档案素材：夜间能源调度表、志愿者口述录音。",
+              "附录线索: 展示建议：加入工坊工具借用流程手绘图。",
+              "建造状态：受阻"
+            ],
+            "accent": null
+          }
+        ]
+      }
+    },
+    "notice": null,
+    "build_plan": null,
+    "guidance": null,
+    "manifestation_intent": null,
+    "error": "unknown_action",
+    "message": "暂不支持该动作。",
+    "city_interpretation": [
+      "城市守护者将该企划视为“记忆修复”，期待居民自述如何使用工坊。",
+      "城市希望看到能源调度的详尽叙写，以保障主电网稳定。",
+      "档案官提醒策展组补齐“风险登记”与“执行步骤”的口述记录。",
+      "城市评分：动机 0 · 逻辑 0 · 建造成熟度 0。",
+      "城市解读：叙述仍在扩展，鼓励补充风险与执行步骤。"
+    ],
+    "unknowns": [],
+    "interpretation_delays": [],
+    "exhibit_mode": {
+      "mode": "archive",
+      "label": "看展模式 · Archive",
+      "description": [
+        "技术状态离线约 22 小时，暂以档案模式展示。",
+        "当前展馆阶段：Crystal Growth。",
+        "能源装置维持运行，展馆具备布展能力。",
+        "近期技术事件：Forge advanced crystal technology to stage 1。",
+        "展馆以档案方式开放，重在回顾历史与未解问题。"
+      ],
+      "updated_at": "2026-01-10T10:57:00Z",
+      "source": "technology_status"
+    }
+  }
+}

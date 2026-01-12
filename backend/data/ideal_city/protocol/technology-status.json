@@ -1,0 +1,30 @@
+{
+  "updated_at": "2026-01-10T10:57:00Z",
+  "stage": {
+    "level": 1,
+    "label": "Crystal Growth",
+    "progress": 0.35
+  },
+  "energy": {
+    "generation": 120.0,
+    "consumption": 85.0,
+    "capacity": 200.0,
+    "storage": 64.0
+  },
+  "risks": [
+    {
+      "risk_id": "energy_spike",
+      "level": "low",
+      "summary": "Monitor generator load variance"
+    }
+  ],
+  "events": [
+    {
+      "event_id": "stage_advance_notice",
+      "category": "stage_update",
+      "description": "Forge advanced crystal technology to stage 1",
+      "occurred_at": "2026-01-10T10:56:30Z",
+      "impact": "positive"
+    }
+  ]
+}

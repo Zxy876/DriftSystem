@@ -231,6 +231,25 @@ def build_level_prompt(level: Level) -> str:
     """
     把心悦文集文章转成 AI 的关卡系统提示词。
     """
+    exhibit_block = ""
+    exhibit = getattr(level, "current_exhibit", None)
+    if isinstance(exhibit, dict):
+        lines: List[str] = ["【当前展览定位】"]
+        exhibit_id = exhibit.get("id")
+        if isinstance(exhibit_id, str) and exhibit_id.strip():
+            lines.append(f"- 企划ID：{exhibit_id.strip()}")
+        title = exhibit.get("title")
+        if isinstance(title, str) and title.strip():
+            lines.append(f"- 展览标题：{title.strip()}")
+        scope = exhibit.get("scope")
+        if isinstance(scope, str) and scope.strip():
+            lines.append(f"- 展览范围：{scope.strip()}")
+        scenario_id = exhibit.get("scenario_id")
+        if isinstance(scenario_id, str) and scenario_id.strip():
+            lines.append(f"- 档案ID：{scenario_id.strip()}")
+        if len(lines) > 1:
+            exhibit_block = "\n".join(lines) + "\n\n"
+
     npc_lines = []
     for n in level.npcs:
         npc_lines.append(
@@ -239,7 +258,6 @@ def build_level_prompt(level: Level) -> str:
             f"personality={n.get('personality','')}"
         )
     npc_block = "\n".join(npc_lines) if npc_lines else "- 本关暂无固定NPC"
-
     text_block = "\n".join(level.text)
 
     structured_guidance = """
@@ -269,4 +287,4 @@ def build_level_prompt(level: Level) -> str:
 {structured_guidance}
 """.strip()
 
-    return prompt
+    return f"{exhibit_block}{prompt}" if exhibit_block else prompt

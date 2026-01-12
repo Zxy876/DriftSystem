@@ -1,0 +1,82 @@
+# Template-to-task mapping for CityPhone story milestones.
+# Designers update this list when adding new narrative beats or NPC answers.
+version: 1
+
+templates:
+  - template_id: logic_quick_start
+    milestone_id: logic_from_npc
+    source: npc
+    narrative_task: quest/phase0/logic_brief
+    npc_id: cityphone_mentor
+    npc_name: "档案员·岚"
+    trigger_event: story_template_completed.logic_intro
+    expected_patch:
+      logic_outline:
+        - "目标：在熄灯区入口搭建安全的气球展台，引导访客。"
+        - "执行：现场布置与社区验证两步完成部署。"
+      coverage_tags:
+        - logic_outline
+    notes:
+      - "玩家在与档案员对话后应当解锁执行逻辑模板。"
+
+  - template_id: constraint_night_quiet
+    milestone_id: constraints_research
+    source: research
+    narrative_task: research/night_quiet_policy
+    npc_id: city_researcher
+    npc_name: "研究员·迟"
+    trigger_event: story_template_completed.night_constraints
+    expected_patch:
+      world_constraints:
+        - "夜间能源供应有限，需控制照明用量。"
+        - "夜间噪音需控制在社区委员会批准范围内。"
+      coverage_tags:
+        - world_constraints
+    notes:
+      - "完成研究任务后，CityPhone 自动补齐世界约束。"
+
+  - template_id: resource_basic
+    milestone_id: resources_supplied
+    source: npc
+    narrative_task: quest/phase1/resource_roundup
+    npc_id: logistics_captain
+    npc_name: "物资队长·坤"
+    trigger_event: story_template_completed.resource_bundle
+    expected_patch:
+      resources:
+        - "木材与防雨布 - 社区工坊"
+        - "照明设备 - 夜间供电站"
+      coverage_tags:
+        - resource_ledger
+    notes:
+      - "NPC 完成物资清点后触发里程碑完成。"
+
+  - template_id: risk_safety
+    milestone_id: risk_noted
+    source: npc
+    narrative_task: quest/phase1/safety_brief
+    npc_id: safety_officer
+    npc_name: "安全官·望"
+    trigger_event: story_template_completed.risk_register
+    expected_patch:
+      risk_register:
+        - "风险: 夜间噪音扰民 / 安装隔音帘"
+      coverage_tags:
+        - risk_register
+    notes:
+      - "安全巡查剧情节点会自动写入风险登记。"
+
+  - template_id: success_night_showcase
+    milestone_id: success_defined
+    source: npc
+    narrative_task: quest/phase2/success_signoff
+    npc_id: community_representative
+    npc_name: "居民代表·祁"
+    trigger_event: story_template_completed.success_definition
+    expected_patch:
+      success_criteria:
+        - "居民按周排班使用，夜间事故为零。"
+      coverage_tags:
+        - success_criteria
+    notes:
+      - "居民代表签字后，CityPhone 显示成功标准来源于 NPC。"

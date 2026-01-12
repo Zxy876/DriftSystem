@@ -317,23 +317,7 @@ class StoryStateAgent:
         follow_up: List[str] = []
         if stage == "location" and ctx.existing_state.player_pose is None:
             follow_up.append("有空的话把现场坐标贴给我（/taskdebug pose 就可以），这样工坊更好落位。")
-        if missing_logic:
-            follow_up.append("补充至少两步执行顺序，我们才能安排建造。")
-        if missing_constraints:
-            follow_up.append("写明关键世界约束（如噪音、能耗），方便档案馆审核。")
-        if missing_resources:
-            follow_up.append("列出资源与责任人（格式：资源项 - 责任人）。")
-        if missing_success:
-            follow_up.append("写下至少一个成功标准，让我们评估成效。")
-        if missing_risk:
-            follow_up.append("请列出至少一个风险点，格式如：风险: 描述 / 缓解。")
-
-        if stage in {"resources", "location"} and missing_resources:
-            follow_up.append("可以聊聊材料是谁帮忙备的，或打算向谁借吗？")
-
-        blocking_entries = ["补齐核心字段后才能生成计划"] if (
-            missing_logic or missing_constraints or missing_resources or missing_success or missing_risk
-        ) else []
+        blocking_entries = []
 
         def _dedupe(items: List[str]) -> List[str]:
             seen: set[str] = set()

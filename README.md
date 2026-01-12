@@ -19,6 +19,13 @@ server/, backend/server   内嵌 Paper 测试服（构建产物，勿提交）
 tmp_protocol_run/         临时导出的 Forge 协议样本（开发期缓存）
 ```
 
+## CityPhone 文档索引
+
+- [CityPhone 作为策展终端的愿景说明](docs/cityphone-vision.md)
+- [CityPhone 策展终端工程落地方案](docs/cityphone-execution-plan.md)
+- [CityPhone API Contract Snapshot (Iteration 1 Narrative Baseline)](docs/api/cityphone-contract.md)
+- [展馆叙事 Markdown → JSON 生成脚本](backend/scripts/generate_exhibit_narrative.py)
+
 ## 端到端回路
 
 1. **玩家叙述**：聊天监听器将自然语言交给 `IntentRouter2` 与 `IntentDispatcher2`，必要时写入 CityPhone。

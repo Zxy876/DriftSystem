@@ -1,0 +1,32 @@
+{
+  "state": {
+    "player_id": "demo_player",
+    "scenario_id": "default",
+    "goals": [],
+    "logic_outline": [],
+    "resources": [],
+    "community_requirements": [],
+    "success_criteria": [],
+    "world_constraints": [],
+    "risk_register": [],
+    "risk_notes": [],
+    "location_hint": null,
+    "player_pose": null,
+    "notes": [
+      "[计划 d8ac4a] GM4 Balloon Celebration · 建造完成，派发 1 条指令。 (日志: /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/ideal_city/build_queue/executed/18c05a80-8dc2-43b0-b3b8-0334b2d8ac4a.json)"
+    ],
+    "ready_for_build": false,
+    "open_questions": [],
+    "blocking": [],
+    "coverage": {},
+    "motivation_score": 0,
+    "logic_score": 0,
+    "build_capability": 0,
+    "last_plan_id": "18c05a80-8dc2-43b0-b3b8-0334b2d8ac4a",
+    "last_plan_status": "completed",
+    "last_plan_synced_at": "2026-01-11T08:34:21.792126Z",
+    "version": 2,
+    "updated_at": "2026-01-11T08:34:21.792127Z"
+  },
+  "frozen_at": "2026-01-11T08:34:21.792140Z"
+}

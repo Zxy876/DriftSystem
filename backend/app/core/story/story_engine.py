@@ -15,6 +15,12 @@ from app.core.story.story_loader import (
     build_level_prompt,
     Level,
 )
+from app.core.story.exhibit_registry import DEFAULT_EXHIBIT_REGISTRY
+from app.core.story.exhibit_instance_builder import ExhibitInstanceBuilder
+from app.core.story.exhibit_instance_repository import (
+    ExhibitInstanceRepository,
+    ExhibitInstance,
+)
 from app.core.story.story_graph import StoryGraph
 from app.core.world.minimap import MiniMap
 from app.core.world.scene_generator import SceneGenerator
@@ -321,6 +327,9 @@ class StoryEngine:
         quest_runtime.set_orphan_callback(self._handle_orphan_rule_event)
 
         self._custom_story_dir = primary_dir
+        self._exhibit_registry = DEFAULT_EXHIBIT_REGISTRY
+        self._exhibit_instances = ExhibitInstanceRepository()
+        self._exhibit_builder = ExhibitInstanceBuilder()
 
         print(f"[StoryEngine] loading levels from {primary_dir}")
 
@@ -467,6 +476,7 @@ class StoryEngine:
     # 状态查询
     # ============================================================
     def get_public_state(self, player_id: Optional[str] = None):
+        player_state = self.players.get(player_id, {}) if player_id else {}
         return {
             "total_levels": len(self.graph.all_levels()),
             "levels": sorted(list(self.graph.all_levels())),
@@ -477,6 +487,7 @@ class StoryEngine:
                 else None
             ),
             "exit_profile": self.get_exit_profile(player_id) if player_id else None,
+            "current_exhibit": self._clone_exhibit_payload(player_state.get("current_exhibit")) if player_id else None,
         }
 
     def get_exit_profile(self, player_id: str) -> Optional[Dict[str, Any]]:
@@ -498,7 +509,88 @@ class StoryEngine:
                 "last_say_time": 0.0,
                 "memory_flags": set(),
                 "emotional_profile": None,
+                "current_exhibit": None,
+                "scenario_id": None,
+                "_exhibit_instance_session": {
+                    "applied": {},
+                    "captured": set(),
+                },
             }
+
+    def _bind_exhibit_to_player(self, player_id: str, level: Level) -> None:
+        player_state = self.players.setdefault(player_id, {})
+        exhibit_payload = self._resolve_current_exhibit(level)
+        if exhibit_payload:
+            player_state["current_exhibit"] = exhibit_payload
+            scenario_id = exhibit_payload.get("scenario_id")
+            player_state["scenario_id"] = scenario_id if scenario_id else None
+        else:
+            player_state["current_exhibit"] = None
+            player_state["scenario_id"] = None
+        setattr(level, "current_exhibit", player_state.get("current_exhibit"))
+
+    def _resolve_current_exhibit(self, level: Level) -> Optional[Dict[str, str]]:
+        raw_payload = getattr(level, "_raw_payload", None)
+        scenario_hint: Optional[str] = None
+        explicit = None
+        if isinstance(raw_payload, dict):
+            meta = raw_payload.get("meta")
+            if isinstance(meta, dict):
+                scenario_candidate = meta.get("scenario") or meta.get("exhibit") or meta.get("exhibit_id")
+                if isinstance(scenario_candidate, str) and scenario_candidate.strip():
+                    scenario_hint = scenario_candidate.strip()
+            explicit_payload = raw_payload.get("current_exhibit")
+            if isinstance(explicit_payload, dict):
+                explicit = {k: v for k, v in explicit_payload.items() if isinstance(v, str) and v.strip()}
+
+        slot = self._exhibit_registry.lookup(getattr(level, "level_id", None), scenario_hint=scenario_hint)
+        details: Dict[str, str] = {}
+        if slot:
+            for key, value in slot.as_dict().items():
+                if isinstance(value, str) and value.strip():
+                    details[key] = value.strip()
+
+        if explicit:
+            for key in ("id", "scenario_id", "title", "scope"):
+                value = explicit.get(key)
+                if isinstance(value, str) and value.strip():
+                    details[key] = value.strip()
+
+        if not details:
+            if scenario_hint:
+                details["id"] = scenario_hint
+                details["scenario_id"] = scenario_hint
+            else:
+                return None
+
+        if "id" not in details:
+            if slot:
+                details["id"] = slot.exhibit_id
+            elif scenario_hint:
+                details["id"] = scenario_hint
+
+        if "scenario_id" not in details:
+            if slot and slot.scenario_id:
+                details["scenario_id"] = slot.scenario_id
+            elif scenario_hint:
+                details["scenario_id"] = scenario_hint
+
+        clean = {k: v for k, v in details.items() if isinstance(v, str) and v.strip()}
+        return clean or None
+
+    def _current_exhibit_payload(self, player_id: str) -> Optional[Dict[str, str]]:
+        state = self.players.get(player_id, {})
+        return self._clone_exhibit_payload(state.get("current_exhibit"))
+
+    def _clone_exhibit_payload(self, payload: Any) -> Optional[Dict[str, str]]:
+        if not isinstance(payload, dict):
+            return None
+        result: Dict[str, str] = {}
+        for key in ("id", "title", "scope", "scenario_id"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                result[key] = value.strip()
+        return result or None
 
     # ============================================================
     # Memory helpers
@@ -1039,6 +1131,11 @@ class StoryEngine:
         p["nodes"].clear()
         p.pop("emotional_profile", None)
 
+        self._bind_exhibit_to_player(player_id, level)
+
+        session_cache = self._ensure_instance_session(p)
+        session_cache["applied"][level.level_id] = set()
+
         exit_profile = self._build_exit_profile(level)
         if exit_profile:
             p["exit_profile"] = exit_profile
@@ -1121,6 +1218,10 @@ class StoryEngine:
 
         base_patch["mc"] = base_mc
 
+        instance_patch = self._apply_exhibit_instances(player_id, level)
+        if instance_patch:
+            base_patch = self._merge_patch(instance_patch, base_patch)
+
         # ---------------------------------------------
         # 🤖 注册NPC行为到引擎
         # ---------------------------------------------
@@ -1168,6 +1269,126 @@ class StoryEngine:
             0, {"role": "system", "content": base_prompt}
         )
         p["level_loaded"] = True
+
+    def _ensure_instance_session(self, player_state: Dict[str, Any]) -> Dict[str, Any]:
+        session = player_state.setdefault("_exhibit_instance_session", {})
+        applied = session.get("applied")
+        if not isinstance(applied, dict):
+            applied = {}
+            session["applied"] = applied
+        captured = session.get("captured")
+        if isinstance(captured, set):
+            pass
+        elif isinstance(captured, (list, tuple)):
+            captured = set(str(item) for item in captured)
+            session["captured"] = captured
+        else:
+            captured = set()
+            session["captured"] = captured
+        return session
+
+    def _apply_exhibit_instances(self, player_id: str, level: Level) -> Optional[Dict[str, Any]]:
+        player_state = self.players.get(player_id)
+        if not player_state:
+            return None
+
+        exhibit_payload = self._current_exhibit_payload(player_id) or {}
+        scenario_id = exhibit_payload.get("scenario_id")
+        exhibit_id = exhibit_payload.get("id") or exhibit_payload.get("exhibit_id")
+
+        instances = self._exhibit_instances.get_instances_for_level(
+            level.level_id,
+            scenario_id=scenario_id,
+            exhibit_id=exhibit_id,
+        )
+        if not instances:
+            return None
+
+        session_cache = self._ensure_instance_session(player_state)
+        applied_registry = session_cache["applied"].setdefault(level.level_id, set())
+
+        merged_patch: Dict[str, Any] = {}
+        applied_count = 0
+
+        for instance in instances:
+            if instance.instance_id in applied_registry:
+                continue
+            patch = self._render_instance_patch(instance)
+            if not patch:
+                continue
+            merged_patch = self._merge_patch(patch, merged_patch)
+            applied_registry.add(instance.instance_id)
+            applied_count += 1
+
+        if applied_count == 0:
+            return None
+
+        logger.info(
+            "Replaying %d exhibit instance(s) for level %s", applied_count, level.level_id
+        )
+        return merged_patch
+
+    def _render_instance_patch(self, instance: ExhibitInstance) -> Optional[Dict[str, Any]]:
+        payload = instance.payload if isinstance(instance.payload, dict) else {}
+        snapshot_type = (instance.snapshot_type or "").strip().lower()
+
+        if snapshot_type == "world_patch":
+            if not payload:
+                return None
+            if "mc" in payload:
+                return deepcopy(payload)
+            return {"mc": deepcopy(payload)}
+
+        if snapshot_type == "narrative":
+            logger.debug(
+                "Narrative exhibit instance %s not yet supported for playback", instance.instance_id
+            )
+            return None
+
+        logger.debug(
+            "Unsupported exhibit instance type %s for instance %s",
+            snapshot_type,
+            instance.instance_id,
+        )
+        return None
+
+    def _capture_exhibit_instance(self, player_id: str, patch: Optional[Dict[str, Any]]) -> None:
+        if not patch:
+            return
+
+        player_state = self.players.get(player_id)
+        if not player_state:
+            return
+
+        level = player_state.get("level")
+        if not level or not getattr(level, "level_id", None):
+            return
+
+        exhibit_payload = self._current_exhibit_payload(player_id)
+        if not exhibit_payload:
+            return
+
+        instance = self._exhibit_builder.build_from_patch(
+            player_id=player_id,
+            level_id=level.level_id,
+            exhibit_payload=exhibit_payload,
+            patch=patch,
+        )
+        if not instance:
+            return
+
+        session_cache = self._ensure_instance_session(player_state)
+        fingerprint = ExhibitInstanceBuilder.fingerprint(instance)
+        captured: Set[str] = session_cache["captured"]
+        if fingerprint in captured:
+            return
+
+        saved = self._exhibit_instances.save_instance(instance)
+        captured.add(fingerprint)
+        session_cache["applied"].setdefault(level.level_id, set()).add(saved.instance_id)
+        logger.info(
+            "Captured exhibit instance %s for level %s", saved.instance_id, level.level_id
+        )
 
     def _build_exit_profile(self, level: Level) -> Optional[Dict[str, Any]]:
         exit_cfg = getattr(level, "exit", None)
@@ -1330,6 +1551,15 @@ class StoryEngine:
             "level_id": p["level"].level_id,
         }
 
+        exhibit_context = self._current_exhibit_payload(player_id)
+        if exhibit_context:
+            ai_input["current_exhibit"] = exhibit_context
+            scenario_id = exhibit_context.get("scenario_id")
+            if scenario_id:
+                ai_input.setdefault("scenario_id", scenario_id)
+        elif isinstance(p.get("scenario_id"), str) and p["scenario_id"].strip():
+            ai_input.setdefault("scenario_id", p["scenario_id"].strip())
+
         ai_result = deepseek_decide(ai_input, p["messages"])
 
         option = ai_result.get("option")
@@ -1420,6 +1650,8 @@ class StoryEngine:
             p["emotional_profile"] = emotional_summary
         else:
             p.pop("emotional_profile", None)
+
+        self._capture_exhibit_instance(player_id, patch)
 
         return option, node, patch
 

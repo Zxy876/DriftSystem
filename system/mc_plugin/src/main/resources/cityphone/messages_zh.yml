@@ -1,0 +1,172 @@
+title:
+  main: "CityPhone · 档案终端"
+  history: "CityPhone · 历史回应"
+  narrative_panel: "CityPhone · 展签全文"
+button:
+  history_view:
+    title: "查看历史回应"
+    lore:
+      - "浏览城市此前的回应记录。"
+      - "左键查看详情"
+  history_back:
+    title: "返回档案终端"
+    lore:
+      - "回到 CityPhone 档案总览界面。"
+      - "左键返回"
+  narrative_back:
+    title: "折叠展签全文"
+    lore:
+      - "回到折叠后的 CityPhone 主界面。"
+      - "左键关闭全文"
+device:
+  display_name: "CityPhone"
+  lore:
+    - "档案馆配发的随身终端"
+    - "右键同步剧情记录"
+command:
+  header: "CityPhone 档案终端:"
+  give: "/cityphone give 领取策展终端"
+  open: "/cityphone open 打开档案说明牌"
+  say: "/cityphone say <文本> 记录新的叙事"
+  pose: "/cityphone pose 同步展馆位置"
+  history_hint: "在终端内切换 '查看历史回应' 阅读城市解读。"
+  player_only: "仅限玩家使用 CityPhone。"
+  say_missing: "请提供叙述内容，如 /cityphone say 我想建造展台。"
+message:
+  prefix: "[CityPhone] %s"
+  phone_received: "已放入背包。"
+  narrative_missing: "请填写要记录的叙述。"
+  narrative_synced: "已同步你的新记录。"
+  pose_synced: "已同步当前位置。"
+  syncing: "正在同步档案，请稍后再试。"
+  backend_failed: "后端连接失败。"
+  state_failed: "状态获取失败 (%d)"
+  state_empty: "后端返回为空。"
+  state_parse_failed: "无法解析后端响应。"
+  state_missing: "未能获取当前状态。"
+  action_failed: "提交失败 (%d)"
+  action_failed_generic: "提交失败。"
+  action_parse_failed: "无法解析响应。"
+  action_empty: "后端返回为空。"
+  error_unknown: "未知错误"
+  interpretation_header: "城市解读"
+  unknowns_header: "城市追问"
+  delay_header: "理解延迟"
+  mode_switch:
+    archive: "展馆回到看展模式，CityPhone 以档案视角展示。"
+    production: "展馆进入布展模式，Forge 信号已与 CityPhone 同步。"
+  mode_switch_generic: "展馆模式已切换为 %s。"
+mode:
+  label:
+    archive: "看展模式"
+    production: "布展模式"
+status:
+  completed: "已完成"
+  running: "执行中"
+  queued: "已入队"
+  blocked: "受阻"
+  pending: "待处理"
+  unknown: "未知"
+ui:
+  anchor:
+    title: "展馆状态"
+    timeframe: "时间框架: %s"
+    mode: "展馆模式: %s"
+    last_event: "最近记录: %s"
+    empty: "暂无展馆状态记录"
+  vision:
+    title: "阶段 · %s"
+    coverage_heading: "覆盖状态:"
+    goals_heading: "目标纲要:"
+    logic_heading: "执行逻辑:"
+    pending_heading: "待补充:"
+    notes_heading: "最新记录:"
+  resources:
+    title: "资源备货"
+    current_heading: "当前清单:"
+    none: "暂无资源记录"
+    pending: "待补齐资源清单"
+  risk:
+    heading: "风险登记:"
+    none: "暂无风险登记"
+    pending: "风险登记待补"
+  location:
+    title: "定位追踪"
+    hint: "地点提示: %s"
+    pose: "坐标: %s (%.1f, %.1f, %.1f)"
+    missing_pose: "未同步玩家坐标"
+    sync_hint: "使用 /cityphone pose 同步当前坐标"
+  plan:
+    title: "建造计划"
+    not_ready: "计划尚未生成"
+    blocking_heading: "理解延迟:"
+    steps_heading: "执行步骤:"
+    mod_hooks_heading: "关联模组:"
+    suggestions_heading: "执行提示:"
+  status:
+    ready: "状态: 可执行"
+    pending: "状态: 准备中"
+    build_capability: "建造能力: %s/200"
+    motivation: "动机评分: %s"
+    logic: "逻辑评分: %s"
+    plan_status: "计划状态: %s"
+    questions_heading: "剩余疑问:"
+  narrative:
+    fallback_title: "叙事段落"
+    header:
+      timeframe: "时间框架: %s"
+      mode: "展馆模式: %s"
+      last_event: "最近事件: %s"
+    body_empty: "暂无档案内容"
+    index_title: "叙事索引"
+    index_heading: "可供查阅的叙事段落:"
+    index_empty: "暂无叙事内容"
+    history_empty_title: "暂无历史回应"
+    history_empty_1: "CityPhone 尚未生成可用的历史档案。"
+    history_empty_2: "请稍后重新同步状态。"
+  narrative_preview:
+    title: "展签摘要"
+    empty: "暂无展签段落。"
+    open_hint: "左键展开展签全文"
+  sources:
+    title: "档案来源"
+    empty: "暂无来源记录。"
+  unknowns:
+    title: "城市记忆空白"
+    empty: "暂无记忆空白记录。"
+  history:
+    empty: "暂无历史档案。"
+    digest_hint: "左键查看全部历史回应"
+  appendix:
+    title: "档案附录"
+    phase: "阶段: %s"
+    mode: "展馆模式: %s"
+    build_capability: "建造能力: %s/200"
+    plan_status: "计划状态: %s"
+    plan_summary: "计划摘要: %s"
+    plan_steps_heading: "执行步骤:"
+    blocking_heading: "理解延迟:"
+    suggestions_heading: "执行提示:"
+    coverage_heading: "覆盖情况:"
+    location_hint: "地点提示: %s"
+    location_pending: "待同步玩家坐标"
+    resources_heading: "资源清单:"
+    resources_pending: "资源清单待补"
+    open_questions_heading: "城市追问:"
+    notes_heading: "档案注记:"
+    risk_heading: "风险登记:"
+    risk_pending: "风险登记待补"
+    mod_hooks_heading: "关联模组:"
+  narrative_panel:
+    header_title: "展签抬头"
+    header_empty: "暂无展签抬头信息"
+    empty_title: "暂无展签内容"
+    empty_body: "CityPhone 尚未整理出可用的展签档案。"
+coverage:
+  logic: "执行逻辑"
+  world: "世界约束"
+  success: "成功标准"
+  complete: "完成"
+  missing: "缺失"
+list:
+  empty: "(无)"

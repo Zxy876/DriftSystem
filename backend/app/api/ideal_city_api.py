@@ -15,6 +15,11 @@ from app.core.ideal_city.pipeline import (
     IdealCityPipeline,
 )
 from app.core.ideal_city.narrative_ingestion import NarrativeChatEvent
+from app.instrumentation.cityphone_metrics import (
+    record_action_error,
+    record_action_request,
+    record_state_request,
+)
 
 router = APIRouter(prefix="/ideal-city", tags=["IdealCity"])
 _pipeline = IdealCityPipeline()
@@ -31,6 +36,11 @@ def submit_device_spec(payload: DeviceSpecSubmission):
         "guidance": [item.model_dump() for item in result.guidance],
         "build_plan": result.build_plan.model_dump() if result.build_plan else None,
         "narration": result.narration.model_dump() if result.narration else None,
+        "manifestation_intent": (
+            result.manifestation_intent.model_dump(mode="json")
+            if result.manifestation_intent
+            else None
+        ),
         "scenario": {
             "scenario_id": result.scenario.scenario_id,
             "title": result.scenario.title,
@@ -84,13 +94,17 @@ def refresh_mods():
 
 @router.get("/cityphone/state/{player_id}")
 def cityphone_state(player_id: str, scenario_id: str = "default"):
+    record_state_request()
     state = _pipeline.cityphone_state(player_id, scenario_id)
     return {"status": "ok", "state": state.model_dump(mode="json")}
 
 
 @router.post("/cityphone/action")
 def cityphone_action(payload: CityPhoneAction):
+    record_action_request()
     result = _pipeline.handle_cityphone_action(payload)
+    if result.status != "ok":
+        record_action_error(result.error)
     return result.model_dump(mode="json")
 
 

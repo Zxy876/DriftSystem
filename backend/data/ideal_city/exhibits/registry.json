@@ -1,0 +1,24 @@
+{
+  "default_exhibit_id": "public_workshop",
+  "exhibits": {
+    "public_workshop": {
+      "scenario_id": "default",
+      "title": "熄灯区公共工坊",
+      "scope": "理想之城旗舰档案 · 公共工坊策展循环",
+      "aliases": ["default"]
+    },
+    "amethyst": {
+      "scenario_id": "amethyst",
+      "title": "紫水晶共振计划",
+      "scope": "紫水晶展览企划循环",
+      "aliases": []
+    }
+  },
+  "levels": {
+    "flagship_tutorial": "public_workshop",
+    "flagship_03": "public_workshop",
+    "flagship_08": "public_workshop",
+    "flagship_12": "public_workshop",
+    "flagship_final": "public_workshop"
+  }
+}

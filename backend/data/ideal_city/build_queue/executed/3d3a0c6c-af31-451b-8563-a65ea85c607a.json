@@ -1,0 +1,70 @@
+{
+  "plan_id": "3d3a0c6c-af31-451b-8563-a65ea85c607a",
+  "summary": "我要搭建一个工坊",
+  "status": "completed",
+  "commands": [
+    "function gm4_balloon_animals:init",
+    "execute in world positioned 10.00 65.00 2.00 rotated 0.00 0 run function gm4_balloon_animals:build/setup_showcase",
+    "execute in world positioned 10.00 65.00 2.00 rotated 0.00 0 run function gm4_balloon_animals:build/populate_showcase"
+  ],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "steps": [
+    {
+      "step_id": "phase-resources",
+      "title": "协调资源",
+      "description": "气球和灯串 - 夜市摊主免费；宣传物料 - 学校社团印制；气球和灯串 - 夜市摊主愿意；木材与工具 - 社区工坊；照明设备 - 夜间供电站；安全的夜间维修空间 - 为熄灯区",
+      "target_region": "default"
+    },
+    {
+      "step_id": "phase-community",
+      "title": "社区共创",
+      "description": "确认展台满足居民期待：居民可以按周使用工坊且不发生事故；城市档案馆记录到新的协作项目；想在熄灯区做一个气球动物展台，让居民晚上也有热闹的景点；保证夜间照明安全；居民能在展台交流故事",
+      "target_region": "default",
+      "dependencies": [
+        "phase-resources"
+      ]
+    },
+    {
+      "step_id": "phase-success",
+      "title": "验收标准",
+      "description": "达成标准：居民按周排班使用；夜间事故为零；居民可以按周使用工坊且不发生事故；城市档案馆记录到新的协作项目",
+      "target_region": "default",
+      "dependencies": [
+        "phase-community"
+      ]
+    },
+    {
+      "step_id": "phase-execution",
+      "title": "执行建造",
+      "description": "在 熄灯区旧电车站附近 落地 GM4 气球展台并点亮周边。",
+      "target_region": "熄灯区旧电车站附近",
+      "dependencies": [
+        "phase-success"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "气球和灯串": "夜市摊主愿意",
+    "宣传物料": "学校社团印制",
+    "木材与工具": "社区工坊",
+    "照明设备": "夜间供电站",
+    "安全的夜间维修空间": "为熄灯区"
+  },
+  "risk_notes": [
+    "风险: 夜间噪音扰民 / 安装隔音帘",
+    "风险: 若能源调度失衡，可能影响核心城区供电 / 待补充",
+    "风险: 若维护计划缺失，工坊或成为安全隐患 / 待补充"
+  ],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-11T15:45:42.408554+00:00",
+  "player_pose": {
+    "world": "world",
+    "x": 10.0,
+    "y": 65.0,
+    "z": -4.0,
+    "yaw": 0.0,
+    "pitch": 0.0
+  }
+}

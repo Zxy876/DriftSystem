@@ -1,0 +1,55 @@
+{
+  "plan_id": "46fe9e06-3d42-455d-b61a-3afac4d76e1b",
+  "created_at": "2026-01-10T23:56:39.571732+00:00",
+  "summary": "收到请回复",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "phase-resources",
+      "title": "协调资源",
+      "description": "你好紫水晶材料 - 熄灯区居民委员会；灯光设备 - 熄灯区居民委员会",
+      "target_region": "default",
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "phase-success",
+      "title": "验收标准",
+      "description": "达成标准：居民可以按周使用工坊且不发生事故；城市档案馆记录到新的协作项目",
+      "target_region": "default",
+      "required_mod": null,
+      "dependencies": [
+        "phase-resources"
+      ]
+    },
+    {
+      "step_id": "phase-execution",
+      "title": "执行建造",
+      "description": "在 world @ (-161.5, 77.0, -118.5) 落地 GM4 气球展台并点亮周边。",
+      "target_region": "world @ (-161.5, 77.0, -118.5)",
+      "required_mod": null,
+      "dependencies": [
+        "phase-success"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "你好紫水晶材料": "熄灯区居民委员会",
+    "灯光设备": "熄灯区居民委员会"
+  },
+  "risk_notes": [
+    "风险: 若能源调度失衡，可能影响核心城区供电 / 待补充",
+    "风险: 若维护计划缺失，工坊或成为安全隐患 / 待补充",
+    "风险: 夜间安全不足 / 安排志愿者巡查"
+  ],
+  "mod_hooks": [],
+  "origin_scenario": "default",
+  "player_pose": {
+    "world": "world",
+    "x": -161.5,
+    "y": 77.0,
+    "z": -118.5,
+    "yaw": -152.85088,
+    "pitch": 26.249994
+  }
+}

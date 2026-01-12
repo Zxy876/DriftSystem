@@ -2,7 +2,6 @@ package com.driftmc.cityphone;
 
 import java.util.Arrays;
 
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -20,7 +19,7 @@ public final class CityPhoneCommand implements CommandExecutor {
   @Override
   public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
     if (!(sender instanceof Player player)) {
-      sender.sendMessage(Component.text("仅限玩家使用 CityPhone。", NamedTextColor.RED));
+      sender.sendMessage(CityPhoneLocalization.component("command.player_only", NamedTextColor.RED));
       return true;
     }
     if (args.length == 0) {
@@ -37,7 +36,7 @@ public final class CityPhoneCommand implements CommandExecutor {
         return true;
       case "say":
         if (args.length < 2) {
-          player.sendMessage(Component.text("请提供叙述内容，如 /cityphone say 我想建造展台。", NamedTextColor.RED));
+          player.sendMessage(CityPhoneLocalization.component("command.say_missing", NamedTextColor.RED));
           return true;
         }
         String narrative = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
@@ -53,10 +52,11 @@ public final class CityPhoneCommand implements CommandExecutor {
   }
 
   private void sendUsage(Player player) {
-    player.sendMessage(Component.text("CityPhone 命令:", NamedTextColor.AQUA));
-    player.sendMessage(Component.text("/cityphone give 领取终端", NamedTextColor.WHITE));
-    player.sendMessage(Component.text("/cityphone open 打开界面", NamedTextColor.WHITE));
-    player.sendMessage(Component.text("/cityphone say <内容> 提交叙述", NamedTextColor.WHITE));
-    player.sendMessage(Component.text("/cityphone pose 同步当前位置", NamedTextColor.WHITE));
+    player.sendMessage(CityPhoneLocalization.component("command.header", NamedTextColor.AQUA));
+    player.sendMessage(CityPhoneLocalization.component("command.give", NamedTextColor.WHITE));
+    player.sendMessage(CityPhoneLocalization.component("command.open", NamedTextColor.WHITE));
+    player.sendMessage(CityPhoneLocalization.component("command.say", NamedTextColor.WHITE));
+    player.sendMessage(CityPhoneLocalization.component("command.pose", NamedTextColor.WHITE));
+    player.sendMessage(CityPhoneLocalization.component("command.history_hint", NamedTextColor.GRAY));
   }
 }

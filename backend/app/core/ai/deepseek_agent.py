@@ -31,6 +31,19 @@ READ_TIMEOUT = float(os.getenv("DEEPSEEK_READ_TIMEOUT", "12"))
 MAX_RETRIES = int(os.getenv("DEEPSEEK_MAX_RETRIES", "2"))
 RETRY_BACKOFF = float(os.getenv("DEEPSEEK_RETRY_BACKOFF", "1.5"))
 
+print(
+    "[AI INFO] LLM config:",
+    {
+        "base_url": BASE_URL,
+        "model": MODEL,
+        "connect_timeout": CONNECT_TIMEOUT,
+        "read_timeout": READ_TIMEOUT,
+        "max_retries": MAX_RETRIES,
+        "retry_backoff": RETRY_BACKOFF,
+    },
+    flush=True,
+)
+
 AI_RETRY_ON_TIMEOUT = os.getenv("IDEAL_CITY_AI_RETRY_ON_TIMEOUT", "0").lower() in {
     "1",
     "true",

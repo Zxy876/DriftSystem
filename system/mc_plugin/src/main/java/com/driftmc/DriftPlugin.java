@@ -14,6 +14,7 @@ import com.driftmc.cinematic.CinematicController;
 import com.driftmc.cityphone.CityPhoneCommand;
 import com.driftmc.cityphone.CityPhoneInventoryListener;
 import com.driftmc.cityphone.CityPhoneListener;
+import com.driftmc.cityphone.CityPhoneLocalization;
 import com.driftmc.cityphone.CityPhoneManager;
 import com.driftmc.commands.AdvanceCommand;
 import com.driftmc.commands.CinematicCommand;
@@ -138,6 +139,7 @@ public class DriftPlugin extends JavaPlugin {
 
         IdealCityCommand idealCityCommand = new IdealCityCommand(this, backend);
         this.intentDispatcher2.setIdealCityCommand(idealCityCommand);
+        CityPhoneLocalization.init(this);
         this.cityPhoneManager = new CityPhoneManager(this, backend);
         this.socialAtmosphereManager = new SocialAtmosphereManager(this, backend);
 

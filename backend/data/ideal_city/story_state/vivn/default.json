@@ -1,0 +1,85 @@
+{
+  "state": {
+    "player_id": "vivn",
+    "scenario_id": "default",
+    "goals": [
+      "你好紫水晶",
+      "紫水晶你好，收到请回复",
+      "收到请回复",
+      "紫水晶收到请回复",
+      "就是紫水晶",
+      "我要到上层建筑上去"
+    ],
+    "logic_outline": [
+      "目标：你好紫水晶",
+      "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "目标：紫水晶你好，收到请回复",
+      "目标：收到请回复",
+      "目标：紫水晶收到请回复",
+      "目标：就是紫水晶",
+      "目标：在熄灯区入口搭建安全的气球展台，引导访客。",
+      "执行：现场布置与社区验证两步完成部署。",
+      "我要到上层建筑上去"
+    ],
+    "resources": [
+      "你好紫水晶材料 - 熄灯区居民委员会",
+      "灯光设备 - 熄灯区居民委员会"
+    ],
+    "community_requirements": [],
+    "success_criteria": [
+      "居民可以按周使用工坊且不发生事故",
+      "城市档案馆记录到新的协作项目"
+    ],
+    "world_constraints": [
+      "夜间能源供应有限，噪音需受限",
+      "居民经济条件薄弱，需要公用资源调度",
+      "市政要求所有新设施公开运作计划"
+    ],
+    "risk_register": [
+      "风险: 若能源调度失衡，可能影响核心城区供电 / 待补充",
+      "风险: 若维护计划缺失，工坊或成为安全隐患 / 待补充",
+      "风险: 夜间安全不足 / 安排志愿者巡查"
+    ],
+    "risk_notes": [],
+    "location_hint": "world @ (-161.5, 77.0, -118.5)",
+    "player_pose": {
+      "world": "world",
+      "x": -161.5,
+      "y": 77.0,
+      "z": -118.5,
+      "yaw": -152.85088,
+      "pitch": 26.249994
+    },
+    "notes": [
+      "你好紫水晶",
+      "[计划 8d0b76] 你好紫水晶 · 建造完成，未检测到派发指令。 (日志: /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/ideal_city/build_queue/executed/3ead3fdc-72d2-4756-a1f3-4595088d0b76.json)",
+      "紫水晶你好，收到请回复",
+      "收到请回复",
+      "[计划 d76e1b] 收到请回复 · 建造完成，未检测到派发指令。 (日志: /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/ideal_city/build_queue/executed/46fe9e06-3d42-455d-b61a-3afac4d76e1b.json)",
+      "紫水晶收到请回复",
+      "[计划 84b394] 紫水晶收到请回复 · 建造完成，未检测到派发指令。 (日志: /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/ideal_city/build_queue/executed/d15c9552-43fc-450a-acce-24cee684b394.json)",
+      "就是紫水晶",
+      "[计划 b85da5] 就是紫水晶 · 建造完成，未检测到派发指令。 (日志: /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/ideal_city/build_queue/executed/6355f011-0541-4087-b553-feeceab85da5.json)",
+      "我要到上层建筑上去"
+    ],
+    "ready_for_build": true,
+    "open_questions": [],
+    "blocking": [],
+    "coverage": {
+      "logic_outline": true,
+      "world_constraints": true,
+      "resource_ledger": true,
+      "success_criteria": true,
+      "risk_register": true
+    },
+    "motivation_score": 80,
+    "logic_score": 90,
+    "build_capability": 170,
+    "last_plan_id": "6355f011-0541-4087-b553-feeceab85da5",
+    "last_plan_status": "completed",
+    "last_plan_synced_at": "2026-01-11T05:58:31.123446Z",
+    "version": 13,
+    "updated_at": "2026-01-12T06:36:03.336329Z"
+  },
+  "frozen_at": "2026-01-12T06:36:03.336353Z"
+}

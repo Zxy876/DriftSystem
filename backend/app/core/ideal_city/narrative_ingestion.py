@@ -156,6 +156,7 @@ class NarrativeIngestionResponse(BaseModel):
     guidance: Optional[List[dict]] = None
     build_plan: Optional[dict] = None
     state: Optional[dict] = None
+    manifestation_intent: Optional[dict] = None
 
 
 class NarrativeFieldExtractor:

@@ -1,0 +1,69 @@
+{
+  "plan_id": "5792e5cb-0880-4019-aadf-57d37f9e71ac",
+  "summary": "紫水晶是微弱的光",
+  "status": "completed",
+  "commands": [
+    "function gm4_balloon_animals:init",
+    "execute in world positioned -6.57 63.20 -1.80 rotated 85.20 0 run function gm4_balloon_animals:build/setup_showcase",
+    "execute in world positioned -6.57 63.20 -1.80 rotated 85.20 0 run function gm4_balloon_animals:build/populate_showcase"
+  ],
+  "mod_hooks": [
+    "gm4:balloon_animals"
+  ],
+  "steps": [
+    {
+      "step_id": "phase-resources",
+      "title": "协调资源",
+      "description": "建造气球展台材料 - 熄灯区居民委员会；灯光设备 - 熄灯区居民委员会；气球展台基础材料 - 档案官提供",
+      "target_region": "default"
+    },
+    {
+      "step_id": "phase-community",
+      "title": "社区共创",
+      "description": "确认展台满足居民期待：居民可以按周使用工坊且不发生事故；城市档案馆记录到新的协作项目",
+      "target_region": "default",
+      "dependencies": [
+        "phase-resources"
+      ]
+    },
+    {
+      "step_id": "phase-success",
+      "title": "验收标准",
+      "description": "达成标准：居民可以按周使用工坊且不发生事故；城市档案馆记录到新的协作项目；夜间入口亮度足够，居民对气球展台反馈满意。",
+      "target_region": "default",
+      "dependencies": [
+        "phase-community"
+      ]
+    },
+    {
+      "step_id": "phase-execution",
+      "title": "执行建造",
+      "description": "在 world @ (-0.6, 63.2, -2.3) 落地 GM4 气球展台并点亮周边。",
+      "target_region": "world @ (-0.6, 63.2, -2.3)",
+      "dependencies": [
+        "phase-success"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "建造气球展台材料": "熄灯区居民委员会",
+    "灯光设备": "熄灯区居民委员会",
+    "气球展台基础材料": "档案官提供"
+  },
+  "risk_notes": [
+    "风险: 夜间安全不足 / 安排志愿者巡查",
+    "风险: 夜间噪音扰民 / 设定静音演示时段",
+    "风险: 若能源调度失衡，可能影响核心城区供电 / 待补充",
+    "风险: 若维护计划缺失，工坊或成为安全隐患 / 待补充"
+  ],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-09T13:09:03.083750+00:00",
+  "player_pose": {
+    "world": "world",
+    "x": -0.5924522565641896,
+    "y": 63.2,
+    "z": -2.3043777925843134,
+    "yaw": 85.198975,
+    "pitch": 28.200064
+  }
+}

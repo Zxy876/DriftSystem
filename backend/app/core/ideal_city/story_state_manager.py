@@ -496,87 +496,12 @@ class StoryStateManager:
         state = self._repository.load(player_id, scenario_id)
         if state is None:
             state = StoryState(player_id=player_id, scenario_id=scenario_id)
-        preset = self._template_presets.get(template_key)
-        if preset is None:
-            return StoryStateManager.TemplateApplication(
-                state=state,
-                applied=False,
-                message="未找到模板。",
-                reason="unknown_template",
-            )
-
-        additions = preset.get("adds")
-        if not isinstance(additions, dict) or not additions:
-            return StoryStateManager.TemplateApplication(
-                state=state,
-                applied=False,
-                message="模板未配置任何内容。",
-                reason="template_empty",
-            )
-
-        updates: Dict[str, List[str]] = {}
-        changed = False
-        for field, values in additions.items():
-            if not isinstance(values, list):
-                continue
-            existing = getattr(state, field, None)
-            if existing is None:
-                continue
-            original = list(existing)
-            merged = _merge_unique(original, [str(value) for value in values])
-            if merged != original:
-                updates[field] = merged
-                changed = True
-
-        if not changed:
-            message = str(preset.get("message_existing") or "模板内容已存在。")
-            return StoryStateManager.TemplateApplication(
-                state=state,
-                applied=False,
-                message=message,
-                reason="no_change",
-            )
-
-        updated_base = state.model_copy(update=updates)
-        resources = self._normalise_collection(updated_base.resources, formatter="resource")
-        risk_register = self._normalise_collection(updated_base.risk_register, formatter="risk")
-        success = self._normalise_collection(updated_base.success_criteria)
-        if not resources:
-            resources = ["气球展台基础材料 - 档案官提供"]
-        if not risk_register:
-            risk_register = ["风险: 气球设备维护不足 / 定期巡检安排"]
-        updated_base = updated_base.model_copy(
-            update={
-                "resources": resources,
-                "risk_register": risk_register,
-                "success_criteria": success,
-            }
+        return StoryStateManager.TemplateApplication(
+            state=state,
+            applied=False,
+            message="模板功能已封存，仅供查阅。",
+            reason="template_archived",
         )
-
-        evaluation = self._evaluate(state, updated_base, "", updated_base.player_pose, None)
-        missing_slots = dict(evaluation.guidance)
-        open_questions = self._deduplicate([*missing_slots.values(), *evaluation.blocking])
-        ready_flag = evaluation.build_capability >= 85 and not evaluation.blocking
-        updated = updated_base.model_copy(
-            update={
-                "ready_for_build": ready_flag,
-                "open_questions": open_questions,
-                "blocking": evaluation.blocking,
-                "coverage": evaluation.coverage,
-                "motivation_score": evaluation.motivation_score,
-                "logic_score": evaluation.logic_score,
-                "build_capability": evaluation.build_capability,
-                "version": updated_base.version + 1,
-                "updated_at": datetime.now(timezone.utc),
-            }
-        )
-        self._repository.save(updated)
-        message = str(
-            preset.get("message_applied")
-            or preset.get("message")
-            or "模板已应用。"
-        )
-        return StoryStateManager.TemplateApplication(state=updated, applied=True, message=message)
 
     def sync_execution_feedback(
         self,

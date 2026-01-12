@@ -1,0 +1,50 @@
+{
+  "plan_id": "6355f011-0541-4087-b553-feeceab85da5",
+  "summary": "就是紫水晶",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "phase-resources",
+      "title": "协调资源",
+      "description": "你好紫水晶材料 - 熄灯区居民委员会；灯光设备 - 熄灯区居民委员会",
+      "target_region": "default"
+    },
+    {
+      "step_id": "phase-success",
+      "title": "验收标准",
+      "description": "达成标准：居民可以按周使用工坊且不发生事故；城市档案馆记录到新的协作项目",
+      "target_region": "default",
+      "dependencies": [
+        "phase-resources"
+      ]
+    },
+    {
+      "step_id": "phase-execution",
+      "title": "执行建造",
+      "description": "在 world @ (-161.5, 77.0, -118.5) 落地 GM4 气球展台并点亮周边。",
+      "target_region": "world @ (-161.5, 77.0, -118.5)",
+      "dependencies": [
+        "phase-success"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "你好紫水晶材料": "熄灯区居民委员会",
+    "灯光设备": "熄灯区居民委员会"
+  },
+  "risk_notes": [
+    "风险: 若能源调度失衡，可能影响核心城区供电 / 待补充",
+    "风险: 若维护计划缺失，工坊或成为安全隐患 / 待补充",
+    "风险: 夜间安全不足 / 安排志愿者巡查"
+  ],
+  "origin_scenario": "default",
+  "logged_at": "2026-01-11T05:56:03.765127+00:00",
+  "player_pose": {
+    "world": "world",
+    "x": -161.5,
+    "y": 77.0,
+    "z": -118.5,
+    "yaw": -152.85088,
+    "pitch": 26.249994
+  }
+}

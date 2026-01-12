@@ -1,0 +1,172 @@
+title:
+  main: "CityPhone · Archive Terminal"
+  history: "CityPhone · Response Archive"
+  narrative_panel: "CityPhone · Exhibit Narrative"
+button:
+  history_view:
+    title: "View Response History"
+    lore:
+      - "Browse earlier interpretations recorded by the city."
+      - "Left-click to view."
+  history_back:
+    title: "Return to Archive Terminal"
+    lore:
+      - "Go back to the CityPhone archive overview."
+      - "Left-click to return."
+  narrative_back:
+    title: "Collapse Exhibit Narrative"
+    lore:
+      - "Return to the folded CityPhone overview."
+      - "Left-click to close."
+device:
+  display_name: "CityPhone"
+  lore:
+    - "Curatorial terminal issued by the archive."
+    - "Right-click to sync narrative records."
+command:
+  header: "CityPhone Archive Terminal:"
+  give: "/cityphone give - receive the terminal"
+  open: "/cityphone open - open the archive terminal"
+  say: "/cityphone say <text> - record a new narrative"
+  pose: "/cityphone pose - sync the gallery location"
+  history_hint: "Open 'View Response History' inside the terminal to read city interpretations."
+  player_only: "Only players can use the CityPhone."
+  say_missing: "Provide a narrative payload, e.g. /cityphone say I want to build an expo stand."
+status:
+  completed: "Completed"
+  running: "Running"
+  queued: "Queued"
+  blocked: "Blocked"
+  pending: "Pending"
+  unknown: "Unknown"
+message:
+  prefix: "[CityPhone] %s"
+  phone_received: "The terminal has been added to your inventory."
+  narrative_missing: "Please provide the narrative you want to record."
+  narrative_synced: "Your new record has been synced."
+  pose_synced: "Current position synced."
+  syncing: "Syncing archive data, please try again soon."
+  backend_failed: "Backend connection failed."
+  state_failed: "Failed to fetch state (%d)"
+  state_empty: "Backend returned an empty response."
+  state_parse_failed: "Unable to parse backend response."
+  state_missing: "No state payload was provided."
+  action_failed: "Action submission failed (%d)"
+  action_failed_generic: "Action submission failed."
+  action_parse_failed: "Unable to parse backend response."
+  action_empty: "Backend returned an empty response."
+  error_unknown: "Unknown error"
+  interpretation_header: "City Interpretation"
+  unknowns_header: "City Questions"
+  delay_header: "Interpretation Delays"
+  mode_switch:
+    archive: "Gallery returned to archive viewing mode; CityPhone will highlight historical records."
+    production: "Gallery entered curatorial build mode; Forge signals are now in sync with CityPhone."
+  mode_switch_generic: "Gallery mode switched to %s."
+mode:
+  label:
+    archive: "Archive Viewing Mode"
+    production: "Curatorial Build Mode"
+ui:
+  anchor:
+    title: "Gallery Status"
+    timeframe: "Timeframe: %s"
+    mode: "Gallery Mode: %s"
+    last_event: "Last Record: %s"
+    empty: "No gallery status available."
+  vision:
+    title: "Phase · %s"
+    coverage_heading: "Coverage:"
+    goals_heading: "Goals:"
+    logic_heading: "Execution Outline:"
+    pending_heading: "Outstanding:"
+    notes_heading: "Latest Notes:"
+  resources:
+    title: "Resource Ledger"
+    current_heading: "Current List:"
+    none: "No resources recorded."
+    pending: "Resource ledger pending."
+  risk:
+    heading: "Risk Register:"
+    none: "No risks recorded."
+    pending: "Risk register pending."
+  location:
+    title: "Location Tracking"
+    hint: "Location hint: %s"
+    pose: "Coordinates: %s (%.1f, %.1f, %.1f)"
+    missing_pose: "Player position not synced."
+    sync_hint: "Use /cityphone pose to sync your current position."
+  plan:
+    title: "Build Plan"
+    not_ready: "Plan not yet generated."
+    blocking_heading: "Interpretation delays:"
+    steps_heading: "Execution Steps:"
+    mod_hooks_heading: "Linked Mods:"
+    suggestions_heading: "Guidance:"
+  status:
+    ready: "Status: Ready"
+    pending: "Status: Preparing"
+    build_capability: "Build Capability: %s/200"
+    motivation: "Motivation Score: %s"
+    logic: "Logic Score: %s"
+    plan_status: "Plan Status: %s"
+    questions_heading: "Open Questions:"
+  narrative:
+    fallback_title: "Narrative Section"
+    header:
+      timeframe: "Timeframe: %s"
+      mode: "Gallery mode: %s"
+      last_event: "Last event: %s"
+    body_empty: "No archive content yet."
+    index_title: "Narrative Index"
+    index_heading: "Available narrative sections:"
+    index_empty: "No narrative content."
+    history_empty_title: "No historical responses"
+    history_empty_1: "CityPhone has not produced any historical archive yet."
+    history_empty_2: "Please resync later."
+  narrative_preview:
+    title: "Exhibit Summary"
+    empty: "No narrative sections available."
+    open_hint: "Left-click to open the full exhibit text."
+  sources:
+    title: "Archive Sources"
+    empty: "No sources available yet."
+  unknowns:
+    title: "City Memory Gaps"
+    empty: "No memory gaps recorded."
+  history:
+    empty: "No historical archive entries."
+    digest_hint: "Left-click to browse the response archive."
+  appendix:
+    title: "Archive Appendix"
+    phase: "Phase: %s"
+    mode: "Gallery mode: %s"
+    build_capability: "Build Capability: %s/200"
+    plan_status: "Plan Status: %s"
+    plan_summary: "Plan Summary: %s"
+    plan_steps_heading: "Execution Steps:"
+    blocking_heading: "Interpretation delays:"
+    suggestions_heading: "Guidance:"
+    coverage_heading: "Coverage:"
+    location_hint: "Location hint: %s"
+    location_pending: "Player position pending sync."
+    resources_heading: "Resources:"
+    resources_pending: "Resource ledger pending."
+    open_questions_heading: "City Queries:"
+    notes_heading: "Archive Notes:"
+    risk_heading: "Risk Register:"
+    risk_pending: "Risk register pending."
+    mod_hooks_heading: "Linked Mods:"
+  narrative_panel:
+    header_title: "Exhibit Header"
+    header_empty: "No exhibit header information."
+    empty_title: "No exhibit narrative"
+    empty_body: "CityPhone has not assembled any exhibit text yet."
+coverage:
+  logic: "Execution Logic"
+  world: "World Constraints"
+  success: "Success Criteria"
+  complete: "Complete"
+  missing: "Missing"
+list:
+  empty: "(none)"

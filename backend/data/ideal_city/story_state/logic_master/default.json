@@ -1,0 +1,57 @@
+{
+  "state": {
+    "player_id": "logic_master",
+    "scenario_id": "default",
+    "goals": [
+      "《熄灯区公共工坊》展品整理稿：收录居民对夜间维修空间的想象与记录。"
+    ],
+    "logic_outline": [
+      "目标：《熄灯区公共工坊》展品整理稿：收录居民对夜间维修空间的想象与记录",
+      "执行：围绕目标拆解两步执行：准备资源并落地社区验证。"
+    ],
+    "resources": [
+      "气球展台基础材料 - 档案官提供"
+    ],
+    "community_requirements": [],
+    "success_criteria": [
+      "居民可以按周使用工坊且不发生事故",
+      "城市档案馆记录到新的协作项目"
+    ],
+    "world_constraints": [
+      "夜间能源供应有限，噪音需受限",
+      "居民经济条件薄弱，需要公用资源调度",
+      "市政要求所有新设施公开运作计划"
+    ],
+    "risk_register": [
+      "风险: 若能源调度失衡，可能影响核心城区供电 / 待补充",
+      "风险: 若维护计划缺失，工坊或成为安全隐患 / 待补充"
+    ],
+    "risk_notes": [],
+    "location_hint": null,
+    "player_pose": null,
+    "notes": [
+      "《熄灯区公共工坊》展品整理稿：收录居民对夜间维修空间的想象与记录。"
+    ],
+    "ready_for_build": true,
+    "open_questions": [
+      "同步一次坐标（/cityphone pose）以便定位施工点。"
+    ],
+    "blocking": [],
+    "coverage": {
+      "logic_outline": true,
+      "world_constraints": true,
+      "resource_ledger": true,
+      "success_criteria": true,
+      "risk_register": true
+    },
+    "motivation_score": 43,
+    "logic_score": 90,
+    "build_capability": 133,
+    "last_plan_id": null,
+    "last_plan_status": null,
+    "last_plan_synced_at": null,
+    "version": 2,
+    "updated_at": "2026-01-11T16:05:37.602308Z"
+  },
+  "frozen_at": "2026-01-11T16:05:37.602320Z"
+}

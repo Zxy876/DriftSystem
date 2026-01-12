@@ -1,0 +1,494 @@
+INFO:     Will watch for changes in these directories: ['/Users/zxydediannao/DRIFT_SCIENCELINE/backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [60724] using StatReload
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [60776]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:57989 - "GET /ideal-city/social-feedback/atmosphere HTTP/1.1" 200 OK
+[MiniMap] Player vivn entered level flagship_03_amethyst
+INFO:     127.0.0.1:58009 - "POST /story/load/vivn/CrystalTech.json HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'app/core/ideal_city/ai_settings.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [60776]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [69020]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/exhibit_instance_repository.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [69020]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [76782]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/exhibit_instance_repository.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [76782]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [76880]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [76880]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [77260]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [77260]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [77311]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [77311]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [77387]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [77387]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [77483]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [77483]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [77534]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [77534]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [77763]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/ideal_city/story_state.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [77763]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [77835]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'test_exhibit_instance_repository.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [77835]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [78093]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'test_exhibit_instance_repository.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [78093]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [90466]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/exhibit_instance_builder.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [90466]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [91261]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [91261]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [91453]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [91453]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [91548]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [91548]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [91764]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [91764]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [91881]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/story/story_engine.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [91881]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [91932]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/ideal_city/pipeline.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [91932]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [92364]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/ideal_city/pipeline.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [92364]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [92459]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/ideal_city/pipeline.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [92459]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [92555]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/ideal_city/pipeline.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [92555]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [92651]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/core/ideal_city/pipeline.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [92651]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [92747]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'test_ideal_city_pipeline.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [92747]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [93070]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'test_ideal_city_pipeline.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [93070]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [94156]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'test_ideal_city_pipeline.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [94156]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [94543]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'test_ideal_city_pipeline.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [94543]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [95963]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'test_ideal_city_pipeline.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [95963]
+[AI INFO] LLM config: {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini', 'connect_timeout': 20.0, 'read_timeout': 60.0, 'max_retries': 3, 'retry_backoff': 2.0}
+[StoryGraph] Loaded 15 levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+[StoryGraph] Graph edges = {'CrystalTech': ['flagship_08'], 'flagship_08': ['flagship_12'], 'flagship_12': ['flagship_final'], 'flagship_custom_1765683090159': ['flagship_custom_1765769857506'], 'flagship_custom_1765769857506': ['flagship_custom_1765778193516'], 'flagship_custom_1765778193516': ['flagship_custom_1765839242297'], 'flagship_custom_1765839242297': ['flagship_custom_1766122015751'], 'flagship_custom_1766122015751': ['flagship_custom_1767408217800'], 'flagship_custom_1767408217800': ['flagship_custom_1767408496007'], 'flagship_custom_1767408496007': ['flagship_custom_1767412228233'], 'flagship_custom_1767412228233': ['flagship_custom_1767412298483'], 'flagship_custom_1767412298483': [], 'flagship_final': ['flagship_story_f47915a5'], 'flagship_story_f47915a5': ['flagship_custom_1765683090159'], 'flagship_tutorial': ['CrystalTech']}
+[Trigger] spiral triggers disabled (StoryEngine v2.stage)
+[StoryEngine] loading levels from /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/flagship_levels
+>>> DriftSystem loaded: TREE + DSL + HINT + WORLD + STORY + AI + MINIMAP + PNG
+>>> Total Levels: 15
+>>> Spiral triggers: 15
+>>> Heart Universe backend ready.
+INFO:     Started server process [96538]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.

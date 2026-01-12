@@ -1,0 +1,23 @@
+{
+  "player_id": "00000000-0000-0000-0000-000000000000",
+  "intent": {
+    "intent_id": "EXAMPLE_STAGE_1",
+    "intent_kind": "CRYSTAL_TECH_STAGE_UNLOCK",
+    "schema_version": "0.1.0",
+    "scenario_id": "default",
+    "allowed_stage": 1,
+    "confidence_level": "research_validated",
+    "issued_at": "2026-01-10T12:00:00Z",
+    "expires_at": "2026-01-11T12:00:00Z",
+    "constraints": [
+      "no_stage_skip"
+    ],
+    "notes": [
+      "示例：城市系统允许紫水晶基础材料化探索"
+    ],
+    "metadata": {
+      "source_spec_id": "EXAMPLE_SPEC"
+    },
+    "signature": "ideal-city::example"
+  }
+}

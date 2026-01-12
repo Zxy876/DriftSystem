@@ -1,0 +1,37 @@
+{
+  "id": "flagship_03_amethyst",
+  "title": "紫水晶 · 初次显现",
+  "tags": ["exhibit", "amethyst", "material", "crystal"],
+  "meta": {
+    "chapter": 3,
+    "exhibit": "amethyst",
+    "stage": "observation",
+    "focus": "material_presence"
+  },
+  "continuity": {
+    "previous": "flagship_tutorial",
+    "next": "flagship_08",
+    "emotional_vector": "stillness",
+    "arc_step": 2
+  },
+  "text": [
+    "在低光环境中，紫水晶的棱面缓慢显现。",
+    "晶体内部并不完全透明，杂质与裂隙形成了可被观察的结构。",
+    "没有人能说清它为何在此，但它显然不是装饰品。"
+  ],
+  "player_prompt": "你可以靠近、观察，或暂时保持距离。",
+  "world_patch": {
+    "mc": {
+      "tell": "§d[记录]§r 晶体尚未被定义用途。",
+      "lighting_shift": "violet_dim",
+      "particle": {
+        "type": "END_ROD",
+        "count": 4
+      }
+    },
+    "variables": {
+      "theme": "amethyst_presence",
+      "state": "unassigned"
+    }
+  }
+}

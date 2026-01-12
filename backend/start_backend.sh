@@ -9,6 +9,14 @@ echo "=============================="
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Ensure Python can resolve shared DriftSystem packages
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [ -n "${PYTHONPATH:-}" ]; then
+    export PYTHONPATH="$ROOT_DIR:$SCRIPT_DIR:$PYTHONPATH"
+else
+    export PYTHONPATH="$ROOT_DIR:$SCRIPT_DIR"
+fi
+
 # 端口占用检测/清理
 BACKEND_PORT=8000
 if command -v lsof >/dev/null 2>&1; then
@@ -58,10 +66,14 @@ pip install -r requirements.txt
 PID_FILE="$SCRIPT_DIR/backend.pid"
 [ -f "$PID_FILE" ] && rm -f "$PID_FILE"
 
-# 启动 FastAPI
+# 启动 FastAPI（后台常驻）
 echo "🌐 后端启动中： http://127.0.0.1:8000"
-echo "（按 Ctrl+C 关闭）"
-uvicorn app.main:app --reload --host 127.0.0.1 --port "$BACKEND_PORT" &
+LOG_FILE="$SCRIPT_DIR/backend_uvicorn.out"
+NOHUP_CMD=("$VENV_DIR/bin/python" -m uvicorn app.main:app --reload --host 127.0.0.1 --port "$BACKEND_PORT")
+
+echo "🪵 日志输出 -> $LOG_FILE"
+nohup env PYTHONUNBUFFERED=1 PYTHONPATH="$PYTHONPATH" "${NOHUP_CMD[@]}" > "$LOG_FILE" 2>&1 &
 UVICORN_PID=$!
 echo $UVICORN_PID > "$PID_FILE"
-wait $UVICORN_PID
+echo "✅ 后端已在后台运行 (PID: $UVICORN_PID)"
+echo "（使用 \`tail -f $LOG_FILE\` 查看日志，'kill $UVICORN_PID' 停止服务）"

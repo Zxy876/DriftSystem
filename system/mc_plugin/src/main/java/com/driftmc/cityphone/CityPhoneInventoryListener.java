@@ -28,12 +28,30 @@ public final class CityPhoneInventoryListener implements Listener {
     if (event.getRawSlot() >= topSize) {
       return;
     }
-    CityPhoneUi.TemplateButton button = CityPhoneUi.getTemplateButton(event.getRawSlot());
-    if (button == null) {
+    CityPhoneUi.ViewKind viewKind = CityPhoneUi.getViewKind(event.getView());
+    if (viewKind == null) {
       return;
     }
     if (event.getWhoClicked() instanceof Player player) {
-      manager.applyTemplate(player, button.templateKey());
+      CityPhoneUi.ActionButton button = CityPhoneUi.getActionButton(viewKind, event.getRawSlot());
+      if (button != null) {
+        String actionKey = button.actionKey();
+        switch (actionKey) {
+          case "history_view":
+            manager.openHistory(player);
+            return;
+          case "history_back":
+          case "narrative_back":
+            manager.reopenFromCache(player);
+            return;
+          default:
+            return;
+        }
+      }
+
+      if (viewKind == CityPhoneUi.ViewKind.MAIN && event.getRawSlot() == CityPhoneUi.NARRATIVE_SLOT) {
+        manager.openNarrative(player);
+      }
     }
   }
 

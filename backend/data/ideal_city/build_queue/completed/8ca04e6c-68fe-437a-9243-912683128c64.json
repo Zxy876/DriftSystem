@@ -1,0 +1,46 @@
+{
+  "plan_id": "8ca04e6c-68fe-437a-9243-912683128c64",
+  "created_at": "2026-01-11T16:05:37.602720+00:00",
+  "summary": "《熄灯区公共工坊》展品整理稿：收录居民对夜间维修空间的想象与记录。",
+  "status": "completed",
+  "steps": [
+    {
+      "step_id": "phase-resources",
+      "title": "协调资源",
+      "description": "气球展台基础材料 - 档案官提供",
+      "target_region": "default",
+      "required_mod": null,
+      "dependencies": []
+    },
+    {
+      "step_id": "phase-success",
+      "title": "验收标准",
+      "description": "达成标准：居民可以按周使用工坊且不发生事故；城市档案馆记录到新的协作项目",
+      "target_region": "default",
+      "required_mod": null,
+      "dependencies": [
+        "phase-resources"
+      ]
+    },
+    {
+      "step_id": "phase-execution",
+      "title": "执行建造",
+      "description": "在 《熄灯区公共工坊》展品整理稿：收录居民对夜间维修空间的想象与记录。 落地 GM4 气球展台并点亮周边。",
+      "target_region": "《熄灯区公共工坊》展品整理稿：收录居民对夜间维修空间的想象与记录。",
+      "required_mod": null,
+      "dependencies": [
+        "phase-success"
+      ]
+    }
+  ],
+  "resource_ledger": {
+    "气球展台基础材料": "档案官提供"
+  },
+  "risk_notes": [
+    "风险: 若能源调度失衡，可能影响核心城区供电 / 待补充",
+    "风险: 若维护计划缺失，工坊或成为安全隐患 / 待补充"
+  ],
+  "mod_hooks": [],
+  "origin_scenario": "default",
+  "player_pose": null
+}

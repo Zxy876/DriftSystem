@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-01-11T01:29:50.986335Z",
+  "updated_at": "2026-01-11T01:29:50.986335Z",
+  "stage": {
+    "current": 0,
+    "level": 0,
+    "label": "baseline",
+    "updated_at": "2026-01-11T01:29:50.986335Z",
+    "source": "unknown"
+  },
+  "energy": {
+    "status": "critical",
+    "level": 41,
+    "updated_at": "2026-01-11T01:29:50.986335Z",
+    "generation": 55.4,
+    "consumption": 39.9,
+    "reserve": 15.5
+  },
+  "risks": [
+    {
+      "id": "energy_grid_strain",
+      "label": "Energy grid strain",
+      "severity": "medium",
+      "description": "Operational energy level has fallen to 41%.",
+      "updated_at": "2026-01-11T01:29:50.986335Z"
+    }
+  ],
+  "alerts": [],
+  "recent_events": []
+}
