@@ -184,13 +184,6 @@ def creation_hard_route(raw_text: str, *, patch_id: Optional[str] = None) -> Har
         "creation_hard_route executing setblock %s", placement.command,
     )
     logger.warning("[HardRoute] BEFORE auto_execute")
-    try:
-        executor._command_runner.run([
-            "setblock -1 63 -1 minecraft:diamond_block",
-        ])
-        logger.warning("[HardRoute] DIRECT setblock dispatched")
-    except Exception as exc:
-        logger.error("[HardRoute][ERROR] direct setblock failed: %s", exc)
     report = executor.auto_execute(plan, patch_id=patch_id)
     logger.warning("[HardRoute] AFTER auto_execute report=%s", report.patch_id)
     return HardRouteOutcome(

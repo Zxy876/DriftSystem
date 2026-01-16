@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Protocol
+from typing import Iterable, List, Optional, Protocol
 
 from app.core.creation.transformer import CreationPlan
 from app.core.world.patch_executor import PatchExecutionResult, PatchExecutor
@@ -91,7 +91,7 @@ class PlanExecutor:
                 summary = _summarize_setblock(command)
                 if summary is not None:
                     x, y, z, block_id = summary
-                    logger.info("[PlanExecutor] CREATE_BLOCK → setblock %s %s %s %s", x, y, z, block_id)
+                    logger.warning("[PlanExecutor] CREATE_BLOCK → setblock %s %s %s %s", x, y, z, block_id)
 
         for executed in dry_result.executed:
             entry = transactions_index.get((executed.template_id, executed.step_id))
@@ -142,9 +142,10 @@ class PlanExecutor:
                 )
                 for command in executed.commands:
                     summary = _summarize_setblock(command)
-                    if summary is not None:
-                        x, y, z, block_id = summary
-                        logger.info("[Drift][EXECUTED] setblock %s %s %s %s", x, y, z, block_id)
+                    if summary is None:
+                        continue
+                    x, y, z, block_id = summary
+                    logger.warning("[Drift][EXECUTED] setblock %s %s %s %s", x, y, z, block_id)
 
         report = PlanExecutionReport(
             patch_id=dry_result.patch_id,
@@ -168,3 +169,4 @@ def _summarize_setblock(command: str) -> Optional[tuple[str, str, str, str]]:
     if tokens[0].lower() != "setblock":
         return None
     return tokens[1], tokens[2], tokens[3], tokens[4]
+
