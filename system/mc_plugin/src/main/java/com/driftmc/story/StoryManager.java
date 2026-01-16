@@ -74,10 +74,9 @@ public class StoryManager {
    * 从后端同步玩家状态
    */
   public void syncState(Player player, Runnable onSuccess) {
-    backend.postJsonAsync(
-        "/story/state/" + player.getName(),
-        "{}",
-        new Callback() {
+    backend.getAsync(
+      "/story/state/" + player.getName(),
+      new Callback() {
           @Override
           public void onFailure(Call call, IOException e) {
             plugin.getLogger().warning(

@@ -27,9 +27,9 @@ FastAPI (`app/api/ideal_city_api.py`)
 ```
 
 ## 3. 插件侧实现（`system/mc_plugin/`）
-- `CityPhoneManager`：生成带有 `cityphone_device` NBT 标记的指南针道具，负责 `/ideal-city/cityphone/state` 与 `/ideal-city/cityphone/action` 的调用，支持 `submit_narrative`、`push_pose`、`apply_template` 等动作。
+- `CityPhoneManager`：生成带有 `cityphone_device` NBT 标记的指南针道具，负责 `/ideal-city/cityphone/state` 与 `/ideal-city/cityphone/action` 的调用，当前仅支持 `submit_narrative` 与 `push_pose` 动作。
 - `CityPhoneCommand`：挂接 `/cityphone give|open|say|pose`，面向无 GUI 的快速调试。
-- `CityPhoneListener` 与 `CityPhoneInventoryListener`：拦截右键与 GUI 交互，确保只有持有 CityPhone 道具时才能打开界面，并在玩家点击模板按钮时回调 `apply_template`。
+- `CityPhoneListener` 与 `CityPhoneInventoryListener`：拦截右键与 GUI 交互，确保只有持有 CityPhone 道具时才能打开界面；模板套用相关按钮已移除。
 - `CityPhoneUi`：使用库存界面呈现四大面板（阶段、资源、定位、计划）以及模板按钮；全部文案以档案馆口吻生成。
 - `CityPhoneSnapshot`：解析后端返回的 JSON，统一转为插件可用的数据结构（状态标签、覆盖率、建造评分、坐标、计划信息等）。
 
@@ -39,7 +39,7 @@ FastAPI (`app/api/ideal_city_api.py`)
   - `request_state`：直接返回当前快照。
   - `submit_narrative`：将叙述封装为 `DeviceSpecSubmission`，驱动裁决、生成建造计划与 Manifestation Intent，并返回最新状态。
   - `push_pose`：写入玩家坐标及位置提示。
-  - `apply_template`：调用 `StoryStateManager.apply_template` 补全常见字段。
+  - （模板套用已下线，不再暴露 `apply_template` 动作。）
 - `StoryStateManager`：为 CityPhone 面板提供覆盖度、阻塞项与评分，并维护模板、跟进问题、建造准备状态。
 - `NarrativeIngestion`、`ManifestationIntentWriter`、`BuildScheduler` 等配套模块会在裁决通过后更新建造计划和城市意图，CityPhone 面板据此显示待办或执行进度。
 
@@ -48,7 +48,7 @@ FastAPI (`app/api/ideal_city_api.py`)
 | 获取状态 | `GET /ideal-city/cityphone/state/{player}` | 返回 `CityPhoneStatePayload` | `IdealCityPipeline.cityphone_state` |
 | 提交叙述 | `POST /ideal-city/cityphone/action` + `action="submit_narrative"` | 触发裁决、生成建造计划、更新 StoryState | `IdealCityPipeline.handle_cityphone_action` → `submit()` |
 | 同步坐标 | 同上 + `action="push_pose"` | 写入 `StoryState.player_pose` 与地标提示 | `StoryStateManager.apply_pose_update` |
-| 模板套用 | 同上 + `action="apply_template"` | 补齐逻辑、约束、资源等常用条目 | `StoryStateManager.apply_template` |
+| 模板套用 | （已下线） | （功能冻结） | — |
 
 ## 5. 数据与协议来源
 - StoryState：`backend/data/ideal_city/story_state/` 下维护每位玩家、每个场景的 JSON 缓存，供 CityPhone 即时读取。

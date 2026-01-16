@@ -8,7 +8,12 @@
       "收到请回复",
       "紫水晶收到请回复",
       "就是紫水晶",
-      "我要到上层建筑上去"
+      "我要到上层建筑上去",
+      "制作一个幽冥莲花灯以纪念埋葬在幽冥的她。",
+      "我的爱人，死于紫水晶碎片",
+      "在我脚下放置一个 minecraft:amethyst_block 方块。",
+      "在我脚下放置一个 minecraft:amethyst_block",
+      "在坐标 -2 63 0 放置 minecraft:amethyst_block"
     ],
     "logic_outline": [
       "目标：你好紫水晶",
@@ -19,7 +24,12 @@
       "目标：就是紫水晶",
       "目标：在熄灯区入口搭建安全的气球展台，引导访客。",
       "执行：现场布置与社区验证两步完成部署。",
-      "我要到上层建筑上去"
+      "我要到上层建筑上去",
+      "我用紫水晶做了一个幽冥莲花灯，因为她埋葬的地方叫幽冥",
+      "我的爱人，死于紫水晶碎片",
+      "在我脚下放置一个 minecraft:amethyst_block 方块。",
+      "在我脚下放置一个 minecraft:amethyst_block",
+      "在坐标 -2 63 0 放置 minecraft:amethyst_block"
     ],
     "resources": [
       "你好紫水晶材料 - 熄灯区居民委员会",
@@ -38,7 +48,9 @@
     "risk_register": [
       "风险: 若能源调度失衡，可能影响核心城区供电 / 待补充",
       "风险: 若维护计划缺失，工坊或成为安全隐患 / 待补充",
-      "风险: 夜间安全不足 / 安排志愿者巡查"
+      "风险: 夜间安全不足 / 安排志愿者巡查",
+      "风险: 若能源调度失衡，可能影响核心城区供电 / 安排合理的能源调度",
+      "风险: 若维护计划缺失，工坊或成为安全隐患 / 制定详细的维护计划"
     ],
     "risk_notes": [],
     "location_hint": "world @ (-161.5, 77.0, -118.5)",
@@ -60,8 +72,14 @@
       "[计划 84b394] 紫水晶收到请回复 · 建造完成，未检测到派发指令。 (日志: /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/ideal_city/build_queue/executed/d15c9552-43fc-450a-acce-24cee684b394.json)",
       "就是紫水晶",
       "[计划 b85da5] 就是紫水晶 · 建造完成，未检测到派发指令。 (日志: /Users/zxydediannao/DRIFT_SCIENCELINE/backend/data/ideal_city/build_queue/executed/6355f011-0541-4087-b553-feeceab85da5.json)",
-      "我要到上层建筑上去"
+      "我要到上层建筑上去",
+      "我用紫水晶做了一个幽冥莲花灯，因为她埋葬的地方叫幽冥",
+      "我的爱人，死于紫水晶碎片",
+      "在我脚下放置一个 minecraft:amethyst_block 方块。",
+      "在我脚下放置一个 minecraft:amethyst_block",
+      "在坐标 -2 63 0 放置 minecraft:amethyst_block"
     ],
+    "exhibit_instances": [],
     "ready_for_build": true,
     "open_questions": [],
     "blocking": [],
@@ -78,8 +96,8 @@
     "last_plan_id": "6355f011-0541-4087-b553-feeceab85da5",
     "last_plan_status": "completed",
     "last_plan_synced_at": "2026-01-11T05:58:31.123446Z",
-    "version": 13,
-    "updated_at": "2026-01-12T06:36:03.336329Z"
+    "version": 21,
+    "updated_at": "2026-01-15T11:45:59.924577Z"
   },
-  "frozen_at": "2026-01-12T06:36:03.336353Z"
+  "frozen_at": "2026-01-15T11:45:59.924600Z"
 }

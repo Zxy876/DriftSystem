@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
+import os
 from copy import deepcopy
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -328,8 +329,16 @@ class StoryEngine:
 
         self._custom_story_dir = primary_dir
         self._exhibit_registry = DEFAULT_EXHIBIT_REGISTRY
-        self._exhibit_instances = ExhibitInstanceRepository()
+        flag = os.getenv("DRIFT_ENABLE_EXHIBIT_INSTANCES", "").strip().lower()
+        self._exhibit_instances_enabled = flag in {"1", "true", "yes", "on"}
+        self._exhibit_instances = (
+            ExhibitInstanceRepository() if self._exhibit_instances_enabled else None
+        )
         self._exhibit_builder = ExhibitInstanceBuilder()
+        if not self._exhibit_instances_enabled:
+            logger.info(
+                "[StoryEngine] Exhibit instance replay disabled (set DRIFT_ENABLE_EXHIBIT_INSTANCES=1 to enable)."
+            )
 
         print(f"[StoryEngine] loading levels from {primary_dir}")
 
@@ -1291,6 +1300,8 @@ class StoryEngine:
         player_state = self.players.get(player_id)
         if not player_state:
             return None
+        if not self._exhibit_instances_enabled or self._exhibit_instances is None:
+            return None
 
         exhibit_payload = self._current_exhibit_payload(player_id) or {}
         scenario_id = exhibit_payload.get("scenario_id")
@@ -1353,7 +1364,7 @@ class StoryEngine:
         return None
 
     def _capture_exhibit_instance(self, player_id: str, patch: Optional[Dict[str, Any]]) -> None:
-        if not patch:
+        if not patch or not self._exhibit_instances_enabled or self._exhibit_instances is None:
             return
 
         player_state = self.players.get(player_id)

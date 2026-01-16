@@ -165,6 +165,25 @@ def fallback_intents(text: str) -> List[Dict[str, Any]]:
 # ============================================================
 # parse_intent → 输出 { status, intents: [] }
 # ============================================================
+BLOCK_KEYWORDS = {"方块", "方塊", "block", "方块儿"}
+
+
+def _looks_like_block_request(text: str) -> bool:
+    if not text:
+        return False
+
+    raw = text.strip()
+    if any(keyword in raw for keyword in BLOCK_KEYWORDS):
+        return True
+
+    lower = raw.lower()
+    if "minecraft:" in lower:
+        suffixes = ("_block", "_glass", "_bricks", "_planks", "_concrete", "_stone")
+        if lower.endswith(suffixes):
+            return True
+    return False
+
+
 def parse_intent(player_id, text, world_state, story_engine):
     if _looks_like_ideal_city_request(text.strip()):
         intents = [{
@@ -222,6 +241,13 @@ def parse_intent(player_id, text, world_state, story_engine):
                     "tell": "✨ 新剧情已准备好，正在加载……"
                 }
             })
+
+    if _looks_like_block_request(text):
+        for it in intents:
+            if it.get("type") in {"SPAWN_ENTITY", "SAY_ONLY", "UNKNOWN", "GOTO_LEVEL"}:
+                it["type"] = "CREATE_BLOCK"
+                it.setdefault("raw_text", text)
+                break
 
     return {
         "status": "ok",

@@ -168,7 +168,7 @@ story:
 # 世界设置
 world:
   allow_world_modification: true
-  allow_story_creation: true
+  allow_story_creation: false  # 需要开放自然语言剧情创作时再开启
   safe_teleport: true
 ```
 

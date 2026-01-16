@@ -1,0 +1,88 @@
+{
+  "id": "flagship_03",
+  "title": "熄灯区公共工坊 · 初号展台",
+  "tags": ["ideal_city", "public_workshop"],
+  "meta": {
+    "chapter": 3,
+    "ideal_city": true,
+    "stage": "proposal_drafting",
+    "scenario": "public_workshop",
+    "focus": "night_shift"
+  },
+  "continuity": {
+    "previous": "flagship_tutorial",
+    "next": "flagship_08",
+    "next_major_level": "flagship_08",
+    "emotional_vector": "anticipation",
+    "arc_step": 2
+  },
+  "text": [
+    "夜间工坊刚刚清理完毕，临时展台还保持着试运行状态。",
+    "城市档案员希望记录下居民对夜班安全设备的建议。",
+    "你能听到远处警报灯的脉冲声在墙面反射。"
+  ],
+  "player_prompt": "说明你想如何调整夜班安全设备，并确认是否需要新的指引。",
+  "world_patch": {
+    "mc": {
+      "tell": "§b[档案员]§r 工坊等待你的调整建议，注意记录警示灯的脉冲频率。",
+      "lighting_shift": "night_soft",
+      "particle": {
+        "type": "REDSTONE",
+        "count": 6
+      },
+      "title": {
+        "main": "熄灯区公共工坊",
+        "sub": "夜班设备处于试运行状态"
+      }
+    },
+    "variables": {
+      "theme": "ideal_city_public_workshop",
+      "arc_position": "introduction"
+    }
+  },
+  "narrative": {
+    "beats": [
+      {
+        "id": "flagship_03_intro",
+        "trigger": "on_enter",
+        "rule_refs": ["fear_pulse_signal"],
+        "choice_prompt": "需要记录夜班安全条件吗？"
+      },
+      {
+        "id": "flagship_03_alignment",
+        "trigger": "rule_event:fear_pulse",
+        "rule_refs": ["fear_pulse"],
+        "choice_prompt": "调整后的脉冲记录完成了吗？"
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "id": "fear_pulse_alignment",
+      "type": "quest_event",
+      "title": "校准夜班警示灯",
+      "hint": "记录一次 fear_pulse 脉冲，确认节奏是否均匀。",
+      "conditions": [
+        {
+          "quest_event": "fear_pulse",
+          "count": 1,
+          "hint": "夜班设备应当在 30 秒内亮起一次。"
+        }
+      ],
+      "milestones": [
+        {
+          "id": "fear_pulse_recorded",
+          "title": "完成脉冲记录",
+          "event": "fear_pulse",
+          "count": 1
+        }
+      ],
+      "rewards": [
+        {
+          "type": "xp",
+          "amount": 40
+        }
+      ]
+    }
+  ]
+}

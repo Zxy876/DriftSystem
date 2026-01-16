@@ -29,8 +29,8 @@ world:
   # 是否允许玩家通过聊天修改世界
   allow_world_modification: true
   
-  # 是否允许创建新剧情
-  allow_story_creation: true
+  # 是否允许通过自然语言创建新剧情（默认关闭，避免触发未控LLM路径）
+  allow_story_creation: false
   
   # 传送安全检查
   safe_teleport: true

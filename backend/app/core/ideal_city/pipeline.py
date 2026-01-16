@@ -71,6 +71,8 @@ from .technology_status import (
     TechnologyStatusSnapshot,
 )
 from .exhibit_mode import ExhibitMode, ExhibitModeResolver, ExhibitModeState
+from app.core.intent_creation import default_creation_classifier
+from app.core.creation import load_default_transformer
 from app.core.story.exhibit_instance_repository import ExhibitInstanceRepository, ExhibitInstance
 
 
@@ -86,38 +88,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
-_COVERAGE_LABELS = {
-    "logic_outline": "执行逻辑",
-    "world_constraints": "世界约束",
-    "resource_ledger": "资源清单",
-    "success_criteria": "成功标准",
-    "risk_register": "风险登记",
-}
-
-_ARCHIVE_BLACKLIST = {
-    "希望",
-    "期待",
-    "建议",
-    "应当",
-    "需要",
-    "可以",
-    "补齐",
-    "完善",
-    "改进",
-    "优化",
-    "生成",
-    "执行",
-    "计划",
-    "步骤",
-    "字段",
-    "解锁",
-    "进入",
-    "准备就绪",
-    "下一阶段",
-    "待补充",
-    "需补",
-}
 
 
 class DeviceSpecSubmission(BaseModel):
@@ -293,10 +263,6 @@ class CityPhoneAction(BaseModel):
 class CityPhoneActionResult(BaseModel):
     status: str
     state: CityPhoneStatePayload
-    notice: Optional[dict] = None
-    build_plan: Optional[dict] = None
-    guidance: Optional[List[dict]] = None
-    manifestation_intent: Optional[dict] = None
     error: Optional[str] = None
     message: Optional[str] = None
     city_interpretation: List[str] = Field(default_factory=list)
@@ -517,6 +483,8 @@ class IdealCityPipeline:
         self._story_state_agent = StoryStateAgent()
         self._story_manager = StoryStateManager(self._story_repository, agent=self._story_state_agent)
         self._narrative_ingestor = NarrativeChatIngestor()
+        self._creation_intent_classifier = default_creation_classifier()
+        self._creation_transformer = load_default_transformer()
         protocol_override = os.getenv("IDEAL_CITY_PROTOCOL_ROOT")
         if protocol_override:
             protocol_root = Path(protocol_override).expanduser()
@@ -625,6 +593,24 @@ class IdealCityPipeline:
     def ingest_narrative_event(self, event: NarrativeChatEvent) -> NarrativeIngestionResponse:
         scenario_id = event.scenario_id or "default"
         extraction = self._narrative_ingestor.process(event)
+        intent_decision = self._creation_intent_classifier.classify(event.message or "")
+        intent_payload = intent_decision.model_dump()
+        try:
+            plan_result = self._creation_transformer.transform(intent_decision)
+            intent_payload["creation_plan"] = plan_result.to_payload()
+        except Exception:
+            logger.exception("creation_transformer_failed")
+        system_intent_match = detect_intent(event.message or "")
+
+        if not intent_decision.is_creation and system_intent_match is None:
+            return NarrativeIngestionResponse(
+                status="ignored",
+                confidence=extraction.confidence,
+                missing_fields=extraction.missing_fields,
+                message="未识别为创造行为，请进一步描述建造意图。",
+                source_fields=extraction.raw_fields,
+                intent_analysis=intent_payload,
+            )
 
         response_status = "accepted"
         message: Optional[str] = None
@@ -647,6 +633,7 @@ class IdealCityPipeline:
                     missing_fields=[field for field in extraction.missing_fields if field in {"vision", "actions", "resources", "location"}],
                     message="未找到结构化标签，已作为草稿保送，请在 CityPhone 完善字段。",
                     source_fields=extraction.raw_fields,
+                    intent_analysis=intent_payload,
                     submission=submission.model_dump(mode="json"),
                     ruling=result.ruling.model_dump(mode="json"),
                     notice=result.notice.model_dump(mode="json"),
@@ -667,6 +654,7 @@ class IdealCityPipeline:
                 missing_fields=extraction.missing_fields,
                 message=message,
                 source_fields=extraction.raw_fields,
+                intent_analysis=intent_payload,
             )
 
         submission = DeviceSpecSubmission(
@@ -696,6 +684,7 @@ class IdealCityPipeline:
             missing_fields=extraction.missing_fields,
             message=message,
             source_fields=extraction.raw_fields,
+            intent_analysis=intent_payload,
             submission=submission.model_dump(mode="json"),
             ruling=result.ruling.model_dump(mode="json"),
             notice=result.notice.model_dump(mode="json"),
@@ -837,52 +826,73 @@ class IdealCityPipeline:
             manifestation_intent=manifestation_intent,
         )
 
-    def cityphone_state(self, player_id: str, scenario_id: Optional[str] = None) -> CityPhoneStatePayload:
-        scenario_id = scenario_id or "default"
-        state = self._story_repository.load(player_id, scenario_id)
+    def _archive_cityphone_narrative(
+        self,
+        *,
+        player_id: str,
+        scenario_id: str,
+        narrative: str,
+        player_pose: Optional[PlayerPose] = None,
+    ) -> StoryState:
+        scenario_ref = scenario_id or "default"
+        cleaned_lines = [self._clean_text(line) for line in narrative.splitlines()]
+        archive_lines = [line for line in cleaned_lines if line]
+
+        state = self._story_repository.load(player_id, scenario_ref)
         if state is None:
-            state = StoryState(player_id=player_id, scenario_id=scenario_id)
+            state = StoryState(player_id=player_id, scenario_id=scenario_ref)
 
-        scenario = self._scenario_repo.load(scenario_id)
+        notes: List[str] = [entry for entry in state.notes if entry and entry.strip()]
+        for line in archive_lines:
+            if line not in notes:
+                notes.append(line)
+        if len(notes) > 120:
+            notes = notes[-120:]
 
-        latest_entry = self._repository.latest_for_player(player_id)
-        plan_obj: Optional[BuildPlan] = None
-        executed_record: Optional[ExecutedPlanRecord] = None
-        if latest_entry:
-            _, notice = latest_entry
-            if notice.build_plan and notice.build_plan.plan_id:
-                plan_obj = self._repository.get_plan(notice.build_plan.plan_id)
-                if plan_obj:
-                    executed_record = self.fetch_executed_plan(str(plan_obj.plan_id))
-                    if executed_record is not None:
-                        state = self._story_manager.sync_execution_feedback(
-                            player_id=player_id,
-                            scenario_id=scenario_id,
-                            plan_id=str(plan_obj.plan_id),
-                            status=executed_record.status,
-                            command_count=len(executed_record.commands or []),
-                            missing_mods=executed_record.missing_mods,
-                            summary=plan_obj.summary,
-                            log_path=str(executed_record.log_path) if executed_record.log_path else None,
-                        )
+        update: Dict[str, Any] = {
+            "notes": notes,
+            "ready_for_build": False,
+            "open_questions": [],
+            "blocking": [],
+            "coverage": {},
+            "motivation_score": 0,
+            "logic_score": 0,
+            "build_capability": 0,
+            "last_plan_id": None,
+            "last_plan_status": None,
+            "version": state.version + 1,
+            "updated_at": datetime.now(timezone.utc),
+        }
 
+        if player_pose is not None:
+            update["player_pose"] = player_pose
+            if not state.location_hint:
+                update["location_hint"] = f"{player_pose.world} @ {player_pose.x:.2f}, {player_pose.y:.2f}, {player_pose.z:.2f}"
+
+        updated = state.model_copy(update=update)
+        self._story_repository.save(updated)
+        return updated
+
+    def cityphone_state(self, player_id: str, scenario_id: Optional[str] = None) -> CityPhoneStatePayload:
+        scenario_ref = scenario_id or "default"
+        state = self._story_repository.load(player_id, scenario_ref)
+        if state is None:
+            state = StoryState(player_id=player_id, scenario_id=scenario_ref)
+
+        scenario = self._scenario_repo.load(scenario_ref)
         technology_status_snapshot = self._tech_status_repo.load_snapshot()
         mode_state = self._mode_resolver.resolve(
-            has_active_plan=bool(plan_obj is not None),
-            has_execution_record=executed_record is not None,
+            has_active_plan=False,
+            has_execution_record=False,
+            last_archival_update=state.updated_at,
         )
         exhibit_mode_view = ExhibitModeView.from_state(mode_state)
-        exhibit_mode_view.description = [
-            "展馆当前处于档案展示状态。",
-            "内容用于回顾与理解历史文本，而非指导行为。",
-        ]
 
-        base_narrative = self._exhibit_repo.load(scenario_id)
+        base_narrative = self._exhibit_repo.load(scenario_ref)
         narrative_bundle = self._compose_narrative(
             scenario=scenario,
             base=base_narrative,
             state=state,
-            executed_plan=executed_record,
             technology_status=technology_status_snapshot,
             mode_state=mode_state,
         )
@@ -893,7 +903,7 @@ class IdealCityPipeline:
             history_entries=narrative_bundle.history_entries,
             narrative=narrative_bundle.narrative,
             exhibit_mode=exhibit_mode_view,
-            exhibits=self._build_exhibits_payload(scenario_id=scenario_id),
+            exhibits=self._build_exhibits_payload(scenario_id=scenario_ref),
         )
 
     def _build_exhibits_payload(self, *, scenario_id: str) -> CityPhoneExhibitsPayload:
@@ -932,73 +942,65 @@ class IdealCityPipeline:
         scenario: ScenarioContext,
         base: ExhibitNarrative,
         state: StoryState,
-        executed_plan: Optional[ExecutedPlanRecord],
         technology_status: Optional[TechnologyStatusSnapshot],
         mode_state: ExhibitModeState,
     ) -> NarrativeBundle:
         technology_status = technology_status or TechnologyStatusSnapshot()
-        title = self._clean_text(base.title) or scenario.title or scenario.scenario_id
+        title = self._clean_text(base.title) or self._clean_text(scenario.title)
         timeframe = self._clean_text(base.timeframe)
-        if not timeframe:
-            timeframe = "熄灯区纪元 · 第17周"
-
-        gallery_status = self._build_gallery_status(timeframe=timeframe, scenario_title=scenario.title)
-        overview_lines, interpretation_section = self._build_city_interpretation_view(
-            scenario=scenario,
+        gallery_status = self._render_gallery_snapshot(
             base=base,
-            state=state,
+            scenario=scenario,
+            timeframe=timeframe,
         )
 
-        topics = self._collect_unknown_topics(
+        interpretation_lines = self._dedupe_lines(base.city_interpretation or [])
+
+        unknown_lines = self._build_unknown_lines(
             base=base,
-            state=state,
             technology_status=technology_status,
         )
-        unknown_lines = self._render_unknowns_full(topics)
-        open_question_lines = self._render_open_questions_section(topics)
 
         history_entries = self._build_history_entries(
             base=base,
             state=state,
             technology_status=technology_status,
-            executed_plan=executed_plan,
         )
-        history_section = self._build_history_section()
 
-        appendix_lines = self._build_archive_appendix(base.appendix or {})
+        appendix_lines = self._render_appendix(base.appendix or {})
 
         sections: List[CityPhoneNarrativeSection] = []
         if gallery_status:
             sections.append(
                 CityPhoneNarrativeSection(
                     slot="gallery_status",
-                    title="展馆状态",
+                    title="档案概览",
                     body=gallery_status,
-                    accent="collecting",
+                    accent=None,
                 )
             )
-        if interpretation_section:
+        if interpretation_lines:
             sections.append(
                 CityPhoneNarrativeSection(
                     slot="city_interpretation",
                     title="来源说明",
-                    body=interpretation_section,
+                    body=list(interpretation_lines),
                 )
             )
-        if open_question_lines:
+        if unknown_lines:
             sections.append(
                 CityPhoneNarrativeSection(
                     slot="open_questions",
                     title="记忆空白",
-                    body=open_question_lines,
+                    body=list(unknown_lines),
                 )
             )
-        if history_section:
+        if history_entries:
             sections.append(
                 CityPhoneNarrativeSection(
                     slot="history_log",
                     title="历史注记",
-                    body=history_section,
+                    body=list(history_entries),
                 )
             )
         if appendix_lines:
@@ -1010,17 +1012,19 @@ class IdealCityPipeline:
                 )
             )
 
+        last_event = history_entries[-1] if history_entries else None
+
         narrative = CityPhoneNarrativePayload(
             mode=mode_state.mode.value if hasattr(mode_state.mode, "value") else (mode_state.mode or "archive"),
             title=title,
             timeframe=timeframe,
-            last_event=self._render_last_event(state, technology_status),
+            last_event=last_event,
             sections=sections,
         )
 
         return NarrativeBundle(
             narrative=narrative,
-            city_interpretation=overview_lines,
+            city_interpretation=interpretation_lines,
             unknowns=unknown_lines,
             history_entries=history_entries,
         )
@@ -1036,114 +1040,42 @@ class IdealCityPipeline:
             ordered.append(cleaned)
         return ordered
 
-    def _build_gallery_status(self, *, timeframe: Optional[str], scenario_title: Optional[str]) -> List[str]:
-        lines: List[str] = [
-            "当前展馆以档案形式开放。",
-            "此阶段侧重呈现既有记录与未解读的片段。",
-            "观众可通过现存文字了解当时的讨论氛围。",
-        ]
+    def _clean_text(self, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    def _render_gallery_snapshot(
+        self,
+        *,
+        base: ExhibitNarrative,
+        scenario: ScenarioContext,
+        timeframe: Optional[str],
+    ) -> List[str]:
+        lines = self._dedupe_lines(base.archive_state or [])
+        supplemental: List[str] = []
         if timeframe:
-            lines.append(f"展期：{timeframe}。")
-        if scenario_title:
-            lines.append(f"展厅主题：{scenario_title}。")
+            supplemental.append(f"展期：{timeframe}")
+        if scenario.title:
+            supplemental.append(f"展厅主题：{scenario.title}")
+        if supplemental:
+            lines.extend(supplemental)
         return self._dedupe_lines(lines)
 
-    def _build_city_interpretation_view(
-        self,
-        *,
-        scenario: ScenarioContext,
-        base: ExhibitNarrative,
-        state: StoryState,
-    ) -> Tuple[List[str], List[str]]:
-        # Source-focused overview: each sentence names original archival material instead of synthesising conclusions.
-        overview_lines: List[str] = [
-            "2056-06-12 熄灯区居民委员会提交的构想稿是此展品最早的记录，原件以手写扫描件形式存档。",
-            "2056-06-18 城市工坊联盟随信附上的工具清单被标注为“物资背景”附件，完整文字收录于此。",
-            "2056-06-20 巡夜护卫队会议纪要中的“夜间开放”段落以会议节选形式保存，注明了记录员。",
-            "旧电车站访谈摘要与夜市摊主、学校递交的佐证文本共同构成口述来源，并列陈列于展柜。",
-        ]
-        author_line = self._author_context_line(state)
-        if author_line:
-            overview_lines.append(author_line)
-
-        section_lines: List[str] = [
-            "展柜列出了各份文本的撰写主体、日期与保存介质，供读者核查来源。",
-            "“能源”“安全”等标签来源于原稿批注，未经过再解释或重写。",
-            "所有记录以原始序列并列呈现，供对比不同叙述的差异。",
-        ]
-
-        return self._dedupe_lines(overview_lines), self._dedupe_lines(section_lines)
-
-    def _author_context_line(self, state: StoryState) -> Optional[str]:
-        if state.notes or state.goals or state.resources:
-            return "以下内容保留了一段作者留下的原始叙述，来源标注为提交者当时的写作记录。"
-        return None
-
-    def _collect_unknown_topics(
+    def _build_unknown_lines(
         self,
         *,
         base: ExhibitNarrative,
-        state: StoryState,
         technology_status: TechnologyStatusSnapshot,
     ) -> List[str]:
-        inputs: List[str] = []
-        inputs.extend(base.archive_state or [])
-        inputs.extend(base.unresolved_risks or [])
-        inputs.extend(base.historic_notes or [])
-        # Player提交的即时叙述不应反哺“未知”列表，避免根据当次提交生成新的理解标签。
+        lines: List[str] = []
+        lines.extend(base.unresolved_risks or [])
         for alert in technology_status.risk_alerts or []:
             summary = self._clean_text(alert.summary) or alert.risk_id
             if summary:
-                inputs.append(summary)
-
-        topics: List[str] = []
-        seen: set[str] = set()
-        for raw in inputs:
-            topic = self._normalize_gap_topic(raw)
-            if not topic:
-                continue
-            topic = self._refine_topic(topic)
-            if topic in seen:
-                continue
-            seen.add(topic)
-            topics.append(topic)
-
-        if not topics:
-            topics = [
-                "夜间能源调度试运行阶段",
-                "社区轮值制度",
-                "工坊安全巡检记录",
-                "夜间噪音议题",
-                "技术监控提示",
-            ]
-
-        return topics
-
-    def _render_unknowns_full(self, topics: List[str]) -> List[str]:
-        formatted = [self._format_topic_label(topic) for topic in topics]
-        templates = [
-            lambda t: f"城市档案中尚未形成对{t}的整理文本，不同来源的记述存在差异。",
-            lambda t: f"{t}的记忆较为零散，目前未还原出一致的书面版本。",
-            lambda t: f"现存资料中缺乏针对{t}的统一说明。",
-            lambda t: f"部分档案提及{t}，但相关描述未形成稳定文本。",
-            lambda t: f"围绕{t}的背景说明在现有档案中仍然模糊。",
-        ]
-        rendered: List[str] = []
-        for idx, topic in enumerate(formatted[: len(templates)]):
-            rendered.append(templates[idx](topic))
-        return rendered
-
-    def _render_open_questions_section(self, topics: List[str]) -> List[str]:
-        formatted = [self._format_topic_label(topic) for topic in topics]
-        templates = [
-            lambda t: f"{t}的记载仍存在明显缺口。",
-            lambda t: f"有关{t}的描述未能在档案中完整呈现。",
-            lambda t: f"部分围绕{t}的讨论上下文已在时间中遗失。",
-        ]
-        lines: List[str] = []
-        for idx, topic in enumerate(formatted[: len(templates)]):
-            lines.append(templates[idx](topic))
-        return lines
+                lines.append(summary)
+        return self._dedupe_lines(lines)
 
     def _build_history_entries(
         self,
@@ -1151,133 +1083,44 @@ class IdealCityPipeline:
         base: ExhibitNarrative,
         state: StoryState,
         technology_status: TechnologyStatusSnapshot,
-        executed_plan: Optional[ExecutedPlanRecord],
     ) -> List[str]:
-        entries: List[str] = [
-            "2056-06-12：熄灯区居民委员会递交的构想文本被归档，作为这组展品的起始记录。",
-            "2056-06-18：城市工坊联盟提供的工具清单随信附上并入档，形成了物资背景的文字注记。",
-            "2056-06-20：巡夜护卫队会议纪要节选被收录，用以记录“夜间开放”议题的讨论方式。",
-        ]
-
-        resident_line = self._resident_reflection_line(state)
-        if resident_line:
-            entries.append(resident_line)
-
-        last_event = self._pick_last_event(state.notes, technology_status)
-        if last_event:
-            rewritten_event = self._rewrite_last_event_entry(last_event)
-            if rewritten_event:
-                entries.append(rewritten_event)
-
+        entries: List[str] = []
+        entries.extend(base.historic_notes or [])
+        entries.extend(self._render_story_notes(state))
+        entries.extend(self._render_recent_events(technology_status))
         return self._dedupe_lines(entries)
 
-    def _resident_reflection_line(self, state: StoryState) -> Optional[str]:
-        if state.notes or state.goals:
-            return "某次居民口述记录提到，希望把熄灯区的夜间景象写成更具活力的公共叙述。"
-        return None
-
-    def _rewrite_last_event_entry(self, last_event: str) -> Optional[str]:
-        text = self._clean_text(last_event)
-        if not text:
-            return None
-        if "·" in text:
-            timestamp, description = [segment.strip() for segment in text.split("·", 1)]
-        else:
-            parts = text.split(" ", 1)
-            if len(parts) == 2:
-                timestamp, description = parts
-            else:
-                return None
-
-        description_map = {
-            "Forge advanced crystal technology to stage 1": "紫水晶相关技术阶段曾出现一次推进",
-        }
-        normalized_desc = description_map.get(description, description)
-        normalized_desc = self._strip_blacklist_tokens(normalized_desc)
-        return f"{timestamp}：档案中新增一则提及{normalized_desc}的注记，用以记录当时的说法。"
-
-    def _build_history_section(self) -> List[str]:
-        return [
-            "档案保留了多次来自不同主体的文字与会议记录，并注明撰写时间。",
-            "这些注记以原文摘录呈现，展示了展品在不同时刻的记录差异。",
-            "并不构成对后续行为的指示。",
-        ]
-
-    def _build_archive_appendix(self, appendix: Dict[str, List[str]]) -> List[str]:
+    def _render_story_notes(self, state: StoryState) -> List[str]:
+        if not state.notes:
+            return []
         lines: List[str] = []
-        if appendix:
-            lines.append("附注：部分相关素材（如能源表格或口述记录）曾被提及，但未完整保存。")
-            lines.append("附注：现有展示内容以文字记录为主，未包含物理实施细节。")
-        else:
-            lines.append("附注：部分相关素材（如能源表格或口述记录）曾被提及，但未完整保存。")
-            lines.append("附注：现有展示内容以文字记录为主，未包含物理实施细节。")
+        for note in state.notes[-12:]:
+            cleaned = self._clean_text(note)
+            if cleaned:
+                lines.append(f"玩家记述：{cleaned}")
+        return lines
+
+    def _render_recent_events(self, technology_status: TechnologyStatusSnapshot) -> List[str]:
+        lines: List[str] = []
+        for event in technology_status.recent_events or []:
+            formatted = self._format_event(event)
+            if formatted:
+                lines.append(f"系统记录：{formatted}")
+        return lines
+
+    def _render_appendix(self, appendix: Dict[str, List[str]]) -> List[str]:
+        lines: List[str] = []
+        for heading, items in appendix.items():
+            heading_text = self._clean_text(heading)
+            for entry in items or []:
+                cleaned = self._clean_text(entry)
+                if not cleaned:
+                    continue
+                if heading_text:
+                    lines.append(f"{heading_text} · {cleaned}")
+                else:
+                    lines.append(cleaned)
         return self._dedupe_lines(lines)
-
-    def _render_last_event(self, state: StoryState, technology_status: TechnologyStatusSnapshot) -> Optional[str]:
-        if state.notes or technology_status.recent_events:
-            return "档案新增一条署名居民的“公共工坊”设想节选，标注来源为个人笔记。"
-        return None
-
-    def _normalize_gap_topic(self, value: str) -> Optional[str]:
-        text = self._clean_text(value)
-        if not text:
-            return None
-
-        text = re.sub(r"风险[:：]\s*", "", text, flags=re.IGNORECASE)
-        text = re.sub(r"技术告警\[[^\]]+\]\s*[:：]?", "", text)
-        text = re.sub(r"(?i)plan|模板|字段|核心|提交|生成|步骤|条件|计划", "", text)
-        text = re.sub(r"(?i)ready|pending|available|blocked", "", text)
-        text = re.sub(r"[/\\]", "，", text)
-        text = text.replace("补齐", "")
-        text = text.replace("至少一个", "")
-        text = text.replace("待补充", "")
-        text = re.sub(r"需补[:：]?", "", text)
-        text = text.strip()
-        text = text.strip("：:，,。；;")
-        text = re.sub(r"\s+", " ", text)
-        if not text:
-            return None
-        if text.startswith("关于"):
-            text = text[2:]
-        text = re.split(r"[，,。；;]", text)[0]
-        sanitized = self._strip_blacklist_tokens(text)
-        return sanitized or None
-
-    def _refine_topic(self, text: str) -> str:
-        replacements = {
-            "夜间能源调度仍在试运行": "夜间能源调度试运行阶段",
-            "社区轮值制度尚未形成书面档案": "社区轮值制度",
-            "工坊安全巡检记录缺口": "工坊安全巡检记录",
-            "夜间噪音扰民": "夜间噪音议题",
-            "若能源调度失衡": "技术监控提示",
-        }
-        for needle, replacement in replacements.items():
-            if needle in text:
-                return replacement
-        return text
-
-    def _format_topic_label(self, text: str) -> str:
-        cleaned = text.strip()
-        if cleaned.startswith("“") and cleaned.endswith("”"):
-            cleaned = cleaned[1:-1]
-        cleaned = cleaned.strip("「」") or text
-        return f"「{cleaned}」相关记录"
-
-    def _strip_blacklist_tokens(self, text: str) -> str:
-        sanitized = text
-        for token in _ARCHIVE_BLACKLIST:
-            sanitized = sanitized.replace(token, "")
-        sanitized = re.sub(r"\s+", " ", sanitized)
-        return sanitized.strip(" ，。:：;")
-
-    def _clean_text(self, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        text = str(value).strip()
-        return text or None
-
-    def _translate_gap(self, field: str) -> str:
-        return _COVERAGE_LABELS.get(field, field)
 
     def _format_event(self, event: TechnologyEvent) -> Optional[str]:
         description = self._clean_text(event.description) or self._clean_text(event.impact) or event.event_id
@@ -1288,21 +1131,6 @@ class IdealCityPipeline:
         if timestamp and description:
             return f"{timestamp} · {description}"
         return description
-
-    def _pick_last_event(
-        self,
-        notes: List[str],
-        technology_status: TechnologyStatusSnapshot,
-    ) -> Optional[str]:
-        for entry in reversed(notes or []):
-            cleaned = self._clean_text(entry)
-            if cleaned:
-                return cleaned
-        for event in reversed(technology_status.recent_events or []):
-            formatted = self._format_event(event)
-            if formatted:
-                return formatted
-        return None
 
     def _extract_action_feedback(
         self, state: CityPhoneStatePayload
@@ -1352,30 +1180,17 @@ class IdealCityPipeline:
                     player_pose = PlayerPose.model_validate(pose_data)
                 except Exception:
                     player_pose = None
-            submission = DeviceSpecSubmission(
+            self._archive_cityphone_narrative(
                 player_id=player_id,
-                narrative=narrative,
                 scenario_id=scenario_id,
+                narrative=narrative,
                 player_pose=player_pose,
             )
-            result = self.submit(submission)
             state = self.cityphone_state(player_id, scenario_id)
-            notice_payload = result.notice.model_dump(mode="json")
-            plan_payload = result.build_plan.model_dump(mode="json") if result.build_plan else None
-            guidance_payload = [item.model_dump(mode="json") for item in result.guidance]
-            manifestation_payload = (
-                result.manifestation_intent.model_dump(mode="json")
-                if result.manifestation_intent
-                else None
-            )
             interpretation, delays, unknowns = self._extract_action_feedback(state)
             return CityPhoneActionResult(
                 status="ok",
                 state=state,
-                notice=notice_payload,
-                build_plan=plan_payload,
-                guidance=guidance_payload,
-                manifestation_intent=manifestation_payload,
                 message="已记录新的叙述。",
                 city_interpretation=interpretation,
                 interpretation_delays=delays,

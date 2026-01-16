@@ -7,6 +7,8 @@ import struct
 import threading
 from typing import Iterable, Tuple
 
+from app.core.world.command_safety import analyze_commands
+
 
 class RconError(RuntimeError):
     """Raised when the RCON server rejects a request."""
@@ -68,6 +70,13 @@ class RconClient:
         encoded_commands = [cmd.strip() for cmd in commands if cmd and cmd.strip()]
         if not encoded_commands:
             return
+        report = analyze_commands(encoded_commands)
+        if report.errors or report.warnings:
+            detail = {
+                "errors": report.errors,
+                "warnings": report.warnings,
+            }
+            raise RconError(f"unsafe_commands_detected:{detail}")
         with socket.create_connection((self.host, self.port), timeout=self.timeout) as sock:
             sock.settimeout(self.timeout)
             login_id = self._next_id()
@@ -89,3 +98,14 @@ class RconClient:
             except Exception:
                 # Ignore timeout or unexpected packets; connection will close gracefully.
                 pass
+
+    def verify(self) -> None:
+        """Attempt a light-weight login handshake to confirm credentials."""
+
+        with socket.create_connection((self.host, self.port), timeout=self.timeout) as sock:
+            sock.settimeout(self.timeout)
+            login_id = self._next_id()
+            self._send_packet(sock, login_id, self._TYPE_LOGIN, self.password)
+            response_id, _, _ = self._recv_packet(sock)
+            if response_id == -1:
+                raise RconError("Authentication failed; check password and server settings")

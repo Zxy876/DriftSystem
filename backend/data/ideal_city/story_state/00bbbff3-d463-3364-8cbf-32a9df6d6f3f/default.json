@@ -1,0 +1,79 @@
+{
+  "state": {
+    "player_id": "00bbbff3-d463-3364-8cbf-32a9df6d6f3f",
+    "scenario_id": "default",
+    "goals": [
+      "?"
+    ],
+    "logic_outline": [
+      "目标：?",
+      "执行：围绕目标拆解两步执行：准备资源并落地社区验证。",
+      "目标：建立安全、共享的工坊空间以促进邻里协作。"
+    ],
+    "resources": [
+      "气球展台基础材料 - 档案官提供"
+    ],
+    "community_requirements": [],
+    "success_criteria": [
+      "居民可以按周使用工坊且不发生事故",
+      "城市档案馆记录到新的协作项目",
+      "居民可以按周使用工坊且不发生事故。",
+      "城市档案馆记录到新的协作项目。"
+    ],
+    "world_constraints": [
+      "夜间能源供应有限，噪音需受限",
+      "居民经济条件薄弱，需要公用资源调度",
+      "市政要求所有新设施公开运作计划",
+      "夜间能源供应有限，噪音需受限。",
+      "居民经济条件薄弱，需要公用资源调度。",
+      "市政要求所有新设施公开运作计划。"
+    ],
+    "risk_register": [
+      "风险: 若能源调度失衡，可能影响核心城区供电 / 待补充",
+      "风险: 若维护计划缺失，工坊或成为安全隐患 / 待补充",
+      "风险: 工坊使用不当导致事故 / 缓解: 提供安全培训和使用指导。",
+      "风险: 资源调度不当导致居民无法使用工坊 / 缓解: 制定明确的资源使用计划。"
+    ],
+    "risk_notes": [],
+    "location_hint": "world @ 0.00, 63.00, 0.00",
+    "player_pose": {
+      "world": "world",
+      "x": 0.0,
+      "y": 63.0,
+      "z": 0.0,
+      "yaw": -143.4,
+      "pitch": -9.6
+    },
+    "notes": [
+      "?"
+    ],
+    "exhibit_instances": [],
+    "ready_for_build": false,
+    "open_questions": [
+      "如何具体准备资源以支持工坊的建立？",
+      "社区验证的具体步骤是什么？",
+      "缺少资源项",
+      "缺少社区需求"
+    ],
+    "blocking": [
+      "缺少资源项",
+      "缺少社区需求"
+    ],
+    "coverage": {
+      "logic_outline": true,
+      "world_constraints": true,
+      "resource_ledger": true,
+      "success_criteria": true,
+      "risk_register": true
+    },
+    "motivation_score": 50,
+    "logic_score": 90,
+    "build_capability": 140,
+    "last_plan_id": null,
+    "last_plan_status": null,
+    "last_plan_synced_at": null,
+    "version": 2,
+    "updated_at": "2026-01-14T05:31:08.695213Z"
+  },
+  "frozen_at": "2026-01-14T05:31:08.695263Z"
+}

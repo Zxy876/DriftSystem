@@ -1,0 +1,101 @@
+{
+  "generated_at": "2026-01-10T00:00:00Z",
+  "resources": [
+    {
+      "resource_id": "minecraft:amethyst_block",
+      "label": "Amethyst Block",
+      "category": "block",
+      "aliases": ["amethyst", "amethyst block", "crystal", "紫水晶"],
+      "tags": ["crystal", "lighting"],
+      "available": 96
+    },
+    {
+      "resource_id": "minecraft:soul_lantern",
+      "label": "Soul Lantern",
+      "category": "block",
+      "aliases": ["lantern", "soul lantern", "幽冥", "灯"],
+      "tags": ["lighting"],
+      "available": 48
+    },
+    {
+      "resource_id": "minecraft:redstone_dust",
+      "label": "Redstone Dust",
+      "category": "item",
+      "aliases": ["redstone", "redstone dust", "红石"],
+      "tags": ["circuit"],
+      "available": 128
+    },
+    {
+      "resource_id": "minecraft:glass",
+      "label": "Glass",
+      "category": "block",
+      "aliases": ["glass", "玻璃"],
+      "tags": ["transparent"],
+      "available": 192
+    },
+    {
+      "resource_id": "minecraft:quartz_block",
+      "label": "Quartz Block",
+      "category": "block",
+      "aliases": ["quartz", "stone quartz", "石英"],
+      "tags": ["structure"],
+      "available": 80
+    },
+    {
+      "resource_id": "minecraft:oak_planks",
+      "label": "Oak Planks",
+      "category": "block",
+      "aliases": ["oak", "plank", "planks", "wood", "木板"],
+      "tags": ["wood"],
+      "available": 256
+    },
+    {
+      "resource_id": "drift:altar_frame",
+      "label": "Drift Altar Frame",
+      "category": "structure",
+      "aliases": ["altar", "祭坛"],
+      "tags": ["ritual"],
+      "available": 12
+    },
+    {
+      "resource_id": "drift:exhibit_frame",
+      "label": "Drift Exhibit Frame",
+      "category": "structure",
+      "aliases": ["exhibit", "展台"],
+      "tags": ["display"],
+      "available": 8
+    },
+    {
+      "resource_id": "drift:garden_bundle",
+      "label": "Drift Garden Bundle",
+      "category": "structure",
+      "aliases": ["garden", "花园"],
+      "tags": ["landscape"],
+      "available": 5
+    },
+    {
+      "resource_id": "drift:machine_core",
+      "label": "Drift Machine Core",
+      "category": "component",
+      "aliases": ["machine", "机器"],
+      "tags": ["mechanism"],
+      "available": 6
+    },
+    {
+      "resource_id": "drift:portal_ring",
+      "label": "Drift Portal Ring",
+      "category": "structure",
+      "aliases": ["portal"],
+      "tags": ["gateway"],
+      "available": 4
+    },
+    {
+      "resource_id": "drift:statue_base",
+      "label": "Drift Statue Base",
+      "category": "structure",
+      "aliases": ["statue", "雕像"],
+      "tags": ["art"],
+      "available": 10
+    }
+  ]
+}

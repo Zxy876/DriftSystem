@@ -258,13 +258,10 @@ StoryManager跟踪:
 系统: [推进剧情]
 ```
 
-### 场景3: 创作者模式
+### 场景3: 创作者模式（已冻结）
 ```
 玩家: 我想写一个科幻故事
-系统: ✨ 正在创建...
-系统: ✅ 关卡创建完成
-玩家: 加载这个关卡
-系统: [进入自定义关卡]
+系统: [提示功能暂未开放]
 ```
 
 ## 🔐 安全性
@@ -273,7 +270,7 @@ StoryManager跟踪:
 ```yaml
 world:
   allow_world_modification: true  # 可关闭世界修改
-  allow_story_creation: true      # 可关闭剧情创建
+  allow_story_creation: false     # 默认为关闭，需手动开启自然语言剧情创作
   safe_teleport: true             # 强制安全传送
 ```
 

@@ -150,6 +150,7 @@ class NarrativeIngestionResponse(BaseModel):
     missing_fields: List[str]
     message: Optional[str] = None
     source_fields: Dict[str, str] = Field(default_factory=dict)
+    intent_analysis: Optional[Dict[str, object]] = None
     submission: Optional[dict] = None
     ruling: Optional[dict] = None
     notice: Optional[dict] = None

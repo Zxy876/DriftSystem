@@ -2,7 +2,7 @@ import os
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Iterable, List
 import logging
 
 from app.core.world.engine import WorldEngine
@@ -10,6 +10,68 @@ from app.core.story.story_engine import story_engine
 from app.core.world.trigger import trigger_engine
 from app.core.ai.intent_engine import parse_intent
 from app.core.quest.runtime import quest_runtime
+from app.core.intent_creation import CreationIntentDecision
+from app.services import creation_workflow
+BLOCK_KEYWORDS = {"方块", "方塊", "blocks", "block"}
+
+
+def _summarize_commands(commands: Iterable[str]) -> List[Dict[str, Any]]:
+    summaries: List[Dict[str, Any]] = []
+    for raw in commands:
+        command = (raw or "").strip()
+        if not command:
+            continue
+        parts = command.split()
+        if not parts:
+            continue
+        opcode = parts[0].lower()
+        if opcode == "setblock" and len(parts) >= 5:
+            summaries.append(
+                {
+                    "type": "setblock",
+                    "coords": parts[1:4],
+                    "block": parts[4],
+                }
+            )
+        elif opcode == "fill" and len(parts) >= 8:
+            summaries.append(
+                {
+                    "type": "fill",
+                    "from": parts[1:4],
+                    "to": parts[4:7],
+                    "block": parts[7],
+                }
+            )
+        else:
+            summaries.append({"type": opcode, "command": command})
+    return summaries
+
+
+def _looks_like_block_request(message: Optional[str], decision: Optional[CreationIntentDecision]) -> bool:
+    if not message:
+        return False
+
+    text = message.strip()
+    if any(keyword in text for keyword in BLOCK_KEYWORDS):
+        return True
+
+    lower = text.lower()
+    if "minecraft:" in lower and lower.endswith("_block"):
+        return True
+
+    if decision is None:
+        return False
+
+    materials: Iterable[str] = decision.slots.get("materials", []) if isinstance(decision.slots, dict) else []
+    for material in materials:
+        token = str(material).strip().lower()
+        if not token:
+            continue
+        if token.endswith("块") or token.endswith("方塊") or "block" in token or token.endswith("_block"):
+            return True
+        if token.startswith("minecraft:") and any(part in token for part in ("block", "brick", "glass", "plank", "stone")):
+            return True
+    return False
 
 router = APIRouter(prefix="/world", tags=["World"])
 world_engine = WorldEngine()
@@ -43,6 +105,7 @@ class WorldApplyResponse(BaseModel):
     story_node: Optional[Dict[str, Any]] = None
     world_patch: Optional[Dict[str, Any]] = None
     trigger: Optional[Dict[str, Any]] = None
+    creation_result: Optional[Dict[str, Any]] = None
 
 
 class EnterStoryRequest(BaseModel):
@@ -86,6 +149,90 @@ def apply_action(inp: ApplyInput):
     if intent_result and "intents" in intent_result and len(intent_result["intents"]) > 0:
         intent = intent_result["intents"][0]
 
+    creation_result: Optional[Dict[str, Any]] = None
+    creation_report = None
+    creation_world_patch: Optional[Dict[str, Any]] = None
+    block_story_world_patch = False
+    creation_decision: Optional[CreationIntentDecision] = None
+    primary_intent_type = intent.get("type") if isinstance(intent, dict) else None
+    redirected_to_block = False
+
+    if say_text:
+        creation_decision = creation_workflow.classify_message(say_text)
+        logger.info(
+            "creation_intent_classified",
+            extra={
+                "player_id": player_id,
+                "primary_intent": primary_intent_type,
+                "creation": creation_decision.model_dump(),
+            },
+        )
+
+        looks_like_block = _looks_like_block_request(say_text, creation_decision)
+
+        if looks_like_block:
+            if intent and primary_intent_type in {"SPAWN_ENTITY", "SAY_ONLY", "UNKNOWN", None}:
+                intent["type"] = "CREATE_BLOCK"
+                intent.setdefault("raw_text", say_text)
+                primary_intent_type = "CREATE_BLOCK"
+                redirected_to_block = True
+            elif intent is None:
+                intent = {"type": "CREATE_BLOCK", "raw_text": say_text}
+                primary_intent_type = "CREATE_BLOCK"
+                intent_result = intent_result or {"status": "ok", "intents": []}
+                intent_result.setdefault("intents", []).insert(0, intent)
+                redirected_to_block = True
+
+        if intent and primary_intent_type == "SPAWN_ENTITY" and creation_decision.is_creation:
+            if looks_like_block:
+                intent["type"] = "CREATE_BLOCK"
+                primary_intent_type = "CREATE_BLOCK"
+                redirected_to_block = True
+
+        should_auto_execute = creation_decision.is_creation and primary_intent_type in (
+            None,
+            "SAY_ONLY",
+            "BUILD_STRUCTURE",
+            "CREATE_BLOCK",
+            "CREATE_BUILD",
+        )
+
+        if should_auto_execute:
+            try:
+                plan_result = creation_workflow.generate_plan(creation_decision, message=say_text)
+                report = creation_workflow.auto_execute_plan(plan_result.plan)
+                creation_report = report
+                plan_payload = plan_result.plan.to_payload()
+                plan_payload["snapshot_generated_at"] = plan_result.snapshot_generated_at
+                auto_enabled = creation_workflow.auto_execute_enabled()
+                creation_result = {
+                    "status": "ok" if auto_enabled else "validated",
+                    "auto_execute": auto_enabled,
+                    "decision": creation_decision.model_dump(),
+                    "plan": plan_payload,
+                    "report": report.to_payload(),
+                }
+                creation_world_patch = creation_workflow.world_patch_from_report(report)
+            except Exception as exc:  # pragma: no cover - defensive path
+                logger.exception(
+                    "creation_auto_execute_failed",
+                    extra={"player_id": player_id, "message": say_text},
+                )
+                creation_result = {
+                    "status": "error",
+                    "error": str(exc),
+                    "decision": creation_decision.model_dump(),
+                }
+
+    if (
+        creation_result
+        and primary_intent_type in {"CREATE_BLOCK", "CREATE_BUILD"}
+        and str(creation_result.get("status")) in {"validated", "ok"}
+    ):
+        block_story_world_patch = True
+        if creation_world_patch is None and creation_report is not None:
+            creation_world_patch = creation_workflow.world_patch_from_report(creation_report)
+
     # ============================================================
     # ⭐ 白名单世界指令（不走剧情）
     # ============================================================
@@ -123,7 +270,8 @@ def apply_action(inp: ApplyInput):
                         "text": f"AI为你生成了新世界：{intent.get('title', '自由创作')}"
                     },
                     world_patch=patch,
-                    ai_response=inject_result.get("world_preview")
+                    ai_response=inject_result.get("world_preview"),
+                    creation_result=creation_result,
                 )
             except Exception as e:
                 # 创建失败时返回错误信息
@@ -133,7 +281,8 @@ def apply_action(inp: ApplyInput):
                     story_node={
                         "title": "创建失败", 
                         "text": f"世界生成出错: {str(e)}"
-                    }
+                    },
+                    creation_result=creation_result,
                 )
 
         # ---------- 跳关 ----------
@@ -148,7 +297,8 @@ def apply_action(inp: ApplyInput):
                 status="ok",
                 world_state=new_state,
                 story_node={"title": "跳转关卡", "text": f"进入 {level}"},
-                world_patch=patch
+                world_patch=patch,
+                creation_result=creation_result,
             )
 
         if t == "GOTO_NEXT_LEVEL":
@@ -160,7 +310,8 @@ def apply_action(inp: ApplyInput):
                 status="ok",
                 world_state=new_state,
                 story_node={"title": "下一关", "text": f"进入 {next_level}"},
-                world_patch=patch
+                world_patch=patch,
+                creation_result=creation_result,
             )
 
         # ---------- 小地图 ----------
@@ -171,28 +322,29 @@ def apply_action(inp: ApplyInput):
                 world_state=new_state,
                 story_node={"title": "小地图", "text": "显示当前世界地图"},
                 world_patch={"minimap": mm},
+                creation_result=creation_result,
             )
 
         # ---------- 时间 ----------
         if t == "SET_DAY":
             patch = {"mc": {"time": "day"}}
             new_state = world_engine.apply_patch(patch)
-            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
+            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch, creation_result=creation_result)
 
         if t == "SET_NIGHT":
             patch = {"mc": {"time": "night"}}
             new_state = world_engine.apply_patch(patch)
-            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
+            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch, creation_result=creation_result)
 
         # ---------- 天气 ----------
         if t == "SET_WEATHER":
             w = intent.get("weather", "clear")
             patch = {"mc": {"weather": w}}
             new_state = world_engine.apply_patch(patch)
-            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
+            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch, creation_result=creation_result)
 
         # ---------- 造实体 ----------
-        if t == "SPAWN_ENTITY":
+        if t == "SPAWN_ENTITY" and not redirected_to_block:
             patch = {"mc": {
                 "spawn": {
                     "type": intent.get("entity", "villager"),
@@ -201,19 +353,41 @@ def apply_action(inp: ApplyInput):
                 }
             }}
             new_state = world_engine.apply_patch(patch)
-            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
+            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch, creation_result=creation_result)
 
         # ---------- 建筑 ----------
         if t == "BUILD_STRUCTURE":
             patch = {"mc": {"build": intent.get("build")}}
             new_state = world_engine.apply_patch(patch)
-            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch)
+            return WorldApplyResponse(status="ok", world_state=new_state, world_patch=patch, creation_result=creation_result)
 
     # ============================================================
     # ⭐ 剧情推进（只要说话一定触发）
     # ============================================================
     if say_text:
         option, node, patch = story_engine.advance(player_id, new_state, act)
+        final_patch = creation_world_patch if block_story_world_patch else patch
+
+        if block_story_world_patch and creation_world_patch:
+            commands = creation_world_patch.get("mc", {}).get("commands", []) if isinstance(creation_world_patch, dict) else []
+            metadata = creation_world_patch.get("metadata", {}) if isinstance(creation_world_patch, dict) else {}
+            coordinates = metadata.get("coordinates") if isinstance(metadata, dict) else None
+            position_hint = None
+            if isinstance(metadata, dict):
+                for key in ("position_hint", "origin", "source"):
+                    if metadata.get(key):
+                        position_hint = metadata.get(key)
+                        break
+            logger.info(
+                "creation_world_patch_override",
+                extra={
+                    "intent_type": primary_intent_type or "UNKNOWN",
+                    "patch_id": metadata.get("patch_id") if isinstance(metadata, dict) else None,
+                    "commands": _summarize_commands(commands),
+                    "coordinates": coordinates,
+                    "position_hint": position_hint,
+                },
+            )
 
         # 🛡️ 确保 ai_option 始终为字符串，兼容 DeepSeek 返回数组/对象
         option_value = None
@@ -232,7 +406,8 @@ def apply_action(inp: ApplyInput):
             world_state=new_state,
             ai_option=option_value,
             story_node=node,
-            world_patch=patch
+            world_patch=final_patch,
+            creation_result=creation_result,
         )
 
     # ============================================================
@@ -249,7 +424,8 @@ def apply_action(inp: ApplyInput):
             world_state=new_state,
             story_node={"title": "世界触发点", "text": f"成功加载 {tp.level_id}"},
             world_patch=patch,
-            trigger={"id": tp.id, "level_id": tp.level_id}
+            trigger={"id": tp.id, "level_id": tp.level_id},
+            creation_result=creation_result,
         )
 
     # ============================================================
@@ -257,7 +433,8 @@ def apply_action(inp: ApplyInput):
     # ============================================================
     return WorldApplyResponse(
         status="ok",
-        world_state=new_state
+        world_state=new_state,
+        creation_result=creation_result,
     )
 
 

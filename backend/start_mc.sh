@@ -29,6 +29,8 @@ find world world_nether world_the_end -maxdepth 1 -name session.lock -exec rm -f
 
 # 端口占用检测/清理
 MC_PORT=25565
+RCON_PORT=${MINECRAFT_RCON_PORT:-25575}
+RCON_PASSWORD=${MINECRAFT_RCON_PASSWORD:-drift_rcon_dev}
 if command -v lsof >/dev/null 2>&1; then
     OCCUPIED_PIDS=$(lsof -ti tcp:$MC_PORT 2>/dev/null || true)
     if [ -n "$OCCUPIED_PIDS" ]; then
@@ -45,6 +47,27 @@ if command -v lsof >/dev/null 2>&1; then
                 [ -z "$PID" ] && continue
                 kill -9 "$PID" 2>/dev/null || true
             done <<< "$STILL_OCCUPIED"
+            sleep 1
+        fi
+    fi
+fi
+
+if command -v lsof >/dev/null 2>&1; then
+    RCON_PIDS=$(lsof -ti tcp:$RCON_PORT 2>/dev/null || true)
+    if [ -n "$RCON_PIDS" ]; then
+        echo "⚠️ RCON 端口 $RCON_PORT 已被占用，尝试结束相关进程: $RCON_PIDS"
+        while read -r PID; do
+            [ -z "$PID" ] && continue
+            kill "$PID" 2>/dev/null || true
+        done <<< "$RCON_PIDS"
+        sleep 1
+        STILL_RCON=$(lsof -ti tcp:$RCON_PORT 2>/dev/null || true)
+        if [ -n "$STILL_RCON" ]; then
+            echo "⚠️ 进程未完全退出，执行强制结束: $STILL_RCON"
+            while read -r PID; do
+                [ -z "$PID" ] && continue
+                kill -9 "$PID" 2>/dev/null || true
+            done <<< "$STILL_RCON"
             sleep 1
         fi
     fi
@@ -70,6 +93,50 @@ fi
 echo "🚀 MC 服务器启动中..."
 echo "（按 Ctrl+C 关闭）"
 
+if [ -f "server.properties" ]; then
+    echo "🛡 确保 RCON 配置启用..."
+    export DRIFT_START_RCON_PORT="$RCON_PORT"
+    export DRIFT_START_RCON_PASSWORD="$RCON_PASSWORD"
+    python3 <<'PY'
+from pathlib import Path
+import os
+
+path = Path("server.properties")
+content = path.read_text(encoding="utf-8").splitlines()
+updates = {
+    "enable-rcon": "true",
+    "broadcast-rcon-to-ops": "true",
+    "rcon.port": os.environ.get("DRIFT_START_RCON_PORT", "25575"),
+    "rcon.password": os.environ.get("DRIFT_START_RCON_PASSWORD", "drift_rcon_dev"),
+}
+
+keys = set(updates)
+result = []
+seen = set()
+for line in content:
+    stripped = line.strip()
+    updated = False
+    for key, value in updates.items():
+        if stripped.startswith(f"{key}="):
+            result.append(f"{key}={value}")
+            seen.add(key)
+            updated = True
+            break
+    if not updated:
+        result.append(line)
+
+missing = keys - seen
+for key in missing:
+    result.append(f"{key}={updates[key]}")
+
+path.write_text("\n".join(result) + "\n", encoding="utf-8")
+PY
+    unset DRIFT_START_RCON_PORT
+    unset DRIFT_START_RCON_PASSWORD
+else
+    echo "⚠️ 未找到 server.properties，无法自动写入 RCON 配置。"
+fi
+
 if [ -f "$AUTO_BUILD_PID" ]; then
     OLD_AUTO_PID=$(cat "$AUTO_BUILD_PID" 2>/dev/null)
     if [ -n "$OLD_AUTO_PID" ] && ps -p "$OLD_AUTO_PID" >/dev/null 2>&1; then
@@ -85,7 +152,7 @@ if [ -f "$AUTO_BUILD_SCRIPT" ]; then
     WATCHER_ARGS=("--watch")
     WATCHER_HOST=${MINECRAFT_RCON_HOST:-localhost}
     WATCHER_PORT=${MINECRAFT_RCON_PORT:-25575}
-    WATCHER_PASSWORD=${MINECRAFT_RCON_PASSWORD:-drift_rcon_dev}
+    WATCHER_PASSWORD=${RCON_PASSWORD}
     if [ -n "$WATCHER_HOST" ]; then
         WATCHER_ARGS+=("--rcon-host" "$WATCHER_HOST")
     fi

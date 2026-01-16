@@ -17,6 +17,9 @@ else
     export PYTHONPATH="$ROOT_DIR:$SCRIPT_DIR"
 fi
 
+# Default to dry-run mode while sanitisation is verified; can be overridden by caller.
+export DRIFT_CREATION_AUTO_EXEC="${DRIFT_CREATION_AUTO_EXEC:-0}"
+
 # 端口占用检测/清理
 BACKEND_PORT=8000
 if command -v lsof >/dev/null 2>&1; then

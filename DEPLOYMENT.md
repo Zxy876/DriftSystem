@@ -59,7 +59,7 @@ story:
 
 world:
   allow_world_modification: true
-  allow_story_creation: true
+  allow_story_creation: false  # 仅在需要启用自然语言创建剧情时改为 true
 ```
 
 ### 4. 启动Minecraft服务器

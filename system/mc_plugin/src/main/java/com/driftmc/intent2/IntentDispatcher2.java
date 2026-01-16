@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.regex.Pattern;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -45,11 +47,13 @@ public class IntentDispatcher2 {
     private ChoicePanel choicePanel;
     private final Set<UUID> tutorialReentryWarned = ConcurrentHashMap.newKeySet();
     private IdealCityCommand idealCityCommand;
+    private boolean storyCreationEnabled = false;
 
     private static final Gson GSON = new Gson();
     private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {
     }.getType();
     private static final String PRIMARY_LEVEL_ID = "flagship_03";
+    private static final Pattern BLOCK_ID_PATTERN = Pattern.compile("minecraft:[a-z0-9_./\\-]+", Pattern.CASE_INSENSITIVE);
 
     public IntentDispatcher2(Plugin plugin, BackendClient backend, WorldPatchExecutor world) {
         this.plugin = plugin;
@@ -77,6 +81,10 @@ public class IntentDispatcher2 {
         this.idealCityCommand = idealCityCommand;
     }
 
+    public void setStoryCreationEnabled(boolean enabled) {
+        this.storyCreationEnabled = enabled;
+    }
+
     private boolean ensureUnlocked(Player player, TutorialState required, String message) {
         if (tutorialManager == null || tutorialManager.isTutorialComplete(player)) {
             return true;
@@ -96,15 +104,18 @@ public class IntentDispatcher2 {
     // ============================================================
     public void dispatch(Player p, IntentResponse2 intent) {
 
-        switch (intent.type) {
+        IntentResponse2 effectiveIntent = enforceCreateBlockOverride(intent);
+        IntentType2 intentType = effectiveIntent.type != null ? effectiveIntent.type : IntentType2.UNKNOWN;
+
+        switch (intentType) {
 
             case SHOW_MINIMAP:
-                showMinimap(p, intent);
+                showMinimap(p, effectiveIntent);
                 break;
 
             case GOTO_LEVEL:
             case GOTO_NEXT_LEVEL:
-                gotoLevelAndLoad(p, intent);
+                gotoLevelAndLoad(p, effectiveIntent);
                 break;
 
             case SET_DAY:
@@ -113,26 +124,156 @@ public class IntentDispatcher2 {
             case TELEPORT:
             case SPAWN_ENTITY:
             case BUILD_STRUCTURE:
-                runWorldCommand(p, intent);
+                runWorldCommand(p, effectiveIntent);
+                break;
+
+            case CREATE_BLOCK:
+                handleCreateBlock(p, effectiveIntent);
                 break;
 
             case CREATE_STORY:
-                createStory(p, intent);
+                createStory(p, effectiveIntent);
                 break;
 
             case IDEAL_CITY_SUBMIT:
-                submitIdealCity(p, intent);
+                submitIdealCity(p, effectiveIntent);
                 break;
 
             case SAY_ONLY:
             case STORY_CONTINUE:
             case UNKNOWN:
-                pushToStoryEngine(p, intent.rawText);
+                pushToStoryEngine(p, effectiveIntent.rawText);
                 break;
 
             default:
                 break;
         }
+    }
+
+    private IntentResponse2 enforceCreateBlockOverride(IntentResponse2 intent) {
+        if (intent == null) {
+            return new IntentResponse2(IntentType2.UNKNOWN, null, null, "", null);
+        }
+
+        IntentType2 originalType = intent.type != null ? intent.type : IntentType2.UNKNOWN;
+        if (originalType == IntentType2.CREATE_BLOCK) {
+            return intent;
+        }
+
+        if (isLikelyBlockPlacement(intent.rawText)) {
+            plugin.getLogger().warning("[IntentDispatcher] Hard override to CREATE_BLOCK, rawText=" + intent.rawText);
+            return new IntentResponse2(
+                    IntentType2.CREATE_BLOCK,
+                    intent.levelId,
+                    intent.minimap,
+                    intent.rawText,
+                    null);
+        }
+
+        return intent;
+    }
+
+    // ============================================================
+    // 创建方块 (CREATE_BLOCK)
+    // ============================================================
+    private void handleCreateBlock(Player p, IntentResponse2 intent) {
+        if (p == null) {
+            return;
+        }
+
+        String rawText = intent != null ? intent.rawText : null;
+        if (rawText == null || rawText.isBlank()) {
+            p.sendMessage("§c[造物] 未能解析你的请求，请描述要放置的方块和坐标。");
+            plugin.getLogger().warning("[IntentDispatcher] CREATE_BLOCK 请求缺少 rawText");
+            return;
+        }
+
+        final Player fp = p;
+        fp.sendMessage("§b[造物] 正在解析并执行你的建造请求...");
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("message", rawText);
+        payload.put("player_id", fp.getName());
+        payload.put("dry_run_only", false);
+
+        String jsonBody = GSON.toJson(payload);
+
+        backend.postJsonAsync("/intent/execute", jsonBody, new Callback() {
+
+            @Override
+            public void onFailure(Call call, IOException e) {
+                plugin.getLogger().log(Level.WARNING, "[IntentDispatcher] CREATE_BLOCK 执行失败: {0}", e.getMessage());
+                Bukkit.getScheduler().runTask(plugin,
+                        () -> fp.sendMessage("§c[造物] 自动执行失败: " + e.getMessage()));
+            }
+
+            @Override
+            public void onResponse(Call call, Response resp) throws IOException {
+                try (Response response = resp) {
+                    String respStr = response.body() != null ? response.body().string() : "{}";
+
+                    JsonObject root;
+                    try {
+                        root = JsonParser.parseString(respStr).getAsJsonObject();
+                    } catch (Exception parseError) {
+                        plugin.getLogger().log(Level.WARNING,
+                                "[IntentDispatcher] CREATE_BLOCK 响应解析失败: {0}", parseError.getMessage());
+                        Bukkit.getScheduler().runTask(plugin,
+                                () -> fp.sendMessage("§c[造物] 服务端返回异常数据"));
+                        return;
+                    }
+
+                    plugin.getLogger().info("[IntentDispatcher] CREATE_BLOCK response = "
+                            + respStr.substring(0, Math.min(200, respStr.length())));
+
+                    if (!response.isSuccessful()) {
+                        String errorMessage = root.has("detail") && root.get("detail").isJsonPrimitive()
+                                ? root.get("detail").getAsString()
+                                : ("HTTP " + response.code());
+                        Bukkit.getScheduler().runTask(plugin,
+                                () -> fp.sendMessage("§c[造物] 服务端错误: " + errorMessage));
+                        return;
+                    }
+
+                    Bukkit.getScheduler().runTask(plugin, () -> handleCreateBlockResponse(fp, root));
+                }
+            }
+        });
+    }
+
+    private void handleCreateBlockResponse(Player player, JsonObject root) {
+        if (player == null || root == null) {
+            return;
+        }
+
+        String status = root.has("status") && root.get("status").isJsonPrimitive()
+                ? root.get("status").getAsString()
+                : "";
+
+        if ("not_creation".equalsIgnoreCase(status)) {
+            player.sendMessage("§c[造物] 这条消息未被识别为造物指令，请补充准确的方块与坐标。");
+            plugin.getLogger().warning("[IntentDispatcher] CREATE_BLOCK returned not_creation");
+            return;
+        }
+
+        JsonObject payload = new JsonObject();
+        String normalizedStatus = status == null || status.isBlank() ? "unknown" : status;
+        payload.addProperty("status", normalizedStatus);
+        payload.addProperty("auto_execute", "ok".equalsIgnoreCase(normalizedStatus));
+
+        if (root.has("report") && root.get("report").isJsonObject()) {
+            payload.add("report", root.getAsJsonObject("report"));
+        }
+
+        if (root.has("plan") && root.get("plan").isJsonObject()) {
+            payload.add("plan", root.getAsJsonObject("plan"));
+        }
+
+        if (root.has("error") && root.get("error").isJsonPrimitive()) {
+            payload.add("error", root.get("error"));
+        }
+
+        displayCreationResult(player, payload);
     }
 
     // ============================================================
@@ -155,6 +296,11 @@ public class IntentDispatcher2 {
     // 创建剧情 (CREATE_STORY)
     // ============================================================
     private void createStory(Player p, IntentResponse2 intent) {
+        if (!storyCreationEnabled) {
+            p.sendMessage("§e[剧情创作] 功能已下线，当前版本仅支持既有关卡。");
+            plugin.getLogger().info("[IntentDispatcher] 忽略剧情创作请求：功能已禁用");
+            return;
+        }
         final Player fp = p;
 
         if (!ensureUnlocked(fp, TutorialState.CREATE_STORY, "请继续当前教学提示后再创造剧情。")) {
@@ -443,6 +589,14 @@ public class IntentDispatcher2 {
         final Player fp = p;
         final String ftext = (text == null ? "" : text); // ← 彻底防止 null
 
+        if (isLikelyBlockPlacement(ftext)) {
+            plugin.getLogger().warning("[剧情推进] 拦截造物请求，跳过故事引擎: " + ftext);
+            if (p != null) {
+                p.sendMessage("§c[造物] 该请求已转交造物执行器，等待执行日志。");
+            }
+            return;
+        }
+
         plugin.getLogger().info("[剧情推进] 玩家: " + fp.getName() + ", 文本: " + ftext);
 
         forwardToNarrativeIngestion(fp, ftext);
@@ -482,6 +636,11 @@ public class IntentDispatcher2 {
                         ? root.get("world_patch").getAsJsonObject()
                         : null;
 
+                final JsonObject creationPayload = (root.has("creation_result")
+                    && root.get("creation_result").isJsonObject())
+                        ? root.get("creation_result").getAsJsonObject()
+                        : null;
+
                 Bukkit.getScheduler().runTask(plugin, () -> {
 
                     if (node != null) {
@@ -515,6 +674,10 @@ public class IntentDispatcher2 {
                         syncTutorialState(fp, patch);
                         world.execute(fp, patch);
                     }
+
+                    if (creationPayload != null && creationPayload.size() > 0) {
+                        displayCreationResult(fp, creationPayload);
+                    }
                 });
             }
         });
@@ -529,6 +692,13 @@ public class IntentDispatcher2 {
             return;
         }
 
+        if (isLikelyBlockPlacement(trimmed)) {
+            if (plugin.getLogger().isLoggable(Level.FINE)) {
+                plugin.getLogger().fine("[CityPhone] 跳过方块指令采集: " + trimmed);
+            }
+            return;
+        }
+
         Map<String, Object> payload = new HashMap<>();
         payload.put("player_id", player.getName());
         payload.put("message", trimmed);
@@ -537,17 +707,21 @@ public class IntentDispatcher2 {
         String json = GSON.toJson(payload);
         UUID playerId = player.getUniqueId();
 
-        backend.postJsonAsync("/ideal-city/narrative/ingest", json, new Callback() {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> backend.postJsonAsync("/ideal-city/narrative/ingest", json, new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
-                plugin.getLogger().warning("[CityPhone] 叙事采集失败: " + e.getMessage());
+                if (plugin.getLogger().isLoggable(Level.FINE)) {
+                    plugin.getLogger().fine("[CityPhone] 叙事采集失败: " + e.getMessage());
+                }
             }
 
             @Override
             public void onResponse(Call call, Response response) throws IOException {
                 try (response) {
                     if (!response.isSuccessful()) {
-                        plugin.getLogger().warning("[CityPhone] 叙事采集返回 HTTP " + response.code());
+                        if (plugin.getLogger().isLoggable(Level.FINE)) {
+                            plugin.getLogger().fine("[CityPhone] 叙事采集返回 HTTP " + response.code());
+                        }
                         return;
                     }
                     ResponseBody responseBody = response.body();
@@ -562,7 +736,9 @@ public class IntentDispatcher2 {
                     try {
                         root = JsonParser.parseString(body).getAsJsonObject();
                     } catch (Exception parseError) {
-                        plugin.getLogger().warning("[CityPhone] 叙事采集解析失败: " + parseError.getMessage());
+                        if (plugin.getLogger().isLoggable(Level.FINE)) {
+                            plugin.getLogger().fine("[CityPhone] 叙事采集解析失败: " + parseError.getMessage());
+                        }
                         return;
                     }
                     String status = root.has("status") && !root.get("status").isJsonNull()
@@ -609,7 +785,84 @@ public class IntentDispatcher2 {
                     });
                 }
             }
-        });
+        }));
+    }
+
+    private boolean isLikelyBlockPlacement(String text) {
+        String lower = text.toLowerCase(Locale.ROOT);
+        if (!BLOCK_ID_PATTERN.matcher(lower).find()) {
+            return false;
+        }
+        if (lower.contains("放置") || lower.contains("生成") || lower.contains("方块") || lower.contains("方塊")
+                || lower.contains("block")) {
+            return true;
+        }
+        return false;
+    }
+
+    private void displayCreationResult(Player player, JsonObject payload) {
+        if (player == null || payload == null) {
+            return;
+        }
+
+        String status = payload.has("status") && payload.get("status").isJsonPrimitive()
+                ? payload.get("status").getAsString()
+                : "";
+        boolean autoExecute = payload.has("auto_execute") && payload.get("auto_execute").isJsonPrimitive()
+                ? payload.get("auto_execute").getAsBoolean()
+                : true;
+        JsonObject report = payload.has("report") && payload.get("report").isJsonObject()
+                ? payload.getAsJsonObject("report")
+                : null;
+        String patchId = "-";
+        if (report != null && report.has("patch_id") && !report.get("patch_id").isJsonNull()) {
+            patchId = report.get("patch_id").getAsString();
+        }
+
+        if ("error".equalsIgnoreCase(status)) {
+            String errorMessage = payload.has("error") && payload.get("error").isJsonPrimitive()
+                    ? payload.get("error").getAsString()
+                    : "未知错误";
+            player.sendMessage("§c[造物] 自动执行失败: " + errorMessage);
+            return;
+        }
+
+        if ("dry_run".equalsIgnoreCase(status) || !autoExecute) {
+            player.sendMessage("§e[造物] Dry-run 完成，patch " + patchId + " 已记录，等待确认。");
+        } else {
+            int executed = 0;
+            if (report != null && report.has("execution_results") && report.get("execution_results").isJsonArray()) {
+                executed = report.getAsJsonArray("execution_results").size();
+            }
+            player.sendMessage("§a[造物] patch " + patchId + " 自动执行完成，模板数: " + executed + "。");
+        }
+
+        if (report != null) {
+            emitCreationList(player, report, "warnings", "§e", "告警");
+            emitCreationList(player, report, "errors", "§c", "提醒");
+        }
+    }
+
+    private void emitCreationList(Player player, JsonObject report, String key, String colorCode, String label) {
+        if (!report.has(key) || !report.get(key).isJsonArray()) {
+            return;
+        }
+        JsonArray arr = report.getAsJsonArray(key);
+        if (arr.size() == 0) {
+            return;
+        }
+        StringBuilder msg = new StringBuilder(colorCode).append("[造物").append(label).append("] ");
+        int limit = Math.min(arr.size(), 3);
+        for (int i = 0; i < limit; i++) {
+            if (i > 0) {
+                msg.append("；");
+            }
+            msg.append(arr.get(i).getAsString());
+        }
+        if (arr.size() > limit) {
+            msg.append(" …");
+        }
+        player.sendMessage(msg.toString());
     }
 
     // ============================================================

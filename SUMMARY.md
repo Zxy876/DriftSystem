@@ -100,7 +100,7 @@
 | 跳过教学 | POST /tutorial/skip | TutorialManager.skipTutorial() | ✅ |
 | 关卡列表 | GET /story/levels | IntentRouter2 | ✅ |
 | 加载关卡 | POST /story/load | IntentDispatcher2.loadLevelForPlayer() | ✅ |
-| 创建剧情 | POST /story/inject | IntentDispatcher2.createStory() | ✅ |
+| 创建剧情 | POST /story/inject | IntentDispatcher2.createStory() | ⛔ 已冻结 |
 | 推进剧情 | POST /world/apply | IntentDispatcher2.pushToStoryEngine() | ✅ |
 
 ---

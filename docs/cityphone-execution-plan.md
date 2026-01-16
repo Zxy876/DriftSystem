@@ -24,7 +24,7 @@
 | 维度 | 现状 (As-Is) | 目标 (To-Be) |
 | --- | --- | --- |
 | CityPhone 角色 | 字段校验器、流程控制台 | 城市自我解释的窗口 |
-| 主 UI 信息 | 缺失字段、阻塞原因、模板按钮 | 展馆状态、企划档案、历史叙事 |
+| 主 UI 信息 | 缺失字段、阻塞原因 | 展馆状态、企划档案、历史叙事 |
 | 行动提示 | 明确指令（去补齐、去提交） | 语义暗示，解释城市如何理解玩家 |
 | 阻塞表现 | 直接拒绝，明确禁止 | 理解延迟，提醒历史风险，世界照常运行 |
 | Scenario 接入 | 需定制 UI、命令、配置 | 注册档案数据即可，CityPhone 自动解释 |
@@ -40,6 +40,16 @@
 - 风险、资源、模板、计划保留为档案附录，永不进入主叙事、更不携带控制语义。
 - Freeze 守护 + CI 契约校验是防回退底线，任何引入流程语感的改动都需被拒绝。
 - Archive 模式仅呈现档案来源、载体与时间位置，不再生成新的“理解”或“总结”，相关语汇一律视为越权回退。
+
+### 2026-01-14 优先级更新
+
+- CityPhone `submit_narrative` 现由专用档案写入路径负责，完全绕开裁决、指导与建造计划生成，仅落盘至 StoryState 档案。
+- `cityphone_state` 仅依赖 StoryState、ExhibitNarrative、TechnologyStatus 快照组合叙事，不再读取 ExecutionNotice 或 BuildPlan，也不会触发排程同步。
+- 展馆叙事段落不再预置模板兜底，当档案缺乏素材时允许返回空列，终端可保持安静。
+- CityPhone UI 原有模板按钮已撤除，终端只保留档案浏览入口与历史折叠视图。
+- `/cityphone/action` 返回体已退化为纯叙事反馈，仅包含 `state` 与解释文本，外部再也看不到 `notice`、`build_plan`、`guidance`、`manifestation_intent`。
+- 展品实例 API、UI 展品卡片、CLI 工具等延伸能力暂缓，待真实布展复测通过后再排期。
+- 下一里程碑是完成“紫水晶”关卡的真实布展回放验证：进场 → 触发事件 → 退出 → 重进，确保世界实体与 CityPhone 叙述都准确“记得”。
 
 ### Phase 0 · 基线验证（可重复执行）
 
@@ -129,6 +139,7 @@
 - **记录 API** (`POST /cityphone/action`)
   - 仅接受 narrative 文本与场景标识，返回 `city_interpretation`、`unknowns`、`history_entries` 的增量视图，不再暴露或推导 verdict/plan 信息。
   - 将作者提交的档案文本以 `narrative_event` 形式入库，供历史叙述迭代使用。
+  - **体验语态**：即便暂时保留 `/action` 名称，也仅表述为“世界记录了一段新文本”，杜绝“提交请求 → 获得反馈”的心智模型回流。
 
 ### 4.2 插件层（Paper）
 
@@ -360,6 +371,7 @@ CityPhone 展签全文视图
 - `StoryStateAgent`（`backend/app/core/ideal_city/story_state_agent.py`）在 `StoryStateManager.process` 中被调用，系统提示 `_STORY_STATE_SYSTEM_PROMPT` + 阶段提示 `_STAGE_PROMPTS`，输入 JSON 含玩家叙述、标准化 spec、Scenario 题面、既有 `StoryState`、阶段 `determine_phase` 与会话记忆；输出 `StoryStatePatch` 补足各槽位。
 - `GuidanceAgent`、`BuildPlanAgent`、`WorldNarratorAgent` 各自使用固定系统提示，将裁决、Scenario、StoryState 作为输入生成指导、建造计划与广播（源码位于 `backend/app/core/ideal_city/guidance_agent.py`、`build_plan_agent.py`、`world_narrator.py`）。
 - 当前实现中未发现“仅限某关卡生效”的额外信息层：所有 agent 均依赖 Scenario JSON 与玩家提交数据，无额外关卡专属 prompt。
+- 剧情 agent 只能决定“世界如何说话”的语态与顺序，内容必须来源于关卡文本、玩家表达、NPC 规则或既有历史实例，严禁代写或润色新文本。
 
 ### 17.4 NPC 行为与剧情勾连
 - `StoryEngine.load_level_for_player` 在检测到 `world_patch.mc.spawn.behaviors` 时调用 `npc_engine.register_npc`（`npc_behavior_engine.py`）登记行为、AI 提示。
@@ -389,6 +401,8 @@ CityPhone 展签全文视图
 
 ## 19. 展品实例层最小可行实现（Amethyst 企划优先）
 
+> **状态更新 · 2026-01-14**：展品实例回放路径暂时冻结。`StoryEngine` 仅在设置环境变量 `DRIFT_ENABLE_EXHIBIT_INSTANCES=1` 时才会加载并回放实例数据，默认情况下视为不可用，CityPhone 也不再展示关联入口。
+
 ### 19.1 背景与目标
 - 紫水晶企划会在剧情推进过程中生成展品（例如世界补丁、结构、记录稿件），目前只在 StoryState/CityPhone 中“记得发生过”。
 - 为保证再次进入关卡时展品仍可见，需要引入独立的展品实例层，对展品进行持久化、回放与展示管理。
@@ -412,6 +426,7 @@ CityPhone 展签全文视图
   1. `world_patch.mc` 包含 `fill/setblock/clone` 等结构性更改；或
   2. `BuildPlanAgent` 产生 `structure_blueprint`；或
   3. 手动调用新的 `POST /exhibit/instance` 后端接口（供运维补录）。
+- 无论系统判定结果如何，只要玩家在企划关卡中真实经历过展品片段，策展团队均可通过人工或脚本入口兜底写入实例，以玩家体验为唯一生成准线。
 - 新增 `ExhibitInstanceBuilder`：负责从 StoryState 事件组装 `ExhibitInstance`，包括提取地理坐标、展示说明、引用的 CityPhone 叙事片段等。
 - 写入成功后返回 `instance_id`，并将其追加到玩家当前 StoryState 的 `exhibit_instances` 列表，供 CityPhone/剧情引用。
 
@@ -443,3 +458,5 @@ CityPhone 展签全文视图
 - 在紫水晶关卡中触发一次展品生成后，退出重进世界仍能看到已布展结构或插入物；日志未出现实例回放错误。
 - `GET /exhibit/instances/CrystalTech` 返回包含新实例的元数据；CityPhone 展示对应条目。
 - CityPhone 响应与 UI 未产生控制语气，保持“只读说明”。
+
+无论实现多复杂，整体第一验收标准始终是：真实布展完成后，玩家重进关卡仍能看到同一展品，并从 CityPhone 获得纯叙事说明而非流程指令。

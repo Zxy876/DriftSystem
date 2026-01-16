@@ -37,7 +37,7 @@ def _bootstrap_data_root(tmp_path: Path) -> Path:
 风险：噪音扰民，资源被挪用""",
         {"accepted", "needs_review"},
     ),
-    ("随便聊聊今晚的天气，没有计划", {"rejected", "needs_review"}),
+    ("随便聊聊今晚的天气，没有计划", {"ignored", "rejected", "needs_review"}),
 ])
 def test_narrative_ingest_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, message: str, expected_status: set[str]) -> None:
     data_root = _bootstrap_data_root(tmp_path)
@@ -49,7 +49,9 @@ def test_narrative_ingest_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     result = pipeline.ingest_narrative_event(event)
 
     assert result.status in expected_status
-    if result.status != "rejected":
+    assert result.intent_analysis is not None
+    assert isinstance(result.intent_analysis.get("is_creation"), bool)
+    if result.status not in {"rejected", "ignored"}:
         assert result.submission is not None
         assert result.notice is not None
         assert result.ruling is not None

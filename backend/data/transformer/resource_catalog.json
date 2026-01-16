@@ -1,0 +1,695 @@
+{
+  "generated_at": "2026-01-15T11:45:08.805833+00:00",
+  "resources": [
+    {
+      "resource_id": "drift:altar_frame",
+      "label": "Drift Altar Frame",
+      "category": "structure",
+      "aliases": [
+        "altar",
+        "祭坛"
+      ],
+      "tags": [
+        "ritual"
+      ],
+      "available": 12,
+      "commands": []
+    },
+    {
+      "resource_id": "drift:exhibit_frame",
+      "label": "Drift Exhibit Frame",
+      "category": "structure",
+      "aliases": [
+        "exhibit",
+        "展台"
+      ],
+      "tags": [
+        "display"
+      ],
+      "available": 8,
+      "commands": []
+    },
+    {
+      "resource_id": "drift:garden_bundle",
+      "label": "Drift Garden Bundle",
+      "category": "structure",
+      "aliases": [
+        "garden",
+        "花园"
+      ],
+      "tags": [
+        "landscape"
+      ],
+      "available": 5,
+      "commands": []
+    },
+    {
+      "resource_id": "drift:machine_core",
+      "label": "Drift Machine Core",
+      "category": "component",
+      "aliases": [
+        "machine",
+        "机器"
+      ],
+      "tags": [
+        "mechanism"
+      ],
+      "available": 6,
+      "commands": []
+    },
+    {
+      "resource_id": "drift:portal_ring",
+      "label": "Drift Portal Ring",
+      "category": "structure",
+      "aliases": [
+        "portal"
+      ],
+      "tags": [
+        "gateway"
+      ],
+      "available": 4,
+      "commands": []
+    },
+    {
+      "resource_id": "drift:statue_base",
+      "label": "Drift Statue Base",
+      "category": "structure",
+      "aliases": [
+        "statue",
+        "雕像"
+      ],
+      "tags": [
+        "art"
+      ],
+      "available": 10,
+      "commands": []
+    },
+    {
+      "resource_id": "gm4_balloon_animals:build/populate_showcase",
+      "label": "Build Populate Showcase",
+      "category": "item",
+      "aliases": [
+        "animals",
+        "balloon",
+        "build",
+        "build populate showcase",
+        "build/populate showcase",
+        "gm4",
+        "populate",
+        "showcase"
+      ],
+      "tags": [
+        "datapack",
+        "gameplay",
+        "gm4",
+        "mod:gm4:balloon_animals",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {forward_x_6_f} {y_f} {forward_z_6_f} rotated {yaw} 0 run function gm4_balloon_animals:build/populate_showcase"
+      ]
+    },
+    {
+      "resource_id": "gm4_balloon_animals:build/setup_showcase",
+      "label": "Build Setup Showcase",
+      "category": "item",
+      "aliases": [
+        "animals",
+        "balloon",
+        "build",
+        "build setup showcase",
+        "build/setup showcase",
+        "gm4",
+        "setup",
+        "showcase"
+      ],
+      "tags": [
+        "datapack",
+        "gameplay",
+        "gm4",
+        "mod:gm4:balloon_animals",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {forward_x_6_f} {y_f} {forward_z_6_f} rotated {yaw} 0 run function gm4_balloon_animals:build/setup_showcase"
+      ]
+    },
+    {
+      "resource_id": "gm4_balloon_animals:init",
+      "label": "Init",
+      "category": "item",
+      "aliases": [
+        "animals",
+        "balloon",
+        "gm4",
+        "init"
+      ],
+      "tags": [
+        "datapack",
+        "gameplay",
+        "gm4",
+        "mod:gm4:balloon_animals",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "function gm4_balloon_animals:init"
+      ]
+    },
+    {
+      "resource_id": "gm4_better_armour_stands:init",
+      "label": "Init",
+      "category": "item",
+      "aliases": [
+        "armour",
+        "better",
+        "gm4",
+        "init",
+        "stands"
+      ],
+      "tags": [
+        "datapack",
+        "decoration",
+        "gm4",
+        "mod:gm4:better_armour_stands",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "function gm4_better_armour_stands:init"
+      ]
+    },
+    {
+      "resource_id": "gm4_boots_of_ostara:init",
+      "label": "Init",
+      "category": "item",
+      "aliases": [
+        "boots",
+        "gm4",
+        "init",
+        "of",
+        "ostara"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "mod:gm4:boots_of_ostara",
+        "movement",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "function gm4_boots_of_ostara:init"
+      ]
+    },
+    {
+      "resource_id": "gm4_boots_of_ostara:items/boots_of_ostara",
+      "label": "Items Boots Of Ostara",
+      "category": "item",
+      "aliases": [
+        "boots",
+        "gm4",
+        "items",
+        "items boots of ostara",
+        "items/boots of ostara",
+        "of",
+        "ostara"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "mod:gm4:boots_of_ostara",
+        "movement",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run loot give @p[distance=..6] loot gm4_boots_of_ostara:items/boots_of_ostara"
+      ]
+    },
+    {
+      "resource_id": "gm4_custom_crafters:load",
+      "label": "Load",
+      "category": "item",
+      "aliases": [
+        "crafters",
+        "custom",
+        "gm4",
+        "library",
+        "load"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "library",
+        "mod:gm4:lib_custom_crafters",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "function gm4_custom_crafters:load"
+      ]
+    },
+    {
+      "resource_id": "gm4_custom_crafters:test_platform",
+      "label": "Test Platform",
+      "category": "item",
+      "aliases": [
+        "crafters",
+        "custom",
+        "gm4",
+        "library",
+        "platform",
+        "test",
+        "test platform"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "library",
+        "mod:gm4:lib_custom_crafters",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run place structure gm4_custom_crafters:test_platform ~ ~ ~"
+      ]
+    },
+    {
+      "resource_id": "gm4_lively_lily_pads:init",
+      "label": "Init",
+      "category": "item",
+      "aliases": [
+        "gm4",
+        "init",
+        "lily",
+        "lively",
+        "pads"
+      ],
+      "tags": [
+        "datapack",
+        "decoration",
+        "gm4",
+        "mod:gm4:lively_lily_pads",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "function gm4_lively_lily_pads:init"
+      ]
+    },
+    {
+      "resource_id": "gm4_tower_structures:init",
+      "label": "Init",
+      "category": "item",
+      "aliases": [
+        "gm4",
+        "init",
+        "structures",
+        "tower"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "mod:gm4:tower_structures",
+        "source:mods",
+        "structures"
+      ],
+      "available": null,
+      "commands": [
+        "function gm4_tower_structures:init"
+      ]
+    },
+    {
+      "resource_id": "gm4_tower_structures:tower/diorite_dark",
+      "label": "Tower Diorite Dark",
+      "category": "item",
+      "aliases": [
+        "dark",
+        "diorite",
+        "gm4",
+        "structures",
+        "tower",
+        "tower diorite dark",
+        "tower/diorite dark"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "mod:gm4:tower_structures",
+        "source:mods",
+        "structures"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run place structure gm4_tower_structures:tower/diorite_dark ~ ~ ~"
+      ]
+    },
+    {
+      "resource_id": "gm4_trades:load",
+      "label": "Load",
+      "category": "item",
+      "aliases": [
+        "gm4",
+        "library",
+        "load",
+        "trades"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "library",
+        "mod:gm4:lib_trades",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "function gm4_trades:load"
+      ]
+    },
+    {
+      "resource_id": "gm4_trees:load",
+      "label": "Load",
+      "category": "item",
+      "aliases": [
+        "gm4",
+        "library",
+        "load",
+        "trees"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "library",
+        "mod:gm4:lib_trees",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "function gm4_trees:load"
+      ]
+    },
+    {
+      "resource_id": "gm4_tunnel_bores:init",
+      "label": "Init",
+      "category": "item",
+      "aliases": [
+        "bores",
+        "gm4",
+        "init",
+        "tunnel"
+      ],
+      "tags": [
+        "automation",
+        "datapack",
+        "gm4",
+        "mod:gm4:tunnel_bores",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "function gm4_tunnel_bores:init"
+      ]
+    },
+    {
+      "resource_id": "level:5",
+      "label": "5",
+      "category": "item",
+      "aliases": [
+        "5",
+        "gm4",
+        "library",
+        "trades"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "library",
+        "mod:gm4:lib_trades",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run summon villager ~ ~ ~ {VillagerData:{profession:farmer,level:5,type:plains},Offers:{},Tags:[\"gm4_demo\",\"gm4_trades_stall\"]}"
+      ]
+    },
+    {
+      "resource_id": "minecraft:air",
+      "label": "Air",
+      "category": "block",
+      "aliases": [
+        "air",
+        "gm4",
+        "lily",
+        "lively",
+        "pads"
+      ],
+      "tags": [
+        "datapack",
+        "decoration",
+        "gm4",
+        "mod:gm4:lively_lily_pads",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run fill ~-2 ~ ~-2 ~2 ~ ~2 minecraft:air"
+      ]
+    },
+    {
+      "resource_id": "minecraft:amethyst_block",
+      "label": "Amethyst Block",
+      "category": "block",
+      "aliases": [
+        "amethyst",
+        "amethyst block",
+        "crystal",
+        "紫水晶"
+      ],
+      "tags": [
+        "crystal",
+        "lighting"
+      ],
+      "available": 96,
+      "commands": []
+    },
+    {
+      "resource_id": "minecraft:birch",
+      "label": "Birch",
+      "category": "block",
+      "aliases": [
+        "birch",
+        "gm4",
+        "library",
+        "trees"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "library",
+        "mod:gm4:lib_trees",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run place feature minecraft:birch"
+      ]
+    },
+    {
+      "resource_id": "minecraft:glass",
+      "label": "Glass",
+      "category": "block",
+      "aliases": [
+        "glass",
+        "玻璃"
+      ],
+      "tags": [
+        "transparent"
+      ],
+      "available": 192,
+      "commands": []
+    },
+    {
+      "resource_id": "minecraft:lily_pad",
+      "label": "Lily Pad",
+      "category": "block",
+      "aliases": [
+        "gm4",
+        "lily",
+        "lily pad",
+        "lively",
+        "pad",
+        "pads"
+      ],
+      "tags": [
+        "datapack",
+        "decoration",
+        "gm4",
+        "mod:gm4:lively_lily_pads",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run setblock ~ ~-1 ~ minecraft:lily_pad",
+        "execute in {world} positioned {x} {y} {z} run setblock ~1 ~-1 ~ minecraft:lily_pad",
+        "execute in {world} positioned {x} {y} {z} run setblock ~-1 ~-1 ~ minecraft:lily_pad",
+        "execute in {world} positioned {x} {y} {z} run setblock ~ ~-1 ~1 minecraft:lily_pad",
+        "execute in {world} positioned {x} {y} {z} run setblock ~ ~-1 ~-1 minecraft:lily_pad"
+      ]
+    },
+    {
+      "resource_id": "minecraft:oak",
+      "label": "Oak",
+      "category": "block",
+      "aliases": [
+        "gm4",
+        "library",
+        "oak",
+        "trees"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "library",
+        "mod:gm4:lib_trees",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run place feature minecraft:oak"
+      ]
+    },
+    {
+      "resource_id": "minecraft:oak_planks",
+      "label": "Oak Planks",
+      "category": "block",
+      "aliases": [
+        "oak",
+        "plank",
+        "planks",
+        "wood",
+        "木板"
+      ],
+      "tags": [
+        "wood"
+      ],
+      "available": 256,
+      "commands": []
+    },
+    {
+      "resource_id": "minecraft:quartz_block",
+      "label": "Quartz Block",
+      "category": "block",
+      "aliases": [
+        "quartz",
+        "stone quartz",
+        "石英"
+      ],
+      "tags": [
+        "structure"
+      ],
+      "available": 80,
+      "commands": []
+    },
+    {
+      "resource_id": "minecraft:redstone_dust",
+      "label": "Redstone Dust",
+      "category": "item",
+      "aliases": [
+        "redstone",
+        "redstone dust",
+        "红石"
+      ],
+      "tags": [
+        "circuit"
+      ],
+      "available": 128,
+      "commands": []
+    },
+    {
+      "resource_id": "minecraft:soul_lantern",
+      "label": "Soul Lantern",
+      "category": "block",
+      "aliases": [
+        "lantern",
+        "soul lantern",
+        "幽冥",
+        "灯"
+      ],
+      "tags": [
+        "lighting"
+      ],
+      "available": 48,
+      "commands": []
+    },
+    {
+      "resource_id": "minecraft:water",
+      "label": "Water",
+      "category": "block",
+      "aliases": [
+        "gm4",
+        "lily",
+        "lively",
+        "pads",
+        "water"
+      ],
+      "tags": [
+        "datapack",
+        "decoration",
+        "gm4",
+        "mod:gm4:lively_lily_pads",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run fill ~-2 ~-1 ~-2 ~2 ~-1 ~2 minecraft:water"
+      ]
+    },
+    {
+      "resource_id": "profession:farmer",
+      "label": "Farmer",
+      "category": "item",
+      "aliases": [
+        "farmer",
+        "gm4",
+        "library",
+        "trades"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "library",
+        "mod:gm4:lib_trades",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run summon villager ~ ~ ~ {VillagerData:{profession:farmer,level:5,type:plains},Offers:{},Tags:[\"gm4_demo\",\"gm4_trades_stall\"]}"
+      ]
+    },
+    {
+      "resource_id": "type:plains",
+      "label": "Plains",
+      "category": "item",
+      "aliases": [
+        "gm4",
+        "library",
+        "plains",
+        "trades"
+      ],
+      "tags": [
+        "datapack",
+        "gm4",
+        "library",
+        "mod:gm4:lib_trades",
+        "source:mods"
+      ],
+      "available": null,
+      "commands": [
+        "execute in {world} positioned {x} {y} {z} run summon villager ~ ~ ~ {VillagerData:{profession:farmer,level:5,type:plains},Offers:{},Tags:[\"gm4_demo\",\"gm4_trades_stall\"]}"
+      ]
+    }
+  ]
+}

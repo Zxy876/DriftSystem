@@ -135,10 +135,15 @@ public class DriftPlugin extends JavaPlugin {
         this.intentDispatcher2.setQuestLogHud(questLogHud);
         this.intentDispatcher2.setDialoguePanel(dialoguePanel);
         this.intentDispatcher2.setChoicePanel(choicePanel);
+        boolean allowStoryCreation = getConfig().getBoolean("world.allow_story_creation", false);
+        this.intentDispatcher2.setStoryCreationEnabled(allowStoryCreation);
         this.exitIntentDetector = new ExitIntentDetector(this, backend, worldPatcher, recommendationHud, questLogHud);
 
         IdealCityCommand idealCityCommand = new IdealCityCommand(this, backend);
         this.intentDispatcher2.setIdealCityCommand(idealCityCommand);
+        if (!allowStoryCreation) {
+            getLogger().info("[DriftPlugin] Story creation via natural language is disabled (world.allow_story_creation = false).");
+        }
         CityPhoneLocalization.init(this);
         this.cityPhoneManager = new CityPhoneManager(this, backend);
         this.socialAtmosphereManager = new SocialAtmosphereManager(this, backend);

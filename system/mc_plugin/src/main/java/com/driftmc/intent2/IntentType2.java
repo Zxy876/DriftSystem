@@ -11,6 +11,8 @@ public enum IntentType2 {
     SPAWN_ENTITY,
     BUILD_STRUCTURE,
 
+    CREATE_BLOCK,
+
     STORY_CONTINUE,
     GOTO_LEVEL,
     GOTO_NEXT_LEVEL,
@@ -34,6 +36,8 @@ public enum IntentType2 {
             case "TELEPORT" -> TELEPORT;
             case "SPAWN_ENTITY" -> SPAWN_ENTITY;
             case "BUILD_STRUCTURE" -> BUILD_STRUCTURE;
+
+            case "CREATE_BLOCK" -> CREATE_BLOCK;
 
             case "STORY_CONTINUE" -> STORY_CONTINUE;
             case "GOTO_LEVEL" -> GOTO_LEVEL;

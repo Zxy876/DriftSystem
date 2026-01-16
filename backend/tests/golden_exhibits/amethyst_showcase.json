@@ -1,0 +1,100 @@
+{
+  "materials": [
+    {
+      "token": "amethyst",
+      "resource_id": "minecraft:amethyst_block",
+      "label": "Amethyst Block",
+      "status": "resolved",
+      "confidence": 1.0,
+      "quantity": 12,
+      "tags": [
+        "crystal",
+        "lighting"
+      ]
+    },
+    {
+      "token": "lantern",
+      "resource_id": "minecraft:soul_lantern",
+      "label": "Soul Lantern",
+      "status": "resolved",
+      "confidence": 1.0,
+      "quantity": 12,
+      "tags": [
+        "lighting"
+      ]
+    }
+  ],
+  "patch_templates": [
+    {
+      "step_id": "step-1",
+      "template_id": "minecraft:amethyst_block::default",
+      "status": "draft",
+      "summary": "部署 Amethyst Block",
+      "step_type": "manual_review",
+      "world_patch": {
+        "metadata": {
+          "resource_id": "minecraft:amethyst_block",
+          "material": {
+            "token": "amethyst",
+            "label": "Amethyst Block",
+            "quantity": 12
+          },
+          "tags": [
+            "crystal",
+            "lighting"
+          ]
+        }
+      },
+      "mod_hooks": [],
+      "requires_player_pose": false,
+      "notes": [],
+      "tags": [
+        "crystal",
+        "lighting"
+      ],
+      "validation": {
+        "errors": [],
+        "execution_tier": "needs_confirm",
+        "missing_fields": [],
+        "unsafe_placeholders": []
+      }
+    },
+    {
+      "step_id": "step-2",
+      "template_id": "minecraft:soul_lantern::default",
+      "status": "draft",
+      "summary": "部署 Soul Lantern",
+      "step_type": "manual_review",
+      "world_patch": {
+        "metadata": {
+          "resource_id": "minecraft:soul_lantern",
+          "material": {
+            "token": "lantern",
+            "label": "Soul Lantern",
+            "quantity": 12
+          },
+          "tags": [
+            "lighting"
+          ]
+        }
+      },
+      "mod_hooks": [],
+      "requires_player_pose": false,
+      "notes": [],
+      "tags": [
+        "lighting"
+      ],
+      "validation": {
+        "errors": [],
+        "execution_tier": "needs_confirm",
+        "missing_fields": [],
+        "unsafe_placeholders": []
+      }
+    }
+  ],
+  "execution_tier": "needs_confirm",
+  "unsafe_steps": [
+    "step-1",
+    "step-2"
+  ]
+}

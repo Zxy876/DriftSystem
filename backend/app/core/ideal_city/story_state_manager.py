@@ -522,7 +522,7 @@ class StoryStateManager:
             return state
 
         status_value = (status or "unknown").strip() or "unknown"
-        tail = plan_id[-6:]
+        tail = plan_id if len(plan_id) <= 12 else plan_id[-6:]
         headline = summary.strip() if isinstance(summary, str) else "建造计划"
         base = f"[计划 {tail}] {headline}"
         mods_text = ""
@@ -549,7 +549,8 @@ class StoryStateManager:
         if already_synced:
             return state
 
-        notes = list(state.notes)
+        prefix = f"{base} ·"
+        notes = [entry for entry in state.notes if not entry.startswith(prefix)]
         if note not in notes:
             notes.append(note)
         if len(notes) > 12:
