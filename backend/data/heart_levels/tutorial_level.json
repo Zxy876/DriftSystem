@@ -241,11 +241,11 @@
     "npc_skins": [
       {
         "id": "心悦向导",
-        "skin": "skins/tutorial_guide.png"
+        "skin": "registry:tutorial"
       },
       {
         "id": "心悦前导",
-        "skin": "skins/tutorial_guide.png"
+        "skin": "registry:guide"
       }
     ]
   },

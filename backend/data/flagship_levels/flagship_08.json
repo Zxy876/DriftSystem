@@ -91,7 +91,7 @@
       {
         "id": "grandma_memory",
         "name": "回忆中的奶奶",
-        "skin": "old_wisdom_01",
+        "skin": "registry:old_wisdom",
         "x": 3,
         "y": 70,
         "z": 3
@@ -99,7 +99,7 @@
       {
         "id": "heart_demon",
         "name": "心魔裂口",
-        "skin": "shadow_creature_01",
+        "skin": "registry:shadow_creature",
         "x": -4,
         "y": 70,
         "z": -4

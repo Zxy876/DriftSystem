@@ -419,11 +419,11 @@
     "npc_skins": [
       {
         "id": "药店店员",
-        "skin": "skins/pharmacist_neon.png"
+        "skin": "registry:pharmacist"
       },
       {
         "id": "影子少女",
-        "skin": "skins/shadow_girl.png"
+        "skin": "registry:shadow"
       }
     ]
   },

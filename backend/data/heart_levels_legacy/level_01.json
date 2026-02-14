@@ -244,7 +244,7 @@
     "npc_skins": [
       {
         "id": "赛车手桃子",
-        "skin": "skins/racer_taozi.png"
+        "skin": "registry:racer"
       }
     ]
   },

@@ -95,9 +95,9 @@
       "structures/ritual/lantern_circle.nbt"
     ],
     "npc_skins": [
-      { "id": "影子少女", "skin": "skins/shadow_girl.png" },
-      { "id": "夜行者", "skin": "skins/night_walker.png" },
-      { "id": "河畔回声", "skin": "skins/river_echo.png" }
+      { "id": "影子少女", "skin": "registry:shadow" },
+      { "id": "夜行者", "skin": "registry:night" },
+      { "id": "河畔回声", "skin": "registry:river" }
     ]
   },
   "world_patch": {

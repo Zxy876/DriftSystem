@@ -163,7 +163,7 @@
       "structures/tutorial/light_markers.nbt"
     ],
     "npc_skins": [
-      { "id": "心悦向导", "skin": "skins/tutorial_guide_flagship.png" }
+      { "id": "心悦向导", "skin": "registry:flagship_tutorial" }
     ]
   },
 

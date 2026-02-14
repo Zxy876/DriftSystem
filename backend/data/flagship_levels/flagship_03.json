@@ -91,8 +91,8 @@
       "structures/mountain/summit_gate.nbt"
     ],
     "npc_skins": [
-      { "id": "Climber", "skin": "skins/climber_summit.png" },
-      { "id": "FearShadow", "skin": "skins/fear_shadow.png" }
+      { "id": "Climber", "skin": "registry:climber" },
+      { "id": "FearShadow", "skin": "registry:fear" }
     ]
   },
 

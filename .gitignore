@@ -83,3 +83,4 @@ backend/server/*.pid
 # ---- Build outputs ----
 **/target/
 **/build/
+**/dist/

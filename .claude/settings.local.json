@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(code:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "mcp__zread__search_doc",
+      "mcp__zread__get_repo_structure",
+      "mcp__zread__read_file"
+    ]
+  }
+}
