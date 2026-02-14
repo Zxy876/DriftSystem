@@ -87,8 +87,8 @@ DriftSystem (心悦宇宙) 将 Minecraft 服务器与 AI 故事引擎融合，�
 
 1. **下载 HMCL 启动器**：https://hmcl.huangyuhui.net/
 2. **安装 Minecraft 1.20.1**：在 HMCL 中安装 Minecraft Java 版 1.20.1
-3. **下载 Demo 包**：解压 `DriftSystem_Demo.zip` 到桌面
-4. **启动**：双击 `启动游戏.bat`，等待自动安装完成
+3. **下载  仓库**：解压 `DriftSystem zip` 到桌面
+4.  
 5. **进入游戏**：保持两个黑色窗口开启，在 HMCL 中启动游戏，添加服务器 `localhost`
 
 > 详见 [DriftSystem_Demo/README_FIRST.txt](DriftSystem_Demo/README_FIRST.txt)
