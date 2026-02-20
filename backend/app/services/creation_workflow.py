@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-import re
-from typing import Dict, Iterable, NamedTuple, Optional, Sequence, Tuple
+from typing import Dict, Iterable, NamedTuple, Optional, Tuple
 
 from app.core.creation import (
     CreationPatchTemplate,
@@ -19,6 +18,16 @@ from app.core.creation import (
 from app.core.intent_creation import CreationIntentDecision, default_creation_classifier
 from app.core.minecraft.rcon_client import RconClient
 from app.core.world.patch_executor import PatchExecutionResult, PatchExecutor
+from app.core.world.patch_planner import (
+    BLOCK_ID_PATTERN as _BLOCK_ID_PATTERN,
+    COORD_TRIPLE_PATTERN as _COORD_TRIPLE_PATTERN,
+    COORD_COMPONENT_PATTERN as _COORD_COMPONENT_PATTERN,
+    DeterministicPlanner,
+    LLMBasedPlanner,
+    PatchPlanner,
+    parse_coordinate_components as _parse_coordinate_components,
+    sanitize_block_id as _sanitize_block_id,
+)
 from app.core.world.plan_executor import CommandRunner, PlanExecutor, PlanExecutionReport
 
 logger = logging.getLogger(__name__)
@@ -43,15 +52,8 @@ _creation_classifier = default_creation_classifier()
 _creation_transformer = load_default_transformer()
 _patch_executor = PatchExecutor()
 
-_BLOCK_ID_PATTERN = re.compile(r"minecraft:[a-z0-9_./\-]+", re.IGNORECASE)
-_COORD_TRIPLE_PATTERN = re.compile(
-    r"(?:坐标|坐標|coordinates?)\s*[:：]?\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)",
-    re.IGNORECASE,
-)
-_COORD_COMPONENT_PATTERN = re.compile(
-    r"(?:(?:坐标)?\s*(x|y|z)\s*[:=]\s*(-?\d+(?:\.\d+)?))",
-    re.IGNORECASE,
-)
+_deterministic_planner: PatchPlanner = DeterministicPlanner()
+_llm_based_planner: PatchPlanner = LLMBasedPlanner(_creation_transformer)
 
 
 class BlockPlacement(NamedTuple):
@@ -223,15 +225,6 @@ def _read_float(env: str, default: float) -> float:
         return default
 
 
-def _sanitize_block_id(block_id: str) -> str:
-    candidate = (block_id or "").strip().lower()
-    if not candidate:
-        raise ValueError("empty_block_id")
-    if not _BLOCK_ID_PATTERN.fullmatch(candidate):
-        raise ValueError(f"invalid_block_id:{block_id}")
-    return candidate
-
-
 def _parse_setblock_command(command: str) -> Optional[BlockPlacement]:
     if not command:
         return None
@@ -248,91 +241,6 @@ def _parse_setblock_command(command: str) -> Optional[BlockPlacement]:
     return BlockPlacement(block_id=block_id, x=x, y=y, z=z, command=command.strip())
 
 
-def _parse_coordinate_components(message: str) -> Optional[Tuple[int, int, int]]:
-    components: Dict[str, float] = {}
-    for match in _COORD_COMPONENT_PATTERN.finditer(message):
-        axis = match.group(1).lower()
-        value = match.group(2)
-        try:
-            components[axis] = float(value)
-        except (TypeError, ValueError):  # pragma: no cover - defensive guard
-            continue
-    if {"x", "y", "z"}.issubset(components):
-        return tuple(int(round(components[axis])) for axis in ("x", "y", "z"))
-    return None
-
-
-def _build_block_plan(
-    block_id: str,
-    coords: Tuple[int, int, int],
-    *,
-    confidence: float,
-    source: str = "chat",
-) -> CreationPlan:
-    sanitized = _sanitize_block_id(block_id)
-    command = f"setblock {coords[0]} {coords[1]} {coords[2]} {sanitized}"
-    clamped_confidence = max(confidence, 0.75)
-
-    material = CreationPlanMaterial(
-        token=sanitized,
-        resource_id=sanitized,
-        label=sanitized,
-        status="resolved",
-        confidence=clamped_confidence,
-        quantity=1,
-        tags=["explicit_coordinate"],
-    )
-    step = CreationPlanStep(
-        step_id="step-1",
-        title=f"Set {sanitized} at {coords[0]} {coords[1]} {coords[2]}",
-        description="根据玩家提供的坐标放置方块。",
-        status="resolved",
-        step_type="block_command",
-        commands=[command],
-        required_resource=sanitized,
-        tags=["explicit_coordinate"],
-    )
-    template = CreationPatchTemplate(
-        step_id=step.step_id,
-        template_id="explicit:setblock",
-        status="resolved",
-        summary=step.title,
-        step_type=step.step_type,
-        world_patch={
-            "mc": {"commands": [command]},
-            "metadata": {
-                "source": source,
-                "coordinates": {"x": coords[0], "y": coords[1], "z": coords[2]},
-                "block_id": sanitized,
-            },
-        },
-        mod_hooks=[],
-        requires_player_pose=False,
-        notes=["聊天坐标直接生成 setblock 指令。"],
-        tags=["explicit_coordinate"],
-    )
-
-    return CreationPlan(
-        action="place_block",
-        materials=[material],
-        confidence=clamped_confidence,
-        summary=f"Place {sanitized} at {coords[0]} {coords[1]} {coords[2]}",
-        steps=[step],
-        patch_templates=[template],
-        notes=[f"source:{source}"],
-        execution_tier="safe_auto",
-        validation_errors=[],
-        validation_warnings=[],
-        missing_fields=[],
-        unsafe_steps=[],
-        safety_assessment={
-            "world_damage_risk": "low",
-            "reversibility": True,
-            "requires_confirmation": False,
-        },
-    )
-
-
 def _extract_block_placement(plan: CreationPlan) -> Optional[BlockPlacement]:
     if plan is None:
         return None
@@ -342,48 +250,6 @@ def _extract_block_placement(plan: CreationPlan) -> Optional[BlockPlacement]:
             if parsed is not None:
                 return parsed
     return None
-
-
-def _extract_explicit_block_plan(
-    decision: CreationIntentDecision,
-    message: Optional[str],
-) -> Optional[CreationPlanResult]:
-    if not decision.is_creation or not message:
-        return None
-
-    block_id: Optional[str] = None
-    material_tokens: Sequence[str] = tuple(
-        decision.slots.get("materials", []) if isinstance(decision.slots, dict) else []
-    )
-    for token in material_tokens:
-        candidate = str(token).strip().lower()
-        if candidate.startswith("minecraft:"):
-            block_id = candidate
-            break
-
-    if block_id is None:
-        match = _BLOCK_ID_PATTERN.search(message)
-        if match:
-            block_id = match.group(0).lower()
-
-    if block_id is None:
-        return None
-
-    coords: Optional[Tuple[int, int, int]] = None
-    triple_match = _COORD_TRIPLE_PATTERN.search(message)
-    if triple_match:
-        try:
-            coords = tuple(int(round(float(group))) for group in triple_match.groups())
-        except (TypeError, ValueError):  # pragma: no cover - defensive guard
-            coords = None
-    if coords is None:
-        coords = _parse_coordinate_components(message)
-
-    if coords is None:
-        return None
-
-    plan = _build_block_plan(block_id, coords, confidence=decision.confidence, source="explicit_coordinates")
-    return CreationPlanResult(plan=plan, snapshot_generated_at=None)
 
 
 def _build_command_runner() -> Optional[CommandRunner]:
@@ -437,13 +303,19 @@ def classify_message(message: str) -> CreationIntentDecision:
 
 
 def generate_plan(decision: CreationIntentDecision, *, message: Optional[str] = None) -> CreationPlanResult:
-    """Transform a classifier decision into a structured creation plan."""
+    """Transform a classifier decision into a structured creation plan.
 
-    explicit = _extract_explicit_block_plan(decision, message)
-    if explicit is not None:
-        return explicit
+    Delegates first to the :class:`~app.core.world.patch_planner.DeterministicPlanner`
+    (explicit-coordinate block placement) and falls back to the
+    :class:`~app.core.world.patch_planner.LLMBasedPlanner` (resource-catalog
+    transformer) when no explicit coordinates are present.
+    """
 
-    return _creation_transformer.transform(decision)
+    result = _deterministic_planner.plan(decision, message=message)
+    if result is not None:
+        return result
+
+    return _llm_based_planner.plan(decision, message=message) or _creation_transformer.transform(decision)
 
 
 def dry_run_plan(plan: CreationPlan, *, patch_id: Optional[str] = None) -> PatchExecutionResult:
