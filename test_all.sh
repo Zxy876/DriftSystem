@@ -83,3 +83,11 @@ echo "🎉 一键测试完成！"
 echo "📌 输出文件： minimap_test.png"
 echo "📌 请在终端检查是否有剧情触发 / 传送 / 造物输出"
 echo "=============================="
+
+echo ""
+echo "8️⃣ 运行 pytest 烟囱（若可用）"
+if command -v pytest >/dev/null 2>&1; then
+    PYTHONPATH=backend pytest backend/test_task_runtime.py backend/test_actor_prompt.py backend/test_task_manager.py backend/test_director_audit.py backend/test_drift_resource_catalog_guardrails.py -q || exit 1
+else
+    echo "pytest 未安装，跳过 Python 测试"
+fi

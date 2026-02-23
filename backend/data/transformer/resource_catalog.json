@@ -1,88 +1,210 @@
 {
-  "generated_at": "2026-01-15T11:45:08.805833+00:00",
+  "generated_at": "2026-02-23T23:34:36.835179+00:00",
   "resources": [
     {
-      "resource_id": "drift:altar_frame",
-      "label": "Drift Altar Frame",
-      "category": "structure",
+      "resource_id": "drift:animal_pair_sheep",
+      "label": "Drift Animal Pair Sheep",
+      "category": "entity",
       "aliases": [
-        "altar",
-        "祭坛"
+        "animals sheep",
+        "sheep pair",
+        "双羊"
       ],
       "tags": [
-        "ritual"
+        "anchor:center_ground",
+        "bbox:3x2x3",
+        "entity:animal"
       ],
-      "available": 12,
-      "commands": []
+      "available": 16,
+      "commands": [
+        "setblock ~ ~ ~ minecraft:grass_block",
+        "summon minecraft:sheep ~1 ~1 ~",
+        "summon minecraft:sheep ~-1 ~1 ~"
+      ]
     },
     {
-      "resource_id": "drift:exhibit_frame",
-      "label": "Drift Exhibit Frame",
-      "category": "structure",
+      "resource_id": "drift:event_marker_beacon",
+      "label": "Drift Event Marker Beacon",
+      "category": "marker",
       "aliases": [
-        "exhibit",
-        "展台"
+        "beacon marker",
+        "event beacon",
+        "信标标记"
       ],
       "tags": [
-        "display"
+        "anchor:base_center",
+        "bbox:1x4x1",
+        "event:marker"
       ],
-      "available": 8,
-      "commands": []
+      "available": 20,
+      "commands": [
+        "fill ~ ~ ~ ~ ~2 ~ minecraft:iron_block",
+        "setblock ~ ~3 ~ minecraft:beacon"
+      ]
     },
     {
-      "resource_id": "drift:garden_bundle",
-      "label": "Drift Garden Bundle",
-      "category": "structure",
+      "resource_id": "drift:event_marker_pressure_plate",
+      "label": "Drift Event Marker Pressure Plate",
+      "category": "marker",
       "aliases": [
-        "garden",
-        "花园"
+        "event plate",
+        "pressure marker",
+        "压力板标记"
       ],
       "tags": [
-        "landscape"
+        "anchor:block_origin",
+        "bbox:1x1x1",
+        "event:marker"
       ],
-      "available": 5,
-      "commands": []
+      "available": 20,
+      "commands": [
+        "setblock ~ ~ ~ minecraft:polished_andesite",
+        "setblock ~ ~1 ~ minecraft:stone_pressure_plate"
+      ]
     },
     {
-      "resource_id": "drift:machine_core",
-      "label": "Drift Machine Core",
-      "category": "component",
+      "resource_id": "drift:npc_anchor_villager",
+      "label": "Drift NPC Anchor Villager",
+      "category": "entity",
       "aliases": [
-        "machine",
-        "机器"
+        "npc villager",
+        "villager anchor",
+        "村民锚点"
       ],
       "tags": [
-        "mechanism"
+        "anchor:feet",
+        "bbox:1x2x1",
+        "entity:npc"
       ],
-      "available": 6,
-      "commands": []
+      "available": 16,
+      "commands": [
+        "setblock ~ ~ ~ minecraft:oak_planks",
+        "summon minecraft:villager ~ ~1 ~"
+      ]
     },
     {
-      "resource_id": "drift:portal_ring",
-      "label": "Drift Portal Ring",
+      "resource_id": "drift:open_field_15x1x15",
+      "label": "Drift Open Field 15x1x15",
       "category": "structure",
       "aliases": [
-        "portal"
+        "open field",
+        "plaza",
+        "开放区"
       ],
       "tags": [
-        "gateway"
-      ],
-      "available": 4,
-      "commands": []
-    },
-    {
-      "resource_id": "drift:statue_base",
-      "label": "Drift Statue Base",
-      "category": "structure",
-      "aliases": [
-        "statue",
-        "雕像"
-      ],
-      "tags": [
-        "art"
+        "anchor:center",
+        "bbox:15x1x15",
+        "layout:open"
       ],
       "available": 10,
-      "commands": []
+      "commands": [
+        "fill ~-7 ~ ~-7 ~7 ~ ~7 minecraft:grass_block"
+      ]
+    },
+    {
+      "resource_id": "drift:open_field_9x1x9",
+      "label": "Drift Open Field 9x1x9",
+      "category": "structure",
+      "aliases": [
+        "open field small",
+        "small plaza",
+        "小开放区"
+      ],
+      "tags": [
+        "anchor:center",
+        "bbox:9x1x9",
+        "layout:open"
+      ],
+      "available": 10,
+      "commands": [
+        "fill ~-4 ~ ~-4 ~4 ~ ~4 minecraft:grass_block"
+      ]
+    },
+    {
+      "resource_id": "drift:path_axis_1x1x15",
+      "label": "Drift Path Axis 1x1x15",
+      "category": "structure",
+      "aliases": [
+        "path 1",
+        "path narrow",
+        "单路径"
+      ],
+      "tags": [
+        "anchor:start_point",
+        "bbox:1x1x15",
+        "layout:path"
+      ],
+      "available": 20,
+      "commands": [
+        "fill ~ ~ ~ ~ ~ ~14 minecraft:stone_bricks"
+      ]
+    },
+    {
+      "resource_id": "drift:path_axis_3x1x15",
+      "label": "Drift Path Axis 3x1x15",
+      "category": "structure",
+      "aliases": [
+        "path 3",
+        "path wide",
+        "宽路径"
+      ],
+      "tags": [
+        "anchor:start_center",
+        "bbox:3x1x15",
+        "layout:path"
+      ],
+      "available": 20,
+      "commands": [
+        "fill ~-1 ~ ~ ~1 ~ ~14 minecraft:stone_bricks"
+      ]
+    },
+    {
+      "resource_id": "drift:room_basic_7x5x7",
+      "label": "Drift Room Basic 7x5x7",
+      "category": "structure",
+      "aliases": [
+        "room basic",
+        "small room",
+        "基础房间"
+      ],
+      "tags": [
+        "anchor:floor_center",
+        "bbox:7x5x7",
+        "layout:room"
+      ],
+      "available": 12,
+      "commands": [
+        "fill ~-3 ~ ~-3 ~3 ~ ~3 minecraft:stone_bricks",
+        "fill ~-3 ~1 ~-3 ~3 ~4 ~3 minecraft:air",
+        "fill ~-3 ~1 ~-3 ~3 ~4 ~-3 minecraft:stone_bricks",
+        "fill ~-3 ~1 ~3 ~3 ~4 ~3 minecraft:stone_bricks",
+        "fill ~-3 ~1 ~-3 ~-3 ~4 ~3 minecraft:stone_bricks",
+        "fill ~3 ~1 ~-3 ~3 ~4 ~3 minecraft:stone_bricks"
+      ]
+    },
+    {
+      "resource_id": "drift:room_small_5x4x5",
+      "label": "Drift Room Small 5x4x5",
+      "category": "structure",
+      "aliases": [
+        "compact room",
+        "room small",
+        "小房间"
+      ],
+      "tags": [
+        "anchor:floor_center",
+        "bbox:5x4x5",
+        "layout:room"
+      ],
+      "available": 12,
+      "commands": [
+        "fill ~-2 ~ ~-2 ~2 ~ ~2 minecraft:oak_planks",
+        "fill ~-2 ~1 ~-2 ~2 ~3 ~2 minecraft:air",
+        "fill ~-2 ~1 ~-2 ~2 ~3 ~-2 minecraft:oak_planks",
+        "fill ~-2 ~1 ~2 ~2 ~3 ~2 minecraft:oak_planks",
+        "fill ~-2 ~1 ~-2 ~-2 ~3 ~2 minecraft:oak_planks",
+        "fill ~2 ~1 ~-2 ~2 ~3 ~2 minecraft:oak_planks"
+      ]
     },
     {
       "resource_id": "gm4_balloon_animals:build/populate_showcase",

@@ -16,6 +16,15 @@ async def ai_react_to_world(request: Request, world_state: dict):
     AI 返回 decision.option -> 推进剧情
     """
     story_engine = request.app.state.story_engine  # ✅ 从 app.state 取引擎
+    player_id = str(world_state.get("player_id") or world_state.get("player") or "default")
+    runtime_mode = story_engine.get_runtime_mode(player_id)
+    if runtime_mode != story_engine.MODE_PERSONAL:
+        return JSONResponse(content={
+            "triggered": False,
+            "player_id": player_id,
+            "mode": runtime_mode,
+            "reason": "ai_story_disabled_outside_personal_mode",
+        })
 
     # 1) 发给 AI
     try:
@@ -37,8 +46,15 @@ async def ai_react_to_world(request: Request, world_state: dict):
         next_node = story_engine.go_next(int(option))
         return JSONResponse(content={
             "triggered": True,
+            "player_id": player_id,
+            "mode": runtime_mode,
             "option": option,
             "node": next_node
         })
 
-    return JSONResponse(content={"triggered": False, "reason": "no option returned"})
+    return JSONResponse(content={
+        "triggered": False,
+        "player_id": player_id,
+        "mode": runtime_mode,
+        "reason": "no option returned",
+    })

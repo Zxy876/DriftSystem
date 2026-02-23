@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Dict, List, Optional, Literal
 
 from fastapi import APIRouter, HTTPException
@@ -29,6 +30,11 @@ class IntentRecognizeResponse(BaseModel):
 
 
 router = APIRouter(prefix="/intent", tags=["Intent"])
+
+
+def _scene_only_build_enabled() -> bool:
+    raw = os.environ.get("DRIFT_SCENE_REALIZATION_ONLY", "1")
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 @router.post("/recognize", response_model=IntentRecognizeResponse)
@@ -102,6 +108,7 @@ class CreationPlanResponse(BaseModel):
     unsafe_steps: List[str] = Field(default_factory=list)
     safety_assessment: Dict[str, object] = Field(default_factory=dict)
     snapshot_generated_at: Optional[str] = None
+    semantic_candidates: List[Dict[str, object]] = Field(default_factory=list)
 
 
 class CreationExecuteRequest(BaseModel):
@@ -111,7 +118,7 @@ class CreationExecuteRequest(BaseModel):
 
 
 class CreationExecuteResponse(BaseModel):
-    status: Literal["ok", "not_creation", "dry_run"]
+    status: Literal["ok", "not_creation", "dry_run", "blocked"]
     decision: Dict[str, object]
     plan: Optional[CreationPlanResponse] = None
     report: Optional[Dict[str, object]] = None
@@ -119,6 +126,15 @@ class CreationExecuteResponse(BaseModel):
 
 @router.post("/plan", response_model=CreationPlanResponse)
 def generate_creation_plan(payload: IntentRecognizeRequest) -> CreationPlanResponse:
+    if _scene_only_build_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "status": "blocked",
+                "reason": "legacy_creation_api_disabled_use_scene_realize",
+            },
+        )
+
     decision = creation_workflow.classify_message(payload.message)
     plan_result: CreationPlanResult = creation_workflow.generate_plan(decision, message=payload.message)
     plan_payload = plan_result.plan.to_payload()
@@ -174,6 +190,17 @@ def _sanitize_patch_prefix(player_id: Optional[str]) -> Optional[str]:
 
 @router.post("/execute", response_model=CreationExecuteResponse)
 def execute_creation_plan(payload: CreationExecuteRequest) -> CreationExecuteResponse:
+    if _scene_only_build_enabled():
+        return CreationExecuteResponse(
+            status="blocked",
+            decision={
+                "legacy": True,
+                "reason": "legacy_creation_api_disabled_use_scene_realize",
+            },
+            plan=None,
+            report=None,
+        )
+
     patch_prefix = _sanitize_patch_prefix(payload.player_id)
 
     try:

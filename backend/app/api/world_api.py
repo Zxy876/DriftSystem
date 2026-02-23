@@ -13,6 +13,7 @@ from app.core.quest.runtime import quest_runtime
 from app.core.intent_creation import CreationIntentDecision
 from app.services import creation_workflow
 BLOCK_KEYWORDS = {"方块", "方塊", "blocks", "block"}
+FORCED_CREATION_KEYWORDS = ("放一个", "在我面前", "放", "建")
 
 
 def _summarize_commands(commands: Iterable[str]) -> List[Dict[str, Any]]:
@@ -73,6 +74,28 @@ def _looks_like_block_request(message: Optional[str], decision: Optional[Creatio
             return True
     return False
 
+
+def _should_force_creation(message: Optional[str]) -> bool:
+    if not message:
+        return False
+    text = message.strip()
+    if not text:
+        return False
+    return any(keyword in text for keyword in FORCED_CREATION_KEYWORDS)
+
+
+def _p4_debug_enabled() -> bool:
+    flag = os.environ.get("DRIFT_P4_DEBUG_MODE")
+    if flag is None:
+        return False
+    return flag.strip().lower() in {"1", "true", "on", "yes", "debug"}
+
+
+def _scene_only_build_enabled() -> bool:
+    raw = os.environ.get("DRIFT_SCENE_REALIZATION_ONLY", "1")
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 router = APIRouter(prefix="/world", tags=["World"])
 world_engine = WorldEngine()
 logger = logging.getLogger("uvicorn.error")
@@ -131,7 +154,7 @@ class RuleTriggerEvent(BaseModel):
 def apply_action(inp: ApplyInput):
 
     player_id = inp.player_id
-    act = inp.action.dict(exclude_none=True)
+    act = inp.action.model_dump(exclude_none=True)
 
     # 1) 世界物理更新
     new_state = world_engine.apply(act)
@@ -142,7 +165,14 @@ def apply_action(inp: ApplyInput):
 
     # 2) 文本 → 意图解析
     say_text = act.get("say")
-    intent_result = parse_intent(player_id, say_text, new_state, story_engine) if say_text else None
+    runtime_mode = story_engine.get_runtime_mode(player_id)
+    story_ai_enabled = runtime_mode == story_engine.MODE_PERSONAL
+    creation_decision: Optional[CreationIntentDecision] = None
+    intent_result = None
+    if say_text and story_ai_enabled:
+        if not _scene_only_build_enabled():
+            creation_decision = creation_workflow.classify_message(say_text)
+        intent_result = parse_intent(player_id, say_text, new_state, story_engine)
     
     # 提取第一个 intent（如果有多个，这里只处理第一个）
     intent = None
@@ -153,12 +183,17 @@ def apply_action(inp: ApplyInput):
     creation_report = None
     creation_world_patch: Optional[Dict[str, Any]] = None
     block_story_world_patch = False
-    creation_decision: Optional[CreationIntentDecision] = None
+    creation_plan_result = None
     primary_intent_type = intent.get("type") if isinstance(intent, dict) else None
     redirected_to_block = False
+    forced_by_p4_rule = False
+    semantic_candidates_for_debug: List[Dict[str, Any]] = []
+    observability_blocked_reason: Optional[str] = None
+    auto_execute_available: Optional[bool] = None
+    p4_debug_mode = _p4_debug_enabled()
+    should_auto_execute = False
 
-    if say_text:
-        creation_decision = creation_workflow.classify_message(say_text)
+    if say_text and creation_decision is not None:
         logger.info(
             "creation_intent_classified",
             extra={
@@ -167,6 +202,18 @@ def apply_action(inp: ApplyInput):
                 "creation": creation_decision.model_dump(),
             },
         )
+
+        if _should_force_creation(say_text) and not creation_decision.is_creation:
+            creation_decision.is_creation = True
+            try:
+                creation_decision.reasons.append("forced_by_p4_rule")
+            except AttributeError:
+                pass
+            forced_by_p4_rule = True
+            logger.info(
+                "creation_forced_by_p4_rule",
+                extra={"player_id": player_id, "raw_text": say_text},
+            )
 
         looks_like_block = _looks_like_block_request(say_text, creation_decision)
 
@@ -189,22 +236,57 @@ def apply_action(inp: ApplyInput):
                 primary_intent_type = "CREATE_BLOCK"
                 redirected_to_block = True
 
-        should_auto_execute = creation_decision.is_creation and primary_intent_type in (
-            None,
-            "SAY_ONLY",
-            "BUILD_STRUCTURE",
-            "CREATE_BLOCK",
-            "CREATE_BUILD",
+        if creation_decision.is_creation:
+            try:
+                creation_plan_result = creation_workflow.generate_plan(creation_decision, message=say_text)
+                plan_payload = creation_plan_result.plan.to_payload()
+                plan_payload["snapshot_generated_at"] = creation_plan_result.snapshot_generated_at
+                plan_payload["semantic_candidates"] = [
+                    dict(candidate) for candidate in creation_plan_result.semantic_candidates
+                ]
+                semantic_candidates_for_debug = [dict(candidate) for candidate in creation_plan_result.semantic_candidates]
+                creation_result = {
+                    "status": "validated",
+                    "auto_execute": False,
+                    "decision": creation_decision.model_dump(),
+                    "plan": plan_payload,
+                }
+            except Exception as exc:  # pragma: no cover - defensive path
+                logger.exception(
+                    "creation_plan_generation_failed",
+                    extra={"player_id": player_id, "message": say_text},
+                )
+                observability_blocked_reason = "plan_generation_failed"
+                creation_result = {
+                    "status": "error",
+                    "error": str(exc),
+                    "decision": creation_decision.model_dump(),
+                }
+
+        should_auto_execute = (
+            creation_decision.is_creation
+            and primary_intent_type in (
+                None,
+                "SAY_ONLY",
+                "BUILD_STRUCTURE",
+                "CREATE_BLOCK",
+                "CREATE_BUILD",
+            )
         )
 
-        if should_auto_execute:
+        if should_auto_execute and creation_plan_result is not None:
             try:
-                plan_result = creation_workflow.generate_plan(creation_decision, message=say_text)
-                report = creation_workflow.auto_execute_plan(plan_result.plan)
+                report = creation_workflow.auto_execute_plan(creation_plan_result.plan)
                 creation_report = report
-                plan_payload = plan_result.plan.to_payload()
-                plan_payload["snapshot_generated_at"] = plan_result.snapshot_generated_at
+                plan_payload = creation_result.get("plan") if creation_result else {}
+                if isinstance(plan_payload, dict):
+                    plan_payload.setdefault("snapshot_generated_at", creation_plan_result.snapshot_generated_at)
+                    plan_payload.setdefault(
+                        "semantic_candidates",
+                        [dict(candidate) for candidate in creation_plan_result.semantic_candidates],
+                    )
                 auto_enabled = creation_workflow.auto_execute_enabled()
+                auto_execute_available = auto_enabled
                 creation_result = {
                     "status": "ok" if auto_enabled else "validated",
                     "auto_execute": auto_enabled,
@@ -218,6 +300,8 @@ def apply_action(inp: ApplyInput):
                     "creation_auto_execute_failed",
                     extra={"player_id": player_id, "message": say_text},
                 )
+                auto_execute_available = auto_execute_available if auto_execute_available is not None else creation_workflow.auto_execute_enabled()
+                observability_blocked_reason = "auto_execute_exception"
                 creation_result = {
                     "status": "error",
                     "error": str(exc),
@@ -226,18 +310,77 @@ def apply_action(inp: ApplyInput):
 
     if (
         creation_result
-        and primary_intent_type in {"CREATE_BLOCK", "CREATE_BUILD"}
+        and creation_decision is not None
+        and creation_decision.is_creation
         and str(creation_result.get("status")) in {"validated", "ok"}
     ):
         block_story_world_patch = True
         if creation_world_patch is None and creation_report is not None:
             creation_world_patch = creation_workflow.world_patch_from_report(creation_report)
 
+    if creation_decision is not None and creation_decision.is_creation:
+        if creation_plan_result is None and observability_blocked_reason is None:
+            observability_blocked_reason = "plan_missing"
+        if should_auto_execute:
+            if auto_execute_available is False and observability_blocked_reason is None:
+                observability_blocked_reason = "auto_execute_disabled"
+            if creation_result and creation_result.get("status") == "validated" and observability_blocked_reason is None:
+                observability_blocked_reason = "manual_review_required"
+            if creation_result and creation_result.get("status") == "error" and observability_blocked_reason is None:
+                observability_blocked_reason = "execution_error"
+        else:
+            if observability_blocked_reason is None and creation_plan_result is not None:
+                observability_blocked_reason = "auto_execute_gate"
+
+    if p4_debug_mode and creation_decision is not None:
+        logger.info(
+            "creation_p4_debug_snapshot",
+            extra={
+                "player_id": player_id,
+                "blocked_reason": observability_blocked_reason or "none",
+                "semantic_candidates_count": len(semantic_candidates_for_debug),
+                "forced_by_p4_rule": forced_by_p4_rule,
+                "redirected_to_block": redirected_to_block,
+                "auto_execute_requested": bool(creation_decision.is_creation and should_auto_execute),
+                "auto_execute_available": auto_execute_available,
+                "creation_status": creation_result.get("status") if creation_result else None,
+            },
+        )
+        if creation_result is not None:
+            debug_payload = {
+                "forced_by_p4_rule": forced_by_p4_rule,
+                "redirected_to_block": redirected_to_block,
+                "primary_intent": primary_intent_type,
+                "blocked_reason": observability_blocked_reason,
+                "semantic_candidates": semantic_candidates_for_debug,
+                "auto_execute": {
+                    "requested": bool(creation_decision.is_creation and should_auto_execute),
+                    "available": auto_execute_available,
+                    "status": creation_result.get("status"),
+                },
+            }
+            creation_result.setdefault("debug_observability", debug_payload)
+
     # ============================================================
     # ⭐ 白名单世界指令（不走剧情）
     # ============================================================
     if intent:
         t = intent["type"]
+
+        if _scene_only_build_enabled() and t in {"BUILD_STRUCTURE", "CREATE_BLOCK", "CREATE_BUILD", "CREATE_STORY"}:
+            return WorldApplyResponse(
+                status="blocked",
+                world_state=new_state,
+                story_node={
+                    "title": "Legacy Build Path Blocked",
+                    "text": "文本/narrative 建造入口已禁用，请使用 /scene/realize。",
+                },
+                creation_result={
+                    "status": "blocked",
+                    "legacy": True,
+                    "reason": "legacy_creation_api_disabled_use_scene_realize",
+                },
+            )
 
         # ---------- 创建故事关卡（AI生成完整世界） ----------
         if t == "CREATE_STORY":
@@ -364,6 +507,17 @@ def apply_action(inp: ApplyInput):
     # ============================================================
     # ⭐ 剧情推进（只要说话一定触发）
     # ============================================================
+    if say_text and not story_ai_enabled:
+        return WorldApplyResponse(
+            status="ok",
+            world_state=new_state,
+            story_node={
+                "title": "Mode Locked",
+                "text": f"当前为 {runtime_mode} 模式，已禁用 AI 回复与剧情推进。",
+            },
+            creation_result=creation_result,
+        )
+
     if say_text:
         option, node, patch = story_engine.advance(player_id, new_state, act)
         final_patch = creation_world_patch if block_story_world_patch else patch
@@ -468,10 +622,12 @@ def story_enter(request: EnterStoryRequest):
     patch = None
     if target_level:
         patch = story_engine.load_level_for_player(request.player_id, target_level)
+    story_engine.set_runtime_mode(request.player_id, story_engine.MODE_PERSONAL)
     logger.info("story_enter", extra={"player_id": request.player_id, "level_id": target_level})
     return {
         "status": "ok",
         "level_id": target_level,
+        "mode": story_engine.get_runtime_mode(request.player_id),
         "world_patch": patch,
     }
 
@@ -488,6 +644,7 @@ def story_start(request: EnterStoryRequest):
     patch = None
     if preferred_level:
         patch = story_engine.load_level_for_player(request.player_id, preferred_level)
+    story_engine.set_runtime_mode(request.player_id, story_engine.MODE_PERSONAL)
 
     logger.info(
         "story_start",
@@ -497,6 +654,7 @@ def story_start(request: EnterStoryRequest):
     return {
         "status": "ok",
         "level_id": preferred_level,
+        "mode": story_engine.get_runtime_mode(request.player_id),
         "world_patch": patch,
     }
 
@@ -510,9 +668,11 @@ def story_end(request: EndStoryRequest):
         cleanup_patch = story_engine.exit_level_with_cleanup(request.player_id, level)
     else:
         quest_runtime.exit_level(request.player_id)
+    story_engine.set_runtime_mode(request.player_id, story_engine.MODE_SHARED)
     logger.info("story_end", extra={"player_id": request.player_id, "level_id": getattr(level, "level_id", None)})
     return {
         "status": "ok",
+        "mode": story_engine.get_runtime_mode(request.player_id),
         "world_patch": cleanup_patch,
     }
 

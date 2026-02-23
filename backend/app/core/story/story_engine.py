@@ -287,6 +287,11 @@ CINEMATIC_LIBRARY: Dict[str, Dict[str, Any]] = {
 
 
 class StoryEngine:
+    MODE_SHARED = "shared"
+    MODE_PERSONAL = "personal"
+    MODE_RETURN = "return"
+    ALLOWED_RUNTIME_MODES = {MODE_SHARED, MODE_PERSONAL, MODE_RETURN}
+
     DEFAULT_EXIT_ALIASES = ["结束剧情", "离开关卡", "退出剧情", "退出", "leave", "exit"]
     DEFAULT_RETURN_SPAWNS: Dict[str, Dict[str, Any]] = {
         "KunmingLakeHub": {
@@ -495,9 +500,32 @@ class StoryEngine:
                 if player_id in self.players and self.players[player_id].get("level")
                 else None
             ),
+            "runtime_mode": self.get_runtime_mode(player_id) if player_id else self.MODE_SHARED,
             "exit_profile": self.get_exit_profile(player_id) if player_id else None,
             "current_exhibit": self._clone_exhibit_payload(player_state.get("current_exhibit")) if player_id else None,
         }
+
+    def set_runtime_mode(self, player_id: str, mode: str) -> str:
+        self._ensure_player(player_id)
+        normalized = (mode or "").strip().lower()
+        if normalized not in self.ALLOWED_RUNTIME_MODES:
+            raise ValueError(f"Unsupported runtime mode: {mode}")
+        self.players[player_id]["runtime_mode"] = normalized
+        return normalized
+
+    def get_runtime_mode(self, player_id: Optional[str]) -> str:
+        if not player_id:
+            return self.MODE_SHARED
+        state = self.players.get(player_id)
+        if not isinstance(state, dict):
+            return self.MODE_SHARED
+        mode = str(state.get("runtime_mode") or self.MODE_SHARED).strip().lower()
+        if mode in self.ALLOWED_RUNTIME_MODES:
+            return mode
+        return self.MODE_SHARED
+
+    def is_personal_mode(self, player_id: Optional[str]) -> bool:
+        return self.get_runtime_mode(player_id) == self.MODE_PERSONAL
 
     def get_exit_profile(self, player_id: str) -> Optional[Dict[str, Any]]:
         profile = self.players.get(player_id, {}).get("exit_profile")
@@ -514,6 +542,7 @@ class StoryEngine:
                 "level_loaded": False,
                 "tree_state": None,
                 "ended": False,
+                "runtime_mode": self.MODE_SHARED,
                 "last_time": 0.0,
                 "last_say_time": 0.0,
                 "memory_flags": set(),

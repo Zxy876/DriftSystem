@@ -16,6 +16,9 @@ from app.routers.minimap import router as minimap_router
 from app.api.minimap_api import router as minimap_png_router
 from app.api.ideal_city_api import router as ideal_city_router
 from app.api.intent_api import router as intent_router
+from app.api.level_api import router as level_router
+from app.api.director_intent_api import router as director_intent_router
+from app.routers.scene import router as scene_router
 
 # Core
 from app.core.story.story_loader import list_levels, load_level
@@ -55,6 +58,9 @@ app.include_router(tutorial_router,    tags=["Tutorial"])
 app.include_router(ai_router.router,   tags=["AI"])
 app.include_router(minimap_router,     tags=["MiniMap"])
 app.include_router(minimap_png_router, tags=["MiniMapPNG"])
+app.include_router(level_router,       tags=["Level"])
+app.include_router(director_intent_router, tags=["DirectorIntent"])
+app.include_router(scene_router, tags=["Scene"])
 
 
 # -----------------------------
@@ -95,6 +101,7 @@ def home():
             "/story/*",
             "/world/*",
             "/intent/*",
+            "/scene/*",
             "/ai/*",
             "/minimap/*",
             "/minimap/png/*",

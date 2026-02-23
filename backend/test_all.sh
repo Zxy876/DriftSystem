@@ -3,6 +3,16 @@ echo "======================================="
 echo "     DriftSystem 0-1 Testing Tool"
 echo "======================================="
 
+echo "--- v1.18 Comment Contract ---"
+python3 tools/validate_v118_comments.py || exit 1
+
+echo "--- Semantic Alias Coverage (P3-1) ---"
+python3 tools/measure_semantic_alias_coverage.py || exit 1
+python3 -m pytest test_semantic_alias_coverage_gate.py || exit 1
+
+echo "--- Drift Resource Guardrails (P3-2) ---"
+python3 -m pytest test_drift_resource_catalog_guardrails.py -q || exit 1
+
 BASE="http://127.0.0.1:8000"
 
 echo "--- Test: Add Node ---"
