@@ -1,0 +1,45 @@
+{
+  "scene_id": "example_memory_scene",
+  "description": "Example memory scene: a quiet altar space evoking a personal memory.",
+  "location": {
+    "world": "minecraft:overworld",
+    "x": 0,
+    "y": 64,
+    "z": 0
+  },
+  "assets_used": [
+    {
+      "resource_id": "drift:altar_frame",
+      "label": "Drift Altar Frame",
+      "quantity": 1
+    },
+    {
+      "resource_id": "minecraft:soul_lantern",
+      "label": "Soul Lantern",
+      "quantity": 4
+    },
+    {
+      "resource_id": "minecraft:amethyst_block",
+      "label": "Amethyst Block",
+      "quantity": 8
+    }
+  ],
+  "plan_sequence": [
+    {
+      "order": 1,
+      "plan_file": "example_plan.json",
+      "description": "Clear area and lay base platform"
+    },
+    {
+      "order": 2,
+      "plan_file": null,
+      "description": "Place altar frame at scene origin (requires commands in drift:altar_frame resource)"
+    },
+    {
+      "order": 3,
+      "plan_file": null,
+      "description": "Surround with soul lanterns and amethyst accents"
+    }
+  ],
+  "_note": "plan_file paths are relative to backend/data/scenes/. null entries indicate resources still missing build commands."
+}
