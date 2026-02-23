@@ -1,0 +1,57 @@
+{
+  "action": "build",
+  "confidence": 0.9,
+  "summary": "example memory scene: soul lantern placement",
+  "execution_tier": "safe_auto",
+  "materials": [
+    {
+      "token": "soul lantern",
+      "resource_id": "minecraft:soul_lantern",
+      "label": "Soul Lantern",
+      "status": "resolved",
+      "confidence": 1.0,
+      "quantity": 4,
+      "tags": ["lighting"]
+    }
+  ],
+  "patch_templates": [
+    {
+      "step_id": "step-1",
+      "template_id": "minecraft:soul_lantern::default",
+      "status": "resolved",
+      "summary": "Place soul lanterns around scene origin",
+      "step_type": "block_placement",
+      "world_patch": {
+        "mc": {
+          "commands": [
+            "setblock 1 64 0 minecraft:soul_lantern",
+            "setblock -1 64 0 minecraft:soul_lantern",
+            "setblock 0 64 1 minecraft:soul_lantern",
+            "setblock 0 64 -1 minecraft:soul_lantern"
+          ]
+        },
+        "metadata": {
+          "resource_id": "minecraft:soul_lantern",
+          "material": {
+            "token": "soul lantern",
+            "label": "Soul Lantern",
+            "quantity": 4
+          }
+        }
+      },
+      "mod_hooks": [],
+      "requires_player_pose": false,
+      "notes": [],
+      "tags": ["lighting"],
+      "validation": {
+        "errors": [],
+        "warnings": [],
+        "execution_tier": "safe_auto",
+        "missing_fields": [],
+        "unsafe_placeholders": []
+      }
+    }
+  ],
+  "notes": [],
+  "steps": []
+}
