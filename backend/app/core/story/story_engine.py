@@ -1667,7 +1667,19 @@ class StoryEngine:
             if buffered:
                 ai_result = buffered.pop(0)
             else:
-                ai_result = deepseek_decide(ai_input, p["messages"])
+                try:
+                    ai_result = deepseek_decide(ai_input, p["messages"])
+                except Exception:
+                    if not self._ai_fail_open_enabled():
+                        raise
+                    ai_result = {
+                        "option": None,
+                        "node": {
+                            "title": "创造之城 · 降级叙事",
+                            "text": "叙事模型暂时不可用，系统已切换到安全文本继续推进。",
+                        },
+                        "world_patch": {"variables": {}, "mc": {}},
+                    }
 
             try:
                 self.prebuffer_story_beats(player_id, count=3)

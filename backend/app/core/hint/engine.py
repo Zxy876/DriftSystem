@@ -1,26 +1,16 @@
 import os
 import json
 import requests
-from openai import OpenAI
 from dotenv import load_dotenv
+
+from app.core.ai.deepseek_agent import call_deepseek
 
 load_dotenv()
 
 class HintEngine:
     def __init__(self, tree_engine):
         self.tree_engine = tree_engine
-        
-        api_key = os.getenv("OPENAI_API_KEY")
-        base_url = os.getenv("OPENAI_BASE_URL")
-        model = os.getenv("OPENAI_MODEL")
-
-        if not api_key:
-            raise ValueError("❌ OPENAI_API_KEY 未设置")
-        if not base_url:
-            raise ValueError("❌ OPENAI_BASE_URL 未设置")
-
-        self.model = model
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.model = os.getenv("PRIMARY_MODEL") or os.getenv("OPENAI_MODEL") or "deepseek-chat"
 
     # ---------------------------------------------------------
     # 清理 AI JSON 字符串
@@ -73,22 +63,30 @@ class HintEngine:
 
         # 调用模型
         try:
-            resp = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}]
+            ai_result = call_deepseek(
+                context={
+                    "type": "hint_generation",
+                    "model": self.model,
+                },
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                response_format={"type": "json_object"},
             )
-            msg = resp.choices[0].message.content.strip()
+
+            parsed = ai_result.get("parsed")
+            if isinstance(parsed, dict):
+                result = parsed
+            else:
+                msg = self.clean_json_string(str(ai_result.get("response") or ""))
+                result = json.loads(msg)
         except Exception as e:
-            return {"error": f"AI 调用失败：{e}"}
-
-        # 清理 JSON
-        msg = self.clean_json_string(msg)
-
-        # 解析 JSON
-        try:
-            result = json.loads(msg)
-        except Exception:
-            return {"error": "AI 返回了非法 JSON", "raw": msg}
+            result = {
+                "summary": "AI 暂不可用，已切换为安全提示。",
+                "reasoning": "保持当前状态并继续推进，不阻断主流程。",
+                "action": None,
+                "fallback": True,
+                "error": str(e),
+            }
 
         # ---------------------------------------------------------
         # 自动修复 action.value（字符串 → 数字）

@@ -4,7 +4,8 @@ import json
 import os
 import re
 from typing import Any, Dict, Optional, List
-import requests
+
+from app.core.ai.deepseek_agent import call_deepseek
 
 API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY", "")
 BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
@@ -69,30 +70,34 @@ def normalize_level(text: str) -> Optional[str]:
 # ============================================================
 # AI 多意图解析
 # ============================================================
-def ai_parse_multi(text: str) -> Optional[List[Dict[str, Any]]]:
+def ai_parse_multi(text: str, player_id: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
     if not API_KEY:
         return None
-
-    payload = {
-        "model": MODEL,
-        "messages": [
-            {"role": "system", "content": INTENT_PROMPT},
-            {"role": "user", "content": text},
-        ],
-        "temperature": 0.2,
-        "response_format": {"type": "json_object"},
-    }
-
     try:
-        resp = requests.post(
-            f"{BASE_URL}/chat/completions",
-            headers={"Authorization": f"Bearer {API_KEY}",
-                     "Content-Type": "application/json"},
-            json=payload,
-            timeout=12,
-        ).json()
-
-        data = json.loads(resp["choices"][0]["message"]["content"])
+        result = call_deepseek(
+            context={
+                "type": "intent_parse",
+                "player_id": player_id or "default",
+                "primary_model": MODEL,
+                "base_url": BASE_URL,
+            },
+            messages=[
+                {"role": "system", "content": INTENT_PROMPT},
+                {"role": "user", "content": text},
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"},
+        )
+        data = result.get("parsed")
+        if data is None:
+            raw_text = str(result.get("response") or "")
+            if not raw_text:
+                return None
+            data = json.loads(raw_text)
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        if not isinstance(data, dict):
+            return None
         return data.get("intents", [])
     except Exception as e:
         print("[intent_engine] AI multi-intent failed:", e)
@@ -185,6 +190,13 @@ def _looks_like_block_request(text: str) -> bool:
 
 
 def parse_intent(player_id, text, world_state, story_engine):
+    runtime_mode = None
+    if story_engine is not None:
+        try:
+            runtime_mode = story_engine.get_runtime_mode(player_id)
+        except Exception:
+            runtime_mode = None
+
     if _looks_like_ideal_city_request(text.strip()):
         intents = [{
             "type": "IDEAL_CITY_SUBMIT",
@@ -192,7 +204,9 @@ def parse_intent(player_id, text, world_state, story_engine):
             "narrative": text.strip(),
         }]
     else:
-        ai_list = ai_parse_multi(text)
+        ai_list = None
+        if runtime_mode == getattr(story_engine, "MODE_PERSONAL", "personal"):
+            ai_list = ai_parse_multi(text, player_id=player_id)
         intents = ai_list if ai_list else fallback_intents(text)
 
     # 修正 level 格式

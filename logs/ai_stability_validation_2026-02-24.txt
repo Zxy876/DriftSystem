@@ -1,0 +1,27 @@
+.........................                                                [100%]
+=============================== warnings summary ===============================
+test_director_intent_api.py::test_level_intent_dry_run
+test_director_intent_api.py::test_level_intent_dry_run
+test_director_intent_api.py::test_level_intent_invalid_transition
+test_director_intent_api.py::test_level_intent_invalid_transition
+  /Users/zxydediannao/DRIFT_SCIENCELINE/backend/app/levels/level_session.py:51: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow().isoformat()
+
+test_director_intent_api.py::test_build_intent_and_apply
+  /Users/zxydediannao/DRIFT_SCIENCELINE/backend/app/api/director_intent_api.py:176: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at = datetime.utcnow().isoformat() + "Z"
+
+test_director_intent_api.py::test_build_intent_and_apply
+  /Users/zxydediannao/DRIFT_SCIENCELINE/backend/app/api/director_intent_api.py:212: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    fh.write(f"[end] code={result.returncode} at {datetime.utcnow().isoformat()+'Z'}\n")
+
+test_director_intent_api.py::test_build_intent_and_apply
+  /Users/zxydediannao/DRIFT_SCIENCELINE/backend/app/api/director_intent_api.py:217: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "ended_at": datetime.utcnow().isoformat() + "Z",
+
+test_director_intent_api.py::test_build_intent_and_apply
+  /Users/zxydediannao/DRIFT_SCIENCELINE/backend/app/api/director_intent_api.py:50: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "ts": datetime.utcnow().isoformat() + "Z",
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+25 passed, 8 warnings in 0.88s
