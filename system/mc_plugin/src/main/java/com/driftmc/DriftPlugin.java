@@ -96,8 +96,8 @@ public class DriftPlugin extends JavaPlugin {
         // 后端地址优先级：环境变量 > config.yml > localhost
         String envUrl = System.getenv("DRIFT_BACKEND_URL");
         String url = (envUrl != null && !envUrl.isBlank())
-            ? envUrl
-            : getConfig().getString("backend_url");
+                ? envUrl
+                : getConfig().getString("backend_url");
         if (url == null || url.isBlank()) {
             url = "http://127.0.0.1:8000";
         }
@@ -149,7 +149,8 @@ public class DriftPlugin extends JavaPlugin {
         IdealCityCommand idealCityCommand = new IdealCityCommand(this, backend);
         this.intentDispatcher2.setIdealCityCommand(idealCityCommand);
         if (!allowStoryCreation) {
-            getLogger().info("[DriftPlugin] Story creation via natural language is disabled (world.allow_story_creation = false).");
+            getLogger().info(
+                    "[DriftPlugin] Story creation via natural language is disabled (world.allow_story_creation = false).");
         }
         CityPhoneLocalization.init(this);
         this.cityPhoneManager = new CityPhoneManager(this, backend);
