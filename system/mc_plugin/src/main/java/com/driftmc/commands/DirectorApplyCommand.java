@@ -166,8 +166,10 @@ public class DirectorApplyCommand implements CommandExecutor {
         if (map == null) {
             return;
         }
-        String taskId = String.valueOf(map.getOrDefault("task_id", "?"));
-        String blueprint = String.valueOf(map.getOrDefault("blueprint_id", "?"));
+        Object taskIdObj = map.containsKey("task_id") ? map.get("task_id") : "?";
+        Object blueprintObj = map.containsKey("blueprint_id") ? map.get("blueprint_id") : "?";
+        String taskId = String.valueOf(taskIdObj);
+        String blueprint = String.valueOf(blueprintObj);
         Object originObj = map.get("origin");
         String origin = originObj != null ? originObj.toString() : "{}";
         String startMsg = ChatColor.AQUA + "[建造开始] task=" + taskId + " blueprint=" + blueprint + " origin=" + origin
@@ -176,7 +178,8 @@ public class DirectorApplyCommand implements CommandExecutor {
     }
 
     private void broadcastEnd(Map<?, ?> map) {
-        String taskId = String.valueOf(map.getOrDefault("task_id", "?"));
+        Object taskIdObj = map.containsKey("task_id") ? map.get("task_id") : "?";
+        String taskId = String.valueOf(taskIdObj);
         boolean failed = "failed".equals(map.get("status"));
         String endMsg = (failed ? ChatColor.RED : ChatColor.GREEN) + "[建造结束] task=" + taskId + " status="
                 + map.get("status") + " exit=" + map.get("exit_code");
