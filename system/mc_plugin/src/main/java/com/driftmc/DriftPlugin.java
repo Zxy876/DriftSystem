@@ -93,8 +93,11 @@ public class DriftPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
 
-        // 从 config.yml 读取后端地址
-        String url = getConfig().getString("backend_url");
+        // 后端地址优先级：环境变量 > config.yml > localhost
+        String envUrl = System.getenv("DRIFT_BACKEND_URL");
+        String url = (envUrl != null && !envUrl.isBlank())
+            ? envUrl
+            : getConfig().getString("backend_url");
         if (url == null || url.isBlank()) {
             url = "http://127.0.0.1:8000";
         }

@@ -3,7 +3,7 @@
 # =========================================
 
 # 后端服务配置
-backend_url: "http://127.0.0.1:8000"
+backend_url: "https://driftsystem-production.up.railway.app"
 
 # 系统设置
 system:
