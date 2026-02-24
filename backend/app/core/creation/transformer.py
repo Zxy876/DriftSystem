@@ -133,10 +133,12 @@ class CreationPlanResult:
 
     plan: CreationPlan
     snapshot_generated_at: Optional[str]
+    semantic_candidates: List[Dict[str, object]] = field(default_factory=list)
 
     def to_payload(self) -> Dict[str, object]:
         payload = self.plan.to_payload()
         payload["snapshot_generated_at"] = self.snapshot_generated_at
+        payload["semantic_candidates"] = [dict(candidate) for candidate in self.semantic_candidates]
         return payload
 
 

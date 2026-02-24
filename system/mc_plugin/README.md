@@ -188,6 +188,20 @@ world:
 - 使用 `/drift debug` 查看实时状态
 - 检查后端日志了解AI解析结果
 
+### ActorController 手动验证（v1.21）
+- 角色：仅消费导演下发的演员动作（say/emote/look/turn/walk_to），不做方块/世界修改。
+- 触发：在后端执行
+  `curl -X POST http://127.0.0.1:8000/director/intents -H "Content-Type: application/json" -d '{"player_id":"director","raw_text":"actor actor_id=<玩家名或UUID> action=say line=hello","dry_run":false}'`
+  然后观察在线玩家是否按动作执行；动作队列可通过 `/director/actor/next` 消费。
+- 安全：所有动作在主线程落地，未找到演员或动作未知时仅记录日志，不修改世界。
+
+### 建造队安全执行（v1.21）
+- 提交流程：
+  1) `/directorinput build task_id=t1 blueprint_id=bp1 level_id=demo origin_x=0 origin_y=64 origin_z=0` （默认 dry-run，生成 pending 任务，不执行）。
+  2) 确认无误后，导演执行 `/director apply build t1` 触发 bridge.js 真实施工。
+- 权限：`drift.directorapply` 仅导演可用。
+- 蓝图：存放于 `backend/data/crew_blueprints/<id>.json`，actions 仅允许 setblock/clear/travel，对应 bridge.js。
+
 ## 依赖
 - Paper API 1.20.1
 - OkHttp 4.12.0

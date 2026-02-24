@@ -13,6 +13,16 @@ AUTO_BUILD_SCRIPT="$PROJECT_DIR/tools/auto_build.py"
 AUTO_BUILD_LOG="$PROJECT_DIR/logs/auto_build.log"
 AUTO_BUILD_PID="$PROJECT_DIR/auto_build.pid"
 
+# Bot auto-join settings
+AUTO_BOT=${AUTO_BOT:-1}
+BOT_TASK_FILE=${BOT_TASK_FILE:-/tmp/film_task.json}
+BOT_HOST=${BOT_HOST:-127.0.0.1}
+BOT_PORT=${BOT_PORT:-25565}
+BOT_USERNAME=${BOT_USERNAME:-crew_builder_01}
+BOT_VERSION=${BOT_VERSION:-1.20.1}
+BOT_TASK_LEVEL=${BOT_TASK_LEVEL:-staging_setdress_001}
+BOT_STAY_ONLINE=${BOT_STAY_ONLINE:-0}
+
 cd "$SERVER_DIR"
 
 # 清理上一轮遗留的 PID 和世界锁文件，避免 SessionLock 异常
@@ -26,6 +36,64 @@ if [ -f "server.pid" ]; then
 fi
 
 find world world_nether world_the_end -maxdepth 1 -name session.lock -exec rm -f {} + 2>/dev/null
+
+create_default_bot_task() {
+    if [ -f "$BOT_TASK_FILE" ]; then
+        return
+    fi
+    cat > "$BOT_TASK_FILE" <<'EOF'
+{
+  "task_id": "film-session-001",
+  "level_id": "BOT_TASK_LEVEL_PLACEHOLDER",
+  "assigned_to": "BOT_USERNAME_PLACEHOLDER",
+  "summary": "Camera bot idle at staging set",
+  "actions": [
+    {
+      "action": "travel",
+      "position": [1, 64, 1],
+      "note": "Move to spawn area for filming"
+    }
+  ]
+}
+EOF
+    # replace placeholders
+    python3 - "$BOT_TASK_LEVEL" "$BOT_USERNAME" "$BOT_TASK_FILE" <<'PY'
+import json, sys, pathlib
+level_id, username, path = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
+data = json.loads(path.read_text())
+data["level_id"] = level_id
+data["assigned_to"] = username
+path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+PY
+}
+
+wait_for_port() {
+    local host="$1" port="$2" retries=60
+    for i in $(seq 1 $retries); do
+        if nc -z "$host" "$port" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+launch_bot_async() {
+    (
+        echo "🤖 等待服务器端口 ${BOT_HOST}:${BOT_PORT} 就绪后自动拉起 bot..."
+        if wait_for_port "$BOT_HOST" "$BOT_PORT"; then
+            create_default_bot_task
+            echo "🤖 端口已就绪，启动 bot (task: $BOT_TASK_FILE)"
+            EXTRA_BOT_ARGS=()
+            if [ "$BOT_STAY_ONLINE" = "1" ]; then
+                EXTRA_BOT_ARGS+=("--stay-online")
+            fi
+            NODE_ENV=staging node "$PROJECT_DIR/system/taskcrew/bridge.js" --mode apply --task-file "$BOT_TASK_FILE" --mc-host "$BOT_HOST" --mc-port "$BOT_PORT" --username "$BOT_USERNAME" --version "$BOT_VERSION" "${EXTRA_BOT_ARGS[@]}" || echo "⚠️ bot 启动失败"
+        else
+            echo "⚠️ bot 未启动：等待端口超时"
+        fi
+    ) &
+}
 
 # 端口占用检测/清理
 MC_PORT=25565
@@ -174,4 +242,15 @@ else
     echo "⚠️ 未找到 $AUTO_BUILD_SCRIPT，跳过 auto_build watcher。"
 fi
 
-java -Xms2G -Xmx4G -jar "$JAR_FILE" nogui
+JAVA_FLAGS=(
+    "-Xms2G"
+    "-Xmx4G"
+    "-Dterminal.jline=false"
+    "-Dterminal.ansi=true"
+)
+
+if [ "$AUTO_BOT" = "1" ]; then
+    launch_bot_async
+fi
+
+java "${JAVA_FLAGS[@]}" -jar "$JAR_FILE" nogui

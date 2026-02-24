@@ -44,6 +44,7 @@ curl -s "http://127.0.0.1:8000/scene/execute-readiness?player_id=player_001"
   "allow_execute_flag": true,
   "rcon_available": true,
   "executor_ready": true,
+  "policy_allow_execute": true,
   "can_execute": true
 }
 ```

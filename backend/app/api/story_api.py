@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import os
 import json
 
@@ -12,6 +12,7 @@ from app.core.story.story_loader import (
     DATA_DIR,          # ⭐ 使用 story_loader 的同一个目录
 )
 from app.core.story.story_engine import story_engine
+from app.routers.scene import realize_scene
 
 router = APIRouter(prefix="/story")
 
@@ -54,6 +55,37 @@ class InjectPayload(BaseModel):
     level_id: str     # test_inject
     title: str        # 测试剧情
     text: str         # 单段剧情文本（自动转成 list）
+    player_id: Optional[str] = "default"
+    execute_confirm: bool = False
+
+
+def _build_default_scene(level_id: str, player_id: str) -> Dict[str, Any]:
+    scene_id = f"scene_{level_id}"
+    anchor = {"x": 1000, "y": 64, "z": 0}
+    return {
+        "scene_id": scene_id,
+        "player_id": player_id,
+        "mode": "personal",
+        "domain": "P1",
+        "anchor": anchor,
+        "assets": [
+            {
+                "resource_id": "drift:path_axis_1x1x15",
+                "anchor": dict(anchor),
+            }
+        ],
+    }
+
+
+def _realize_scene_from_level(scene_block: Dict[str, Any], *, execute_confirm: bool) -> Dict[str, Any]:
+    request_payload = dict(scene_block)
+    if execute_confirm:
+        request_payload["execute"] = True
+    else:
+        request_payload["execution_mode"] = "dry_run"
+
+    response = realize_scene(request_payload)
+    return response.model_dump() if hasattr(response, "model_dump") else dict(response)
 
 
 # ============================================================
@@ -138,6 +170,8 @@ def api_story_inject(payload: InjectPayload):
             status_code=400,
             detail=f"Level {level_id} already exists"
         )
+
+    player_id = (payload.player_id or "default").strip() or "default"
 
     # ⭐ 使用AI生成完整的世界内容（NPC、环境、建筑等）
     from app.core.ai.deepseek_agent import call_deepseek
@@ -224,6 +258,8 @@ def api_story_inject(payload: InjectPayload):
         }
 
     # ⭐ 生成兼容 Level 类的结构（全部字段完整）
+    scene_block = _build_default_scene(level_id, player_id)
+
     data = {
         "id": level_id,
         "title": payload.title,
@@ -234,15 +270,26 @@ def api_story_inject(payload: InjectPayload):
         "meta": {},
         "npcs": [],
         "bootstrap_patch": bootstrap_patch,
+        "scene": scene_block,
         "tree": None
     }
 
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+    scene_status = _realize_scene_from_level(scene_block, execute_confirm=payload.execute_confirm)
+
     return {
         "status": "ok",
         "msg": f"Level {level_id} created with AI-generated world",
         "file": file_path,
-        "world_preview": bootstrap_patch.get("mc", {})
+        "world_preview": bootstrap_patch.get("mc", {}),
+        "scene_status": scene_status,
+        "scene_request": {
+            "scene_id": scene_block.get("scene_id"),
+            "player_id": scene_block.get("player_id"),
+            "mode": scene_block.get("mode"),
+            "domain": scene_block.get("domain"),
+            "execution_mode": "execute" if payload.execute_confirm else "dry_run",
+        },
     }

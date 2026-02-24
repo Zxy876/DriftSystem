@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Any, Dict, Optional, List
 
 from app.core.ai.intent_engine import parse_intent
+from app.core.ai.deepseek_agent import get_quota_status
 from app.core.story.story_engine import story_engine
 
 router = APIRouter(prefix="/ai", tags=["AI"])
@@ -51,3 +52,8 @@ def ai_intent(req: IntentRequest):
         status=result["status"],
         intents=result["intents"]
     )
+
+
+@router.get("/quota-status")
+def ai_quota_status():
+    return get_quota_status()

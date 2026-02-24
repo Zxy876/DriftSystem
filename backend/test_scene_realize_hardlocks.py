@@ -272,12 +272,14 @@ def test_execute_readiness_reports_block_reasons(monkeypatch):
         "rcon_available",
         "executor_ready",
         "mode",
+        "policy_allow_execute",
         "can_execute",
         "reason",
     }
     assert body["allow_execute_flag"] is False
     assert body["rcon_available"] is False
     assert body["executor_ready"] is False
+    assert body["policy_allow_execute"] is False
     assert body["can_execute"] is False
     assert "flag_disabled" in body["reason"]
     assert "rcon_unavailable" in body["reason"]
@@ -298,6 +300,7 @@ def test_execute_readiness_can_execute_when_all_ready(monkeypatch):
     assert body["allow_execute_flag"] is True
     assert body["rcon_available"] is True
     assert body["executor_ready"] is True
+    assert body["policy_allow_execute"] is False
     assert body["can_execute"] is True
     assert body["reason"] == []
 

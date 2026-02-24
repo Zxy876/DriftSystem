@@ -8,3 +8,7 @@ chat:
 
   # 玩家说“/saytoai”也会调用 AI
   enableSayToAICommand: true
+
+world:
+  # 允许通过自然语言创建新剧情
+  allow_story_creation: true

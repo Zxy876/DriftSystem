@@ -9,6 +9,13 @@ echo "=============================="
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Load environment configuration if available so backend inherits OpenAI settings.
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
+
 # Ensure Python can resolve shared DriftSystem packages
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 if [ -n "${PYTHONPATH:-}" ]; then

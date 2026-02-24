@@ -68,6 +68,16 @@ commands:
     usage: "/planjump <plan_id>"
     permission: "drift.planjump"
 
+  directorinput:
+    description: "导演输入框指令入口（结构化，默认 dry-run）"
+    usage: "/directorinput <结构化指令>"
+    permission: "drift.directorinput"
+
+  director:
+    description: "导演建造指令：apply/status build <task_id>"
+    usage: "/director apply build <task_id> | /director status build <task_id>"
+    permission: "drift.directorapply"
+
   recommend:
     description: "显示 StoryGraph 推荐章节"
     usage: "/recommend"
@@ -99,4 +109,10 @@ permissions:
     default: op
   drift.planjump:
     description: "使用 planjump 命令"
+    default: op
+  drift.directorinput:
+    description: "提交导演输入框指令"
+    default: op
+  drift.directorapply:
+    description: "执行经过审批的建造任务"
     default: op

@@ -1,13 +1,17 @@
-from fastapi import APIRouter, HTTPException
 import json
+import os
 from pathlib import Path
 from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException, Request
 
 from pydantic import BaseModel, Field
 
 from app.core.story.story_loader import DATA_DIR, load_level
 from app.core.story.story_engine import story_engine
 from app.core.story.level_schema import ensure_level_extensions
+from app.levels.level_session import LevelSessionStore
+from app.instrumentation.director_audit import log_decision
 
 try:
     # Prefer loading from the top-level backend package when available (test contexts).
@@ -18,6 +22,16 @@ except ImportError:  # pragma: no cover - production runtime invoked from backen
 router = APIRouter()
 
 LEVEL_DIR = Path(DATA_DIR)
+LEVEL_SESSION_DB = Path(
+    os.environ.get("DRIFT_LEVEL_SESSION_DB", LEVEL_DIR / "sessions.db")
+)
+LEVEL_AUDIT_LOG = Path(os.environ.get("DRIFT_LEVEL_AUDIT_LOG", "backend/logs/level_audit.log"))
+
+
+def _append_audit(entry: dict) -> None:
+    LEVEL_AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+    with LEVEL_AUDIT_LOG.open("a", encoding="utf-8") as fp:
+        fp.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 class GenerateLevelRequest(BaseModel):
@@ -122,6 +136,48 @@ async def inject_story_level(level_id: str, title: str, text: str):
         "level_id": target_id,
         "path": str(filepath)
     }
+
+
+@router.post("/levels/{level_id}/transition")
+async def transition_level_state(level_id: str, target_state: str, request: Request, actor_id: Optional[str] = None):
+    """阶段迁移：IMPORTED → SET_DRESS → REHEARSE → TAKE。
+
+    权限：需要导演身份。若环境变量 DRIFT_DIRECTOR_TOKEN 存在，则要求请求头
+    `X-Director-Token` 匹配；否则默认允许（保持向后兼容）。
+    """
+
+    expected_token = os.environ.get("DRIFT_DIRECTOR_TOKEN")
+    if expected_token:
+        provided = request.headers.get("X-Director-Token")
+        if provided != expected_token:
+            raise HTTPException(status_code=403, detail="Director authorization required")
+
+    store = LevelSessionStore(LEVEL_SESSION_DB)
+    store.create_session(level_id)
+
+    try:
+        new_state = store.advance(level_id, target_state=target_state, actor_id=actor_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _append_audit(
+        {
+            "level_id": level_id,
+            "target_state": target_state,
+            "actor_id": actor_id,
+            "result": "ok",
+        }
+    )
+
+    log_decision(
+        player_id=actor_id or "unknown",
+        decision="transition",
+        reason=f"target_state={target_state}",
+        level_id=level_id,
+        session_state=new_state,
+    )
+
+    return {"status": "ok", "level_id": level_id, "state": new_state}
 
 @router.post("/story/inject")
 async def inject_story_level(level_id: str, title: str, text: str):

@@ -96,6 +96,22 @@ def _scene_only_build_enabled() -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _has_execute_confirmation(message: Optional[str]) -> bool:
+    text = (message or "").strip().lower()
+    if not text:
+        return False
+    keywords = (
+        "确认执行",
+        "执行确认",
+        "立即执行",
+        "开始执行",
+        "confirm execute",
+        "execute now",
+        "run execute",
+    )
+    return any(keyword in text for keyword in keywords)
+
+
 router = APIRouter(prefix="/world", tags=["World"])
 world_engine = WorldEngine()
 logger = logging.getLogger("uvicorn.error")
@@ -367,7 +383,7 @@ def apply_action(inp: ApplyInput):
     if intent:
         t = intent["type"]
 
-        if _scene_only_build_enabled() and t in {"BUILD_STRUCTURE", "CREATE_BLOCK", "CREATE_BUILD", "CREATE_STORY"}:
+        if _scene_only_build_enabled() and t in {"BUILD_STRUCTURE", "CREATE_BLOCK", "CREATE_BUILD"}:
             return WorldApplyResponse(
                 status="blocked",
                 world_state=new_state,
@@ -397,24 +413,25 @@ def apply_action(inp: ApplyInput):
                 payload = InjectPayload(
                     level_id=level_id,
                     title=intent.get("title", "自由创作"),
-                    text=raw_text
+                    text=raw_text,
+                    player_id=player_id,
+                    execute_confirm=_has_execute_confirmation(raw_text),
                 )
                 inject_result = api_story_inject(payload)
-                
-                # 立即加载生成的关卡
-                patch = story_engine.load_level_for_player(player_id, level_id)
-                new_state = world_engine.apply_patch(patch)
-                
+
                 return WorldApplyResponse(
                     status="ok",
                     world_state=new_state,
                     story_node={
-                        "title": "✨ 世界已创建", 
-                        "text": f"AI为你生成了新世界：{intent.get('title', '自由创作')}"
+                        "title": "✨ 世界已创建",
+                        "text": f"已完成 level.json 生成并触发 scene.realize：{intent.get('title', '自由创作')}"
                     },
-                    world_patch=patch,
-                    ai_response=inject_result.get("world_preview"),
-                    creation_result=creation_result,
+                    creation_result={
+                        "status": "ok",
+                        "flow": "natural_language->level.json->scene.json->/scene/realize",
+                        "scene_status": inject_result.get("scene_status"),
+                        "scene_request": inject_result.get("scene_request"),
+                    },
                 )
             except Exception as e:
                 # 创建失败时返回错误信息
@@ -623,6 +640,7 @@ def story_enter(request: EnterStoryRequest):
     if target_level:
         patch = story_engine.load_level_for_player(request.player_id, target_level)
     story_engine.set_runtime_mode(request.player_id, story_engine.MODE_PERSONAL)
+    story_engine.prebuffer_story_beats(request.player_id, count=3)
     logger.info("story_enter", extra={"player_id": request.player_id, "level_id": target_level})
     return {
         "status": "ok",
@@ -645,6 +663,7 @@ def story_start(request: EnterStoryRequest):
     if preferred_level:
         patch = story_engine.load_level_for_player(request.player_id, preferred_level)
     story_engine.set_runtime_mode(request.player_id, story_engine.MODE_PERSONAL)
+    story_engine.prebuffer_story_beats(request.player_id, count=3)
 
     logger.info(
         "story_start",

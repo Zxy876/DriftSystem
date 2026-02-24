@@ -1,0 +1,24 @@
+{
+  "task_id": "crew-task-001",
+  "level_id": "level-alpha",
+  "assigned_to": "crew-team-a",
+  "summary": "准备入口灯光并清理通道，最后返回待命点",
+  "actions": [
+    {
+      "action": "setblock",
+      "position": [10, 64, -3],
+      "block": "minecraft:lantern",
+      "note": "在入口放置灯笼"
+    },
+    {
+      "action": "clear",
+      "region": [8, 63, -5, 12, 66, -1],
+      "note": "清理入口障碍方块"
+    },
+    {
+      "action": "travel",
+      "position": [5, 64, -10],
+      "note": "返回待命点"
+    }
+  ]
+}

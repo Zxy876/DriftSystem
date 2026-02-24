@@ -1,0 +1,60 @@
+{
+  "metadata": {
+    "generated_at": "2026-01-20T08:00:00Z",
+    "edition": "v1.18",
+    "notes": [
+      "P3-1 coverage snapshot seed",
+      "Data derived from safe_auto resources subset"
+    ]
+  },
+  "summary": {
+    "safe_auto_total": 6,
+    "alias_covered": 6,
+    "coverage_ratio": 1.0,
+    "threshold": 0.95
+  },
+  "resources": [
+    {
+      "resource_id": "minecraft:soul_lantern",
+      "display_name": "灵魂灯笼",
+      "is_safe_auto": true,
+      "alias_examples": ["灵魂灯", "幽魂灯"],
+      "status": "covered"
+    },
+    {
+      "resource_id": "minecraft:oak_planks",
+      "display_name": "橡木木板",
+      "is_safe_auto": true,
+      "alias_examples": ["橡木板", "木板"],
+      "status": "covered"
+    },
+    {
+      "resource_id": "minecraft:glass",
+      "display_name": "玻璃",
+      "is_safe_auto": true,
+      "alias_examples": ["透明玻璃", "玻璃窗"],
+      "status": "covered"
+    },
+    {
+      "resource_id": "minecraft:amethyst_block",
+      "display_name": "紫水晶块",
+      "is_safe_auto": true,
+      "alias_examples": ["紫水晶", "晶石块"],
+      "status": "covered"
+    },
+    {
+      "resource_id": "minecraft:quartz_block",
+      "display_name": "石英块",
+      "is_safe_auto": true,
+      "alias_examples": ["石英砖", "白石块"],
+      "status": "covered"
+    },
+    {
+      "resource_id": "minecraft:redstone_dust",
+      "display_name": "红石粉",
+      "is_safe_auto": true,
+      "alias_examples": ["红石粉末", "红石"],
+      "status": "covered"
+    }
+  ]
+}

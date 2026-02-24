@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import Dict, Iterable, NamedTuple, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
 
 from app.core.creation import (
     CreationPatchTemplate,
@@ -16,12 +18,17 @@ from app.core.creation import (
     PatchTemplateValidationResult,
     load_default_transformer,
 )
+from app.instrumentation import cityphone_metrics
+from app.ml.embedding_model import EmbeddingModel
+from app.ml.resource_index import ResourceIndex
+from app.ml.semantic_resolver import IndexedSemanticResolver
+from app.services.semantic_proposal import ResourceEntry, SemanticProposalService
 from app.core.intent_creation import CreationIntentDecision, default_creation_classifier
 from app.core.minecraft.rcon_client import RconClient
 from app.core.world.patch_executor import PatchExecutionResult, PatchExecutor
 from app.core.world.plan_executor import CommandRunner, PlanExecutor, PlanExecutionReport
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 
 class RconCommandRunner(CommandRunner):
@@ -42,6 +49,215 @@ class RconCommandRunner(CommandRunner):
 _creation_classifier = default_creation_classifier()
 _creation_transformer = load_default_transformer()
 _patch_executor = PatchExecutor()
+
+
+# 【语义层接入】确保 IndexedSemanticResolver 可以按需启用并随时回退
+_SEMANTIC_INDEX_DEFAULT_PATH = Path(__file__).resolve().parents[2] / "data" / "transformer" / "semantic_index.json"
+
+
+@dataclass(frozen=True)
+class _CatalogResourceEntry:
+    resource_id: str
+    display_name: str
+    category: Optional[str]
+
+
+_resource_entry_cache: Dict[str, _CatalogResourceEntry] = {}
+_semantic_service_singleton: Optional[SemanticProposalService] = None
+
+
+def _reset_semantic_layer_for_testing() -> None:
+    """测试专用：重置语义层单例，避免跨用例污染。"""
+
+    global _semantic_service_singleton
+    _resource_entry_cache.clear()
+    _semantic_service_singleton = None
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _semantic_layer_enabled() -> bool:
+    return _env_flag("SEMANTIC_LAYER_ENABLED", default=False)
+
+
+def _transformer_proposal_enabled() -> bool:
+    return _env_flag("TRANSFORMER_PROPOSAL_ENABLED", default=True)
+
+
+def _build_semantic_resolver() -> Optional[IndexedSemanticResolver]:
+    index_path_raw = os.getenv("SEMANTIC_INDEX_PATH")
+    index_path = Path(index_path_raw) if index_path_raw else _SEMANTIC_INDEX_DEFAULT_PATH
+    if not index_path.exists():
+        logger.info("semantic_index_missing path=%s", index_path)
+        return None
+    try:
+        index = ResourceIndex.load(index_path)
+    except Exception:  # pragma: no cover - index 读取失败回退
+        logger.exception("semantic_index_load_failed path=%s", index_path)
+        return None
+
+    min_confidence = max(0.0, min(1.0, _read_float("SEMANTIC_LAYER_MIN_CONFIDENCE", 0.35)))
+    per_query_limit = max(1, _read_int("SEMANTIC_LAYER_PER_QUERY_LIMIT", 5))
+    embedding_model = EmbeddingModel()
+    return IndexedSemanticResolver(
+        index=index,
+        embedding_model=embedding_model,
+        min_confidence=float(min_confidence),
+        per_query_limit=int(per_query_limit),
+        origin_label=index.model_version or "semantic_index",
+    )
+
+
+def _candidate_payload_builder(
+    entry: ResourceEntry,
+    *,
+    source: str,
+    confidence: Optional[float] = None,
+    token: Optional[str] = None,
+    reason: Optional[str] = None,
+) -> Dict[str, object]:
+    payload: Dict[str, object] = {
+        "resource_id": entry.resource_id,
+        "display_name": entry.display_name,
+        "source": [source] if source else [],
+    }
+    if confidence is not None:
+        payload["confidence"] = round(float(confidence), 3)
+    if token is not None:
+        payload["token"] = token
+    if reason is not None:
+        payload["reason"] = reason
+    category = getattr(entry, "category", None)
+    if isinstance(category, str) and category.strip():
+        payload.setdefault("category", category.strip())
+    return payload
+
+
+def _resolve_catalog_entry(resource_id: str) -> Optional[ResourceEntry]:
+    if not resource_id:
+        return None
+    cached = _resource_entry_cache.get(resource_id)
+    if cached is not None:
+        return cached
+    snapshot = _creation_transformer.catalog.load_snapshot()
+    for record in getattr(snapshot, "resources", []):
+        if record.resource_id == resource_id:
+            entry = _CatalogResourceEntry(
+                resource_id=record.resource_id,
+                display_name=record.label,
+                category=getattr(record, "category", None),
+            )
+            _resource_entry_cache[resource_id] = entry
+            return entry
+    return None
+
+
+def _iter_material_tokens(material_tokens: Sequence[str], message: Optional[str]) -> Iterable[str]:
+    for token in material_tokens:
+        if not isinstance(token, str):
+            continue
+        stripped = token.strip()
+        if stripped:
+            yield stripped
+
+
+def _build_semantic_proposal_service() -> SemanticProposalService:
+    try:
+        resolver = _build_semantic_resolver()
+    except Exception:  # pragma: no cover - 语义层初始化失败
+        logger.exception("semantic_resolver_initialisation_failed")
+        resolver = None
+
+    return SemanticProposalService(
+        transformer=_creation_transformer,
+        transformer_feature_gate=_transformer_proposal_enabled,
+        resource_resolver=_resolve_catalog_entry,
+        candidate_builder=_candidate_payload_builder,
+        token_iterator=_iter_material_tokens,
+        semantic_resolver=resolver,
+        semantic_feature_gate=_semantic_layer_enabled,
+    )
+
+
+def _get_semantic_proposal_service(force_refresh: bool = False) -> Optional[SemanticProposalService]:
+    global _semantic_service_singleton
+    if force_refresh or _semantic_service_singleton is None:
+        try:
+            _semantic_service_singleton = _build_semantic_proposal_service()
+        except Exception:  # pragma: no cover - 初始化异常
+            logger.exception("semantic_proposal_service_init_failed")
+            _semantic_service_singleton = None
+    return _semantic_service_singleton
+
+
+def _material_tokens_from_decision(decision: CreationIntentDecision) -> List[str]:
+    slots = getattr(decision, "slots", {})
+    candidates = slots.get("materials", []) if isinstance(slots, dict) else []
+    tokens: List[str] = []
+    for token in candidates:
+        if not isinstance(token, str):
+            continue
+        stripped = token.strip()
+        if stripped:
+            tokens.append(stripped)
+    return tokens
+
+
+def collect_semantic_candidates(
+    decision: CreationIntentDecision,
+    *,
+    message: Optional[str],
+    limit: int = 3,
+) -> List[Dict[str, object]]:
+    if not getattr(decision, "is_creation", False):
+        return []
+    flag_enabled = _semantic_layer_enabled()
+    if limit <= 0:
+        cityphone_metrics.record_semantic_candidate_event(
+            enabled=flag_enabled,
+            total_candidates=0,
+            semantic_layer_candidates=0,
+        )
+        return []
+    service = _get_semantic_proposal_service()
+    if service is None:
+        cityphone_metrics.record_semantic_candidate_event(
+            enabled=flag_enabled,
+            total_candidates=0,
+            semantic_layer_candidates=0,
+        )
+        return []
+    material_tokens = _material_tokens_from_decision(decision)
+    # 【ML 角色声明】
+    # ML_ROLE: 语义提议（proposal_only）
+    # EXECUTION_AUTHORITY: 无
+    # GOVERNANCE_OWNER: CreationWorkflow
+    candidates = list(service.collect_candidates(material_tokens, message, limit=limit))
+    semantic_hits = 0
+    for candidate in candidates:
+        sources = candidate.get("source") or candidate.get("sources") or []
+        if isinstance(sources, (list, tuple, set)) and "semantic_layer" in {str(item) for item in sources}:
+            semantic_hits += 1
+    logger.info(
+        "creation_semantic_candidates_collected",
+        extra={
+            "decision_is_creation": getattr(decision, "is_creation", False),
+            "material_tokens": material_tokens,
+            "total_candidates": len(candidates),
+            "semantic_hits": semantic_hits,
+        },
+    )
+    cityphone_metrics.record_semantic_candidate_event(
+        enabled=flag_enabled,
+        total_candidates=len(candidates),
+        semantic_layer_candidates=semantic_hits,
+    )
+    return candidates
 
 _BLOCK_ID_PATTERN = re.compile(r"minecraft:[a-z0-9_./\-]+", re.IGNORECASE)
 _COORD_TRIPLE_PATTERN = re.compile(
@@ -441,9 +657,15 @@ def generate_plan(decision: CreationIntentDecision, *, message: Optional[str] = 
 
     explicit = _extract_explicit_block_plan(decision, message)
     if explicit is not None:
-        return explicit
+        plan_result = explicit
+    else:
+        plan_result = _creation_transformer.transform(decision)
 
-    return _creation_transformer.transform(decision)
+    if getattr(decision, "is_creation", False):
+        plan_result.semantic_candidates = collect_semantic_candidates(decision, message=message, limit=5)
+    else:
+        plan_result.semantic_candidates = []
+    return plan_result
 
 
 def dry_run_plan(plan: CreationPlan, *, patch_id: Optional[str] = None) -> PatchExecutionResult:
@@ -531,6 +753,7 @@ def world_patch_from_report(report: PlanExecutionReport) -> Optional[Dict[str, o
 __all__ = [
     "auto_execute_plan",
     "auto_execute_enabled",
+    "collect_semantic_candidates",
     "creation_hard_route",
     "HardRouteOutcome",
     "HardRouteUnavailableError",

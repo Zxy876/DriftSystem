@@ -1,0 +1,12 @@
+[Unit]
+Description=Drift Minecraft Server
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/minecraft
+ExecStart=/opt/minecraft/start.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

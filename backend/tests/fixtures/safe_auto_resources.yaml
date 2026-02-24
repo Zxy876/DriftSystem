@@ -1,0 +1,16 @@
+# DriftSystem v1.18 safe_auto resources snapshot
+# Generated from data/transformer/resource_catalog.json
+# Total resources: 6
+safe_auto_resources:
+  - resource_id: minecraft:amethyst_block
+    display_name: Amethyst Block
+  - resource_id: minecraft:glass
+    display_name: Glass
+  - resource_id: minecraft:oak_planks
+    display_name: Oak Planks
+  - resource_id: minecraft:quartz_block
+    display_name: Quartz Block
+  - resource_id: minecraft:redstone_dust
+    display_name: Redstone Dust
+  - resource_id: minecraft:soul_lantern
+    display_name: Soul Lantern

@@ -1,5 +1,6 @@
 import time
 import os
+import socket
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Body, HTTPException
@@ -45,6 +46,7 @@ class SceneExecuteReadinessResponse(BaseModel):
     rcon_available: bool
     executor_ready: bool
     mode: Literal["shared", "personal"]
+    policy_allow_execute: bool
     can_execute: bool
     reason: List[str] = Field(default_factory=list)
 
@@ -456,6 +458,7 @@ def realize_scene(payload: Dict[str, Any] = Body(...)):
 def scene_execute_readiness(player_id: Optional[str] = None):
     runtime_mode = story_engine.get_runtime_mode(player_id)
     mode: Literal["shared", "personal"] = "personal" if runtime_mode == story_engine.MODE_PERSONAL else "shared"
+    policy_allow_execute = mode == "personal"
 
     allow_execute_flag = _execute_mode_enabled()
     rcon_available = _rcon_available()
@@ -474,9 +477,23 @@ def scene_execute_readiness(player_id: Optional[str] = None):
         rcon_available=rcon_available,
         executor_ready=executor_ready,
         mode=mode,
+        policy_allow_execute=policy_allow_execute,
         can_execute=allow_execute_flag and rcon_available and executor_ready,
         reason=reasons,
     )
+
+
+@router.get("/test-rcon")
+def test_rcon():
+    s = socket.socket()
+    s.settimeout(5)
+    try:
+        s.connect(("101.33.226.238", 25575))
+        return {"ok": True}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        s.close()
 
 
 @router.post("/prepare/{player_id}/{level_id}")

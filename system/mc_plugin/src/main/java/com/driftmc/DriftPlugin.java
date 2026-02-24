@@ -7,6 +7,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import com.driftmc.actor.ActorController;
 import com.driftmc.atmosphere.SocialAtmosphereListener;
 import com.driftmc.atmosphere.SocialAtmosphereManager;
 import com.driftmc.backend.BackendClient;
@@ -18,6 +19,8 @@ import com.driftmc.cityphone.CityPhoneLocalization;
 import com.driftmc.cityphone.CityPhoneManager;
 import com.driftmc.commands.AdvanceCommand;
 import com.driftmc.commands.CinematicCommand;
+import com.driftmc.commands.DirectorApplyCommand;
+import com.driftmc.commands.DirectorInputCommand;
 import com.driftmc.commands.DriftCommand;
 import com.driftmc.commands.HeartMenuCommand;
 import com.driftmc.commands.IdealCityCommand;
@@ -81,6 +84,7 @@ public class DriftPlugin extends JavaPlugin {
     private DialoguePanel dialoguePanel;
     private ChoicePanel choicePanel;
     private CinematicController cinematicController;
+    private ActorController actorController;
     private String taskDebugToken;
     private CityPhoneManager cityPhoneManager;
     private SocialAtmosphereManager socialAtmosphereManager;
@@ -147,6 +151,7 @@ public class DriftPlugin extends JavaPlugin {
         CityPhoneLocalization.init(this);
         this.cityPhoneManager = new CityPhoneManager(this, backend);
         this.socialAtmosphereManager = new SocialAtmosphereManager(this, backend);
+        this.actorController = new ActorController(this, backend);
 
         // 注册聊天监听器（核心：自然语言驱动）
         Bukkit.getPluginManager().registerEvents(
@@ -189,6 +194,8 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("heartmenu", new HeartMenuCommand(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("level", new LevelCommand(this, backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("levels", new LevelsCommand(backend, intentRouter, worldPatcher, sessionManager));
+        registerCommand("directorinput", new DirectorInputCommand(this, backend));
+        registerCommand("director", new DirectorApplyCommand(this, backend));
         registerCommand("npc", new NpcMasterCommand(npcManager));
         registerCommand("tp2", new CmdTeleport(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("time2", new CmdTime(backend, intentRouter, worldPatcher, sessionManager));
@@ -200,6 +207,8 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("taskdebug", new TaskDebugCommand(this, backend, taskDebugToken));
         registerCommand("idealcity", idealCityCommand);
         registerCommand("cityphone", new CityPhoneCommand(cityPhoneManager));
+
+        this.actorController.start();
 
         getLogger().info("======================================");
         getLogger().info("   DriftSystem / 心悦宇宙");
@@ -226,6 +235,10 @@ public class DriftPlugin extends JavaPlugin {
 
         if (tutorialManager != null) {
             Bukkit.getOnlinePlayers().forEach(tutorialManager::cleanupPlayer);
+        }
+
+        if (actorController != null) {
+            actorController.stop();
         }
 
         if (worldPatcher != null) {

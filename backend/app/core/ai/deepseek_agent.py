@@ -19,30 +19,90 @@ load_dotenv()
 
 API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY", "")
 BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
-MODEL = os.getenv("OPENAI_MODEL", "deepseek-chat")
+PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", os.getenv("OPENAI_MODEL", "deepseek-chat"))
+FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "gpt-4o-mini")
+MODEL = PRIMARY_MODEL
 
 HEADERS = {
     "Authorization": f"Bearer {API_KEY}" if API_KEY else "",
     "Content-Type": "application/json",
 }
 
-CONNECT_TIMEOUT = float(os.getenv("DEEPSEEK_CONNECT_TIMEOUT", "6"))
-READ_TIMEOUT = float(os.getenv("DEEPSEEK_READ_TIMEOUT", "12"))
-MAX_RETRIES = int(os.getenv("DEEPSEEK_MAX_RETRIES", "2"))
+CONNECT_TIMEOUT = min(20.0, float(os.getenv("DEEPSEEK_CONNECT_TIMEOUT", "6")))
+READ_TIMEOUT = min(20.0, float(os.getenv("DEEPSEEK_READ_TIMEOUT", "12")))
+MAX_RETRIES = min(2, max(0, int(os.getenv("DEEPSEEK_MAX_RETRIES", "2"))))
 RETRY_BACKOFF = float(os.getenv("DEEPSEEK_RETRY_BACKOFF", "1.5"))
+DEFAULT_MAX_TOKENS = max(64, int(os.getenv("AI_MAX_TOKENS", "800")))
+MAX_TOKENS_CAP = max(64, int(os.getenv("AI_MAX_TOKENS_CAP", "1200")))
+DRIFT_AI_FAIL_OPEN = os.getenv("DRIFT_AI_FAIL_OPEN", "true").lower() in {"1", "true", "yes", "on"}
 
 print(
     "[AI INFO] LLM config:",
     {
         "base_url": BASE_URL,
-        "model": MODEL,
+        "primary_model": PRIMARY_MODEL,
+        "fallback_model": FALLBACK_MODEL,
         "connect_timeout": CONNECT_TIMEOUT,
         "read_timeout": READ_TIMEOUT,
         "max_retries": MAX_RETRIES,
         "retry_backoff": RETRY_BACKOFF,
+        "max_tokens_default": DEFAULT_MAX_TOKENS,
+        "fail_open": DRIFT_AI_FAIL_OPEN,
     },
     flush=True,
 )
+
+_metrics_lock = threading.Lock()
+_runtime_metrics: Dict[str, Any] = {
+    "provider": "deepseek/openai-compatible",
+    "model": PRIMARY_MODEL,
+    "last_error": None,
+    "rate_limit_hits": 0,
+    "timeout_count": 0,
+    "fallback_count": 0,
+}
+
+
+def _set_last_error(message: Optional[str]) -> None:
+    with _metrics_lock:
+        _runtime_metrics["last_error"] = message
+
+
+def _set_model(model_name: str) -> None:
+    with _metrics_lock:
+        _runtime_metrics["model"] = model_name
+
+
+def _inc_metric(name: str, delta: int = 1) -> None:
+    with _metrics_lock:
+        _runtime_metrics[name] = int(_runtime_metrics.get(name, 0)) + delta
+
+
+def get_quota_status() -> Dict[str, Any]:
+    with _metrics_lock:
+        return {
+            "provider": str(_runtime_metrics.get("provider", "deepseek/openai-compatible")),
+            "model": str(_runtime_metrics.get("model", PRIMARY_MODEL)),
+            "last_error": _runtime_metrics.get("last_error"),
+            "rate_limit_hits": int(_runtime_metrics.get("rate_limit_hits", 0)),
+            "timeout_count": int(_runtime_metrics.get("timeout_count", 0)),
+            "fallback_count": int(_runtime_metrics.get("fallback_count", 0)),
+        }
+
+
+def _ensure_payload_limits(payload: Dict[str, Any], model_name: str) -> Dict[str, Any]:
+    bounded = dict(payload)
+    bounded["model"] = model_name
+    raw_max_tokens = bounded.get("max_tokens")
+    if raw_max_tokens is None:
+        bounded["max_tokens"] = DEFAULT_MAX_TOKENS
+        return bounded
+    try:
+        parsed = int(raw_max_tokens)
+    except (TypeError, ValueError):
+        parsed = DEFAULT_MAX_TOKENS
+    bounded["max_tokens"] = min(max(64, parsed), MAX_TOKENS_CAP)
+    return bounded
 
 AI_RETRY_ON_TIMEOUT = os.getenv("IDEAL_CITY_AI_RETRY_ON_TIMEOUT", "0").lower() in {
     "1",
@@ -317,55 +377,75 @@ def _call_deepseek_api_sync(
         effective_connect_timeout = min(connect_timeout, max(1.0, AI_TIMEOUT_DEADLINE * 0.5))
         effective_read_timeout = min(read_timeout, max(2.0, AI_TIMEOUT_DEADLINE))
 
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            resp = requests.post(
-                f"{BASE_URL}/chat/completions",
-                headers=HEADERS,
-                json=payload,
-                timeout=(effective_connect_timeout, effective_read_timeout),
-            )
-            resp.raise_for_status()
-            body = resp.json()
-            content = body["choices"][0]["message"]["content"]
-            result = json.loads(content)
-            _record_success()
-            return result
-        except requests.Timeout as exc:
-            last_error = exc
-            print(f"[AI WARN] DeepSeek timeout attempt {attempt + 1}: {exc}")
-            if not AI_RETRY_ON_TIMEOUT:
-                _record_failure()
-                failure_recorded = True
-                break
-        except requests.RequestException as exc:
-            last_error = exc
-            status = getattr(exc.response, "status_code", "?")
-            print(
-                f"[AI WARN] DeepSeek HTTP error attempt {attempt + 1}"
-                f" (status={status}): {exc}"
-            )
-        except (KeyError, ValueError, json.JSONDecodeError) as exc:
-            last_error = exc
-            print(f"[AI WARN] DeepSeek parse error attempt {attempt + 1}: {exc}")
+    model_chain: List[str] = [PRIMARY_MODEL]
+    if FALLBACK_MODEL and FALLBACK_MODEL not in model_chain:
+        model_chain.append(FALLBACK_MODEL)
 
-        if attempt < MAX_RETRIES:
-            base_delay = RETRY_BACKOFF * (2**attempt)
-            capped_delay = min(AI_MAX_BACKOFF, base_delay)
-            jitter = random.uniform(0, capped_delay * 0.25)
-            sleep_seconds = capped_delay + jitter
-            time.sleep(max(0.05, sleep_seconds))
+    for model_index, model_name in enumerate(model_chain):
+        if model_index > 0:
+            _inc_metric("fallback_count")
+            print(f"[AI WARN] DeepSeek fallback model engaged: {model_name}")
 
-        if AI_TIMEOUT_DEADLINE > 0:
-            elapsed = time.monotonic() - start_time
-            if elapsed >= AI_TIMEOUT_DEADLINE:
-                print(
-                    f"[AI WARN] DeepSeek aborting after {elapsed:.1f}s without success (deadline {AI_TIMEOUT_DEADLINE}s)."
+        model_payload = _ensure_payload_limits(payload, model_name)
+        _set_model(model_name)
+
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                resp = requests.post(
+                    f"{BASE_URL}/chat/completions",
+                    headers=HEADERS,
+                    json=model_payload,
+                    timeout=(effective_connect_timeout, effective_read_timeout),
                 )
-                break
+                resp.raise_for_status()
+                body = resp.json()
+                content = body["choices"][0]["message"]["content"]
+                result = json.loads(content)
+                _set_last_error(None)
+                _record_success()
+                return result
+            except requests.Timeout as exc:
+                last_error = exc
+                _set_last_error(str(exc))
+                _inc_metric("timeout_count")
+                print(f"[AI WARN] DeepSeek timeout attempt {attempt + 1} (model={model_name}): {exc}")
+                if not AI_RETRY_ON_TIMEOUT:
+                    _record_failure()
+                    failure_recorded = True
+                    break
+            except requests.RequestException as exc:
+                last_error = exc
+                _set_last_error(str(exc))
+                status = getattr(exc.response, "status_code", "?")
+                if str(status) == "429":
+                    _inc_metric("rate_limit_hits")
+                print(
+                    f"[AI WARN] DeepSeek HTTP error attempt {attempt + 1}"
+                    f" (model={model_name}, status={status}): {exc}"
+                )
+            except (KeyError, ValueError, json.JSONDecodeError) as exc:
+                last_error = exc
+                _set_last_error(str(exc))
+                print(f"[AI WARN] DeepSeek parse error attempt {attempt + 1} (model={model_name}): {exc}")
+
+            if attempt < MAX_RETRIES:
+                base_delay = RETRY_BACKOFF * (2**attempt)
+                capped_delay = min(AI_MAX_BACKOFF, base_delay)
+                jitter = random.uniform(0, capped_delay * 0.25)
+                sleep_seconds = capped_delay + jitter
+                time.sleep(max(0.05, sleep_seconds))
+
+            if AI_TIMEOUT_DEADLINE > 0:
+                elapsed = time.monotonic() - start_time
+                if elapsed >= AI_TIMEOUT_DEADLINE:
+                    print(
+                        f"[AI WARN] DeepSeek aborting after {elapsed:.1f}s without success (deadline {AI_TIMEOUT_DEADLINE}s)."
+                    )
+                    break
 
     if last_error:
         print("[AI ERROR] DeepSeek failed after retries:", last_error)
+        _set_last_error(str(last_error))
         if not failure_recorded:
             _record_failure()
         raise last_error
@@ -386,6 +466,7 @@ def deepseek_decide(context, messages_history):
 
     reason = _bypass_reason()
     if reason:
+        _inc_metric("fallback_count")
         print(f"[AI INFO] DeepSeek bypassed ({reason}); returning static response.")
         return {
             "option": None,
@@ -419,6 +500,8 @@ def deepseek_decide(context, messages_history):
 
     # ⭐ 无 API KEY → 本地占位剧情
     if not API_KEY:
+        _inc_metric("fallback_count")
+        _set_last_error("missing_api_key")
         return {
             "option": None,
             "node": {
@@ -448,9 +531,9 @@ def deepseek_decide(context, messages_history):
     msgs.append({"role": "user", "content": user_prompt})
 
     payload = {
-        "model": MODEL,
         "messages": msgs,
         "temperature": 0.8,
+        "max_tokens": DEFAULT_MAX_TOKENS,
         "response_format": {"type": "json_object"},
     }
 
@@ -463,6 +546,8 @@ def deepseek_decide(context, messages_history):
 
     except Exception as e:
         print("[AI ERROR]", e)
+        _set_last_error(str(e))
+        _inc_metric("fallback_count")
         _LAST_CALL_TS[player_id] = time.time()
         return {
             "option": None,
@@ -484,6 +569,7 @@ def call_deepseek(
 
     reason = _bypass_reason()
     if reason:
+        _inc_metric("fallback_count")
         return {
             "response": json.dumps(
                 {
@@ -498,11 +584,14 @@ def call_deepseek(
         }
 
     if not API_KEY:
+        _inc_metric("fallback_count")
+        _set_last_error("missing_api_key")
         return {
             "response": json.dumps(
                 {"error": "missing_api_key", "context": context or {}},
                 ensure_ascii=False,
-            )
+            ),
+            "parsed": None,
         }
 
     payload_messages: List[Dict[str, str]] = []
@@ -512,9 +601,9 @@ def call_deepseek(
     payload_messages.extend(messages)
 
     payload = {
-        "model": MODEL,
         "messages": payload_messages,
         "temperature": temperature,
+        "max_tokens": DEFAULT_MAX_TOKENS,
     }
     if response_format is not None:
         payload["response_format"] = response_format
@@ -551,8 +640,13 @@ def call_deepseek(
         return result
     except Exception as exc:
         print("[AI ERROR] call_deepseek failed:", exc)
+        _set_last_error(str(exc))
+        _inc_metric("fallback_count")
+        if not DRIFT_AI_FAIL_OPEN:
+            raise
         return {
             "response": json.dumps(
                 {"error": str(exc), "context": context or {}}, ensure_ascii=False
-            )
+            ),
+            "parsed": None,
         }

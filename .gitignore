@@ -57,9 +57,13 @@ server/banned-players.json
 backend/server/cache/
 backend/server/logs/
 backend/server/logs/*.gz
+backend/server/crash-reports/
 backend/server/world/
 backend/server/world_nether/
 backend/server/world_the_end/
+backend/server/world_staging_v*/
+backend/server/world_staging_v*_nether/
+backend/server/world_staging_v*_the_end/
 backend/server/libraries/
 backend/server/versions/
 backend/server/paper*.jar
@@ -68,6 +72,12 @@ backend/server/plugins/mc_plugin-*.jar
 backend/server/plugins/**
 backend/server/server.log
 backend/server/*.pid
+backend/server/*.javap
+
+# Backend runtime artifacts
+backend/logs/
+backend/nohup.out
+backend/data/flagship_levels/sessions.db
 
 # ---- OS / System ----
 .DS_Store
@@ -86,3 +96,12 @@ backend/server/*.pid
 **/target/
 **/build/
 **/dist/
+
+# ---- Node runtime artifacts ----
+node_modules/
+system/taskcrew/node_modules/
+
+# ---- Local rehearsal/log artifacts ----
+logs/rollback_rehearsal/
+docs/freeze_evidence/
+backend/backend/

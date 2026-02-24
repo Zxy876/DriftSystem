@@ -99,13 +99,13 @@ class EmbeddingModel:
                     self._mode = "fallback"
                     self._endpoint = None
                 else:
-                    raw_timeout = os.getenv("OPENAI_TIMEOUT", "30")
+                    raw_timeout = os.getenv("OPENAI_TIMEOUT", "20")
                     try:
-                        openai_timeout = float(raw_timeout)
+                        openai_timeout = min(20.0, float(raw_timeout))
                     except ValueError:
                         logger.warning("semantic_embedding_openai_invalid_timeout value=%s", raw_timeout)
-                        openai_timeout = 30.0
-                    self._client = OpenAI(api_key=api_key, timeout=openai_timeout)
+                        openai_timeout = 20.0
+                    self._client = OpenAI(api_key=api_key, timeout=openai_timeout, max_retries=2)
                     self._mode = "openai"
                     self._endpoint = None
         elif not self._endpoint:

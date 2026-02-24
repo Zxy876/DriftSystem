@@ -533,11 +533,62 @@ class StoryEngine:
             return dict(profile)
         return None
 
+    def _ai_fail_open_enabled(self) -> bool:
+        return str(os.getenv("DRIFT_AI_FAIL_OPEN", "true")).strip().lower() in {"1", "true", "yes", "on"}
+
+    def prebuffer_story_beats(self, player_id: str, count: int = 3) -> int:
+        self._ensure_player(player_id)
+        if not self.is_personal_mode(player_id):
+            return 0
+
+        p = self.players[player_id]
+        if p.get("level") is None:
+            return 0
+
+        target = max(0, int(count))
+        cache = p.setdefault("story_prebuffer", [])
+        synthetic_messages = list(p.get("messages") or [])
+
+        try:
+            while len(cache) < target:
+                ai_input = {
+                    "player_id": player_id,
+                    "player_action": {"type": "prebuffer"},
+                    "world_state": {"variables": {}},
+                    "recent_nodes": p.get("nodes", [])[-5:],
+                    "tree_state": p.get("tree_state"),
+                    "level_id": p["level"].level_id,
+                    "story_prebuffer": True,
+                    "prebuffer_index": len(cache),
+                }
+                ai_result = deepseek_decide(ai_input, synthetic_messages)
+                node = ai_result.get("node") if isinstance(ai_result, dict) else None
+                world_patch = (ai_result.get("world_patch") if isinstance(ai_result, dict) else {}) or {}
+                option = ai_result.get("option") if isinstance(ai_result, dict) else None
+
+                if node is None and not world_patch:
+                    break
+
+                cache.append({"option": option, "node": node, "world_patch": world_patch})
+                if isinstance(node, dict):
+                    synthetic_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": f"{node.get('title', '')}\n{node.get('text', '')}".strip(),
+                        }
+                    )
+            return len(cache)
+        except Exception:
+            if self._ai_fail_open_enabled():
+                return len(cache)
+            raise
+
     def _ensure_player(self, player_id: str):
         if player_id not in self.players:
             self.players[player_id] = {
                 "messages": [],
                 "nodes": [],
+                "story_prebuffer": [],
                 "level": None,
                 "level_loaded": False,
                 "tree_state": None,
@@ -1167,6 +1218,7 @@ class StoryEngine:
         p["ended"] = False
         p["messages"].clear()
         p["nodes"].clear()
+        p["story_prebuffer"] = []
         p.pop("emotional_profile", None)
 
         self._bind_exhibit_to_player(player_id, level)
@@ -1600,7 +1652,28 @@ class StoryEngine:
         elif isinstance(p.get("scenario_id"), str) and p["scenario_id"].strip():
             ai_input.setdefault("scenario_id", p["scenario_id"].strip())
 
-        ai_result = deepseek_decide(ai_input, p["messages"])
+        ai_result: Dict[str, Any]
+        if not self.is_personal_mode(player_id):
+            ai_result = {
+                "option": None,
+                "node": {
+                    "title": "Shared 模式",
+                    "text": "共享模式下禁用实时模型调用，剧情旁白使用静态安全文本。",
+                },
+                "world_patch": {"variables": {}, "mc": {}},
+            }
+        else:
+            buffered = p.setdefault("story_prebuffer", [])
+            if buffered:
+                ai_result = buffered.pop(0)
+            else:
+                ai_result = deepseek_decide(ai_input, p["messages"])
+
+            try:
+                self.prebuffer_story_beats(player_id, count=3)
+            except Exception:
+                if not self._ai_fail_open_enabled():
+                    raise
 
         option = ai_result.get("option")
         node = ai_result.get("node")

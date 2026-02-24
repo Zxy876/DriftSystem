@@ -1,7 +1,43 @@
 #!/bin/bash
-# DriftSystem 功能演示脚本
+# DriftSystem 功能演示脚本（Issue 7.1）
+# 增加 --dry-run（默认）用于无后台环境下演示，仍写出日志。
 
 BASE_URL="http://127.0.0.1:8000"
+DRY_RUN=1
+DEMO_DATE="${DEMO_DATE:-20260121}"
+LOG_DIR="logs/demos/${DEMO_DATE}"
+LOG_FILE="$LOG_DIR/demo.log"
+
+mkdir -p "$LOG_DIR"
+
+for arg in "$@"; do
+    case "$arg" in
+        --run)
+            DRY_RUN=0
+            ;;
+        --dry-run)
+            DRY_RUN=1
+            ;;
+    esac
+done
+
+log_line() {
+    printf '[%s] %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$1" | tee -a "$LOG_FILE"
+}
+
+if [ "$DRY_RUN" -eq 1 ]; then
+    log_line "dry-run 模式：不发出真实请求，仅记录计划"
+    log_line "计划阶段：IMPORT → SET_DRESS → REHEARSE → TAKE"
+    log_line "将调用接口：/story/levels, /tutorial/start, /story/load/<player>/<level>, /story/inject 等"
+    log_line "如需真实演示请使用 --run 且确保后台可用"
+    exit 0
+fi
+DRY_RUN=1
+LOG_DIR="logs/demos/$(date -u +%Y%m%d)"
+
+if [[ "$1" == "--apply" ]]; then
+    DRY_RUN=0
+fi
 
 # 颜色
 GREEN='\033[0;32m'
@@ -10,6 +46,8 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m'
+
+mkdir -p "$LOG_DIR"
 
 clear
 
@@ -31,15 +69,27 @@ cat << "EOF"
 EOF
 echo -e "${NC}"
 
-# 检查后端
-if ! curl -s $BASE_URL/health >/dev/null 2>&1; then
-    echo -e "${YELLOW}⚠ 后端未运行，正在启动...${NC}"
-    cd /Users/zxydediannao/DriftSystem
-    ./start_all.sh
-    sleep 5
-fi
+run_curl() {
+    if [ $DRY_RUN -eq 1 ]; then
+        echo "[dry-run] curl $*" | tee -a "$LOG_DIR/demo.log"
+    else
+        echo "[exec] curl $*" | tee -a "$LOG_DIR/demo.log"
+        curl "$@" | tee -a "$LOG_DIR/demo.log"
+    fi
+}
 
-echo -e "${GREEN}✓ 后端运行中${NC}"
+# 检查后端
+if [ $DRY_RUN -eq 0 ]; then
+    if ! curl -s $BASE_URL/health >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠ 后端未运行，正在启动...${NC}"
+        cd /Users/zxydediannao/DriftSystem
+        ./start_all.sh
+        sleep 5
+    fi
+    echo -e "${GREEN}✓ 后端运行中${NC}"
+else
+    echo -e "${YELLOW}dry-run：跳过后端连通性检查${NC}"
+fi
 echo ""
 
 DEMO_PLAYER="demo_$(date +%s)"
@@ -52,7 +102,7 @@ echo ""
 echo -e "${CYAN}📚 获取所有关卡列表...${NC}"
 echo ""
 
-curl -s $BASE_URL/story/levels | python3 -c "
+run_curl -s $BASE_URL/story/levels | python3 -c "
 import sys, json
 levels = json.load(sys.stdin)
 print(f'共有 {len(levels)} 个关卡：\n')
@@ -75,7 +125,7 @@ echo ""
 echo -e "${CYAN}🎓 启动新手教学...${NC}"
 echo ""
 
-curl -s -X POST $BASE_URL/tutorial/start/$DEMO_PLAYER | python3 -c "
+run_curl -s -X POST $BASE_URL/tutorial/start/$DEMO_PLAYER | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 if data.get('status') == 'started':
@@ -91,9 +141,9 @@ echo ""
 
 # 步骤1
 echo -e "${PURPLE}玩家: 你好${NC}"
-RESULT=$(curl -s -X POST $BASE_URL/tutorial/check \
-  -H "Content-Type: application/json" \
-  -d "{\"player_id\":\"$DEMO_PLAYER\",\"message\":\"你好\"}")
+RESULT=$(run_curl -s -X POST $BASE_URL/tutorial/check \
+    -H "Content-Type: application/json" \
+    -d "{\"player_id\":\"$DEMO_PLAYER\",\"message\":\"你好\"}")
 
 echo "$RESULT" | python3 -c "
 import sys, json
@@ -111,9 +161,9 @@ sleep 1
 # 步骤2
 echo ""
 echo -e "${PURPLE}玩家: 这是什么地方？${NC}"
-RESULT=$(curl -s -X POST $BASE_URL/tutorial/check \
-  -H "Content-Type: application/json" \
-  -d "{\"player_id\":\"$DEMO_PLAYER\",\"message\":\"这是什么地方\"}")
+RESULT=$(run_curl -s -X POST $BASE_URL/tutorial/check \
+    -H "Content-Type: application/json" \
+    -d "{\"player_id\":\"$DEMO_PLAYER\",\"message\":\"这是什么地方\"}")
 
 echo "$RESULT" | python3 -c "
 import sys, json
@@ -131,9 +181,9 @@ sleep 1
 # 步骤3
 echo ""
 echo -e "${PURPLE}玩家: 创建一个剧情${NC}"
-RESULT=$(curl -s -X POST $BASE_URL/tutorial/check \
-  -H "Content-Type: application/json" \
-  -d "{\"player_id\":\"$DEMO_PLAYER\",\"message\":\"创建一个剧情\"}")
+RESULT=$(run_curl -s -X POST $BASE_URL/tutorial/check \
+    -H "Content-Type: application/json" \
+    -d "{\"player_id\":\"$DEMO_PLAYER\",\"message\":\"创建一个剧情\"}")
 
 echo "$RESULT" | python3 -c "
 import sys, json
@@ -154,7 +204,7 @@ echo ""
 echo -e "${CYAN}🤖 加载第一关并查看NPC配置...${NC}"
 echo ""
 
-curl -s -X POST $BASE_URL/story/load/$DEMO_PLAYER/level_01 | python3 -c "
+run_curl -s -X POST $BASE_URL/story/load/$DEMO_PLAYER/level_01 | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 patch = data.get('bootstrap_patch', {})
@@ -195,9 +245,9 @@ echo ""
 echo -e "${CYAN}✨ AI创建新剧情...${NC}"
 echo ""
 
-curl -s -X POST $BASE_URL/story/inject \
-  -H "Content-Type: application/json" \
-  -d '{"level_id":"demo_level","title":"月光探险","text":"在月光下的神秘探险..."}' | python3 -c "
+run_curl -s -X POST $BASE_URL/story/inject \
+    -H "Content-Type: application/json" \
+    -d '{"level_id":"demo_level","title":"月光探险","text":"在月光下的神秘探险..."}' | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 if data.get('status') == 'ok':

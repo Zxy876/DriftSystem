@@ -1,0 +1,40 @@
+# Runtime/cache
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+
+# Local virtualenvs
+venv/
+.venv/
+.venv_phase21/
+
+# Local logs/artifacts
+logs/
+*.log
+*.out
+*.pid
+nohup.out
+backend_uvicorn.out
+uvicorn.log
+
+# Local-only helper workspace
+backend/
+
+# Minecraft server bundle (must not ship to Railway)
+server/
+
+# Test and dev-only files
+tests/
+test_*.py
+conftest.py
+scripts/
+examples/
+
+# Temporary files
+tmp/
+*.tmp
+
+# Local data that should not be deployed
+data/patch_logs/
+data/flagship_levels/sessions.db

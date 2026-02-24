@@ -1,0 +1,25 @@
+# RAILWAY_ENVIRONMENT
+
+## Railway 必备环境变量（生产）
+
+以下变量必须在 Railway 项目中配置：
+
+- DRIFT_SCENE_REALIZE_ALLOW_EXECUTE=1
+- RCON_HOST=<VPS公网IP>
+- RCON_PORT=25575
+- RCON_PASSWORD=<强密码>
+
+## 后端实际读取的 RCON 变量（兼容映射）
+
+当前后端执行器读取如下变量：
+
+- MINECRAFT_RCON_HOST=<VPS公网IP>
+- MINECRAFT_RCON_PORT=25575
+- MINECRAFT_RCON_PASSWORD=<强密码>
+
+建议在 Railway 同时设置两组（RCON_* + MINECRAFT_RCON_*），避免环境差异导致读取失败。
+
+## 其他建议变量
+
+- DRIFT_SCENE_REALIZATION_ONLY=1
+- MINECRAFT_RCON_TIMEOUT=5.0

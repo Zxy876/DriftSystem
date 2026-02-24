@@ -22,21 +22,69 @@ cat > $PLUGIN_DIR/pom.xml << 'EOF'
   <version>1.0-SNAPSHOT</version>
   <packaging>jar</packaging>
 
-  <dependencies>
-    <dependency>
-      <groupId>io.papermc.paper</groupId>
-      <artifactId>paper-api</artifactId>
-      <version>1.20.1-R0.1-SNAPSHOT</version>
-      <scope>provided</scope>
-    </dependency>
+    <dependencies>
+        <dependency>
+            <groupId>io.papermc.paper</groupId>
+            <artifactId>paper-api</artifactId>
+            <version>1.20.1-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
 
-    <!-- HTTP 客户端 -->
-    <dependency>
-      <groupId>com.squareup.okhttp3</groupId>
-      <artifactId>okhttp</artifactId>
-      <version>4.12.0</version>
-    </dependency>
-  </dependencies>
+        <!-- 使用纯 Java 的 OkHttp 3.x 与 Okio，避免 Kotlin 运行时依赖 -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>3.14.9</version>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okio</groupId>
+            <artifactId>okio</artifactId>
+            <version>1.17.5</version>
+        </dependency>
+    </dependencies>
+
+    <repositories>
+        <repository>
+            <id>papermc</id>
+            <url>https://repo.papermc.io/repository/maven-public/</url>
+        </repository>
+    </repositories>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.4.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <filters>
+                                <filter>
+                                    <artifact>com.squareup.okhttp3:okhttp</artifact>
+                                    <includes>
+                                        <include>okhttp3/**</include>
+                                    </includes>
+                                </filter>
+                                <filter>
+                                    <artifact>com.squareup.okio:okio</artifact>
+                                    <includes>
+                                        <include>okio/**</include>
+                                    </includes>
+                                </filter>
+                            </filters>
+                            <minimizeJar>true</minimizeJar>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>
 EOF
@@ -192,4 +240,3 @@ cd mc_plugin
 mvn -q clean package
 
 echo "=== 完成！插件输出：mc_plugin/target/drift-mc-plugin-1.0-SNAPSHOT.jar ==="
-EOF

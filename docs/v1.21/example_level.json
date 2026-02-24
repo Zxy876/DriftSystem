@@ -1,0 +1,46 @@
+{
+  "level_id": "scene_001_market_night",
+  "title": "夜市 · 初遇",
+  "version": "1.0.0",
+  "set_design": {
+    "allowed_region": [ -10, 63, -10, 10, 70, 10 ],
+    "required_props": [
+      {
+        "block": "minecraft:soul_lantern",
+        "tag": "main_light"
+      },
+      {
+        "block": "minecraft:barrel",
+        "tag": "stall_storage"
+      }
+    ]
+  },
+  "actors": [
+    {
+      "actor_id": "npc_vendor",
+      "role": "vendor",
+      "memory_seed": "friendly_nervous",
+      "spawn_point": [ -2, 63, 1 ]
+    },
+    {
+      "actor_id": "npc_director_assistant",
+      "role": "assistant",
+      "memory_seed": "precise_helper",
+      "spawn_point": [ 0, 63, -1 ]
+    }
+  ],
+  "beats": [
+    {
+      "beat_id": "beat_01",
+      "description": "灯亮起，摊主抬头迎客",
+      "requirements": [ "main_light:on" ],
+      "actor_actions": [ "npc_vendor:look_up", "npc_vendor:say:greeting" ]
+    },
+    {
+      "beat_id": "beat_02",
+      "description": "导演助手上前确认货物",
+      "requirements": [ "stall_storage:ready" ],
+      "actor_actions": [ "npc_director_assistant:walk_to:stall", "npc_director_assistant:say:status_check" ]
+    }
+  ]
+}
