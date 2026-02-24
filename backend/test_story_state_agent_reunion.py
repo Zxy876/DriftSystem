@@ -2,7 +2,7 @@ from app.core.ideal_city.device_spec import DeviceSpec
 from app.core.ideal_city.scenario_repository import ScenarioContext
 from app.core.ideal_city.story_state import StoryState
 from app.core.ideal_city.story_state_agent import StoryStateAgent, StoryStateAgentContext
-import app.core.ideal_city.story_state_agent as story_state_agent_module
+import app.core.ideal_city.narrative.reunion_engine as reunion_engine_module
 
 
 def _build_context(*, narrative: str, location_hint: str | None = None) -> StoryStateAgentContext:
@@ -43,7 +43,7 @@ def _build_context(*, narrative: str, location_hint: str | None = None) -> Story
 def test_reunion_prompt_uses_runtime_container_context(monkeypatch):
     captured = {}
 
-    monkeypatch.setattr(story_state_agent_module, "NARRATIVE_DENSITY", "low")
+    monkeypatch.setattr(reunion_engine_module, "NARRATIVE_DENSITY", "low")
 
     def _fake_call_deepseek(context, messages, **kwargs):
         captured["context"] = context
@@ -59,7 +59,7 @@ def test_reunion_prompt_uses_runtime_container_context(monkeypatch):
             }
         }
 
-    monkeypatch.setattr(story_state_agent_module, "call_deepseek", _fake_call_deepseek)
+    monkeypatch.setattr(reunion_engine_module, "call_deepseek", _fake_call_deepseek)
 
     agent = StoryStateAgent()
     ctx = _build_context(narrative="继续，我们换到河边入口再推进。", location_hint="旧广场")
@@ -80,7 +80,7 @@ def test_reunion_prompt_uses_runtime_container_context(monkeypatch):
 
 
 def test_reunion_prompt_non_push_keeps_minimal_extension(monkeypatch):
-    monkeypatch.setattr(story_state_agent_module, "NARRATIVE_DENSITY", "low")
+    monkeypatch.setattr(reunion_engine_module, "NARRATIVE_DENSITY", "low")
 
     def _fake_call_deepseek(context, messages, **kwargs):
         return {
@@ -93,7 +93,7 @@ def test_reunion_prompt_non_push_keeps_minimal_extension(monkeypatch):
             }
         }
 
-    monkeypatch.setattr(story_state_agent_module, "call_deepseek", _fake_call_deepseek)
+    monkeypatch.setattr(reunion_engine_module, "call_deepseek", _fake_call_deepseek)
 
     agent = StoryStateAgent()
     ctx = _build_context(narrative="我先看看。", location_hint="旧广场")

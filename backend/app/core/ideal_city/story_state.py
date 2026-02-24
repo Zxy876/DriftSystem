@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,7 @@ class StoryState(BaseModel):
     location_hint: Optional[str] = None
     player_pose: Optional[PlayerPose] = None
     notes: List[str] = Field(default_factory=list)
+    protocol_state: Dict[str, Any] = Field(default_factory=dict)
     exhibit_instances: List[str] = Field(default_factory=list)
     ready_for_build: bool = False
     open_questions: List[str] = Field(default_factory=list)
@@ -71,6 +72,7 @@ class StoryStatePatch(BaseModel):
     location_hint: Optional[str] = None
     player_pose: Optional[PlayerPose] = None
     notes: Optional[List[str]] = None
+    protocol_state: Optional[Dict[str, Any]] = None
     follow_up_questions: Optional[List[str]] = None
     blocking: Optional[List[str]] = None
     coverage: Optional[Dict[str, bool]] = None

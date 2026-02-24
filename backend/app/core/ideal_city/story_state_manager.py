@@ -198,6 +198,9 @@ class StoryStateManager:
         extra_risks = patch.risk_notes if patch and patch.risk_notes else []
         extra_register = patch.risk_register if patch and patch.risk_register else []
         extra_notes = patch.notes if patch and patch.notes else []
+        protocol_state = state.protocol_state
+        if patch and patch.protocol_state is not None:
+            protocol_state = dict(patch.protocol_state)
 
         goals = _merge_unique(state.goals, [spec.intent_summary, *extra_goals])
         logic_outline = _merge_unique(state.logic_outline, [*spec.logic_outline, *extra_logic])
@@ -236,6 +239,7 @@ class StoryStateManager:
                 "risk_notes": risk_notes,
                 "risk_register": risk_register,
                 "notes": notes,
+                "protocol_state": protocol_state,
                 "player_pose": pose,
                 "location_hint": location_hint,
             }
