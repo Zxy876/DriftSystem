@@ -76,13 +76,13 @@ public class PlayerChatListener implements Listener {
         // 首先检查教学进度（如果玩家在教学中）
         tutorialManager.checkProgress(p, originalMsg);
 
-        if (exitDetector != null && exitDetector.handle(p, originalMsg)) {
-            return;
-        }
-
         // 多意图版本
         router.askIntent(p.getName(), processedMsg, (List<IntentResponse2> intents) -> {
             plugin.getLogger().log(Level.INFO, "[聊天] 收到 {0} 个意图", intents.size());
+
+            if (exitDetector != null && shouldFallbackToExitDetector(intents) && exitDetector.handle(p, originalMsg)) {
+                return;
+            }
 
             final boolean forceCreateBlock = shouldForceCreateBlock(processedMsg);
             final IntentResponse2 firstIntent = intents.isEmpty() ? null : intents.get(0);
@@ -97,7 +97,8 @@ public class PlayerChatListener implements Listener {
                             firstIntent != null ? firstIntent.levelId : null,
                             firstIntent != null ? firstIntent.minimap : null,
                             processedMsg,
-                            null);
+                            null,
+                            firstIntent != null ? firstIntent.modeTarget : null);
 
                     dispatcher.dispatch(p, forcedIntent);
                     return;
@@ -116,7 +117,8 @@ public class PlayerChatListener implements Listener {
                             intent.levelId,
                             intent.minimap,
                             processedMsg,
-                            targetType == IntentType2.CREATE_BLOCK ? null : intent.worldPatch);
+                            targetType == IntentType2.CREATE_BLOCK ? null : intent.worldPatch,
+                            intent.modeTarget);
 
                     if (!processedMsg.equals(intent.rawText)) {
                         plugin.getLogger().log(Level.INFO,
@@ -127,6 +129,20 @@ public class PlayerChatListener implements Listener {
                 }
             });
         });
+    }
+
+    private boolean shouldFallbackToExitDetector(List<IntentResponse2> intents) {
+        if (intents == null || intents.isEmpty()) {
+            return true;
+        }
+
+        for (IntentResponse2 intent : intents) {
+            IntentType2 type = intent != null && intent.type != null ? intent.type : IntentType2.UNKNOWN;
+            if (type != IntentType2.SAY_ONLY && type != IntentType2.STORY_CONTINUE && type != IntentType2.UNKNOWN) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String augmentWithFrontCoordinate(Player player, String message) {

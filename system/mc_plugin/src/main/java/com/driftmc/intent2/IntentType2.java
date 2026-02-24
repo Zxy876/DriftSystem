@@ -13,6 +13,8 @@ public enum IntentType2 {
 
     CREATE_BLOCK,
 
+    MODE_SWITCH,
+
     STORY_CONTINUE,
     GOTO_LEVEL,
     GOTO_NEXT_LEVEL,
@@ -38,6 +40,8 @@ public enum IntentType2 {
             case "BUILD_STRUCTURE" -> BUILD_STRUCTURE;
 
             case "CREATE_BLOCK" -> CREATE_BLOCK;
+
+            case "MODE_SWITCH" -> MODE_SWITCH;
 
             case "STORY_CONTINUE" -> STORY_CONTINUE;
             case "GOTO_LEVEL" -> GOTO_LEVEL;

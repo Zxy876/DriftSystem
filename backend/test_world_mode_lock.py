@@ -81,3 +81,19 @@ def test_story_start_and_end_switch_runtime_mode(monkeypatch):
     end_resp = world_api.story_end(EndStoryRequest(player_id="p1", level_id="flagship_01"))
     assert end_resp["status"] == "ok"
     assert end_resp["mode"] == "shared"
+
+
+def test_multi_player_mode_switch_has_no_cross_pollution(monkeypatch):
+    dummy_story = _DummyStoryEngine()
+    monkeypatch.setattr(world_api, "story_engine", dummy_story)
+    monkeypatch.setattr(world_api, "quest_runtime", _DummyQuestRuntime())
+
+    response = world_api.story_start(EnterStoryRequest(player_id="alice", level_id="flagship_01"))
+    assert response["status"] == "ok"
+    assert dummy_story.get_runtime_mode("alice") == "personal"
+    assert dummy_story.get_runtime_mode("bob") == "shared"
+
+    response = world_api.story_end(EndStoryRequest(player_id="alice", level_id="flagship_01"))
+    assert response["status"] == "ok"
+    assert dummy_story.get_runtime_mode("alice") == "shared"
+    assert dummy_story.get_runtime_mode("bob") == "shared"

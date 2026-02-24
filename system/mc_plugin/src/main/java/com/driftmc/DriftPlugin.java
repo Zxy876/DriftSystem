@@ -27,6 +27,7 @@ import com.driftmc.commands.IdealCityCommand;
 import com.driftmc.commands.LevelCommand;
 import com.driftmc.commands.LevelsCommand;
 import com.driftmc.commands.MiniMapCommand;
+import com.driftmc.commands.ModeSwitchCommand;
 import com.driftmc.commands.NpcMasterCommand;
 import com.driftmc.commands.QuestLogCommand;
 import com.driftmc.commands.RecommendCommand;
@@ -211,6 +212,10 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("taskdebug", new TaskDebugCommand(this, backend, taskDebugToken));
         registerCommand("idealcity", idealCityCommand);
         registerCommand("cityphone", new CityPhoneCommand(cityPhoneManager));
+        registerCommand("enter", new ModeSwitchCommand(this, backend, worldPatcher,
+            "/world/story/start", "§a你进入了创作空间。"));
+        registerCommand("exit", new ModeSwitchCommand(this, backend, worldPatcher,
+            "/world/story/end", "§e你回到了共享空间。"));
 
         this.actorController.start();
 

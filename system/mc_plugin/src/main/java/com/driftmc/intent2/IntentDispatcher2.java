@@ -131,6 +131,10 @@ public class IntentDispatcher2 {
                 handleCreateBlock(p, effectiveIntent);
                 break;
 
+            case MODE_SWITCH:
+                handleModeSwitch(p, effectiveIntent, "natural_language");
+                break;
+
             case CREATE_STORY:
                 createStory(p, effectiveIntent);
                 break;
@@ -167,7 +171,8 @@ public class IntentDispatcher2 {
                     intent.levelId,
                     intent.minimap,
                     intent.rawText,
-                    null);
+                    null,
+                    intent.modeTarget);
         }
 
         return intent;
@@ -347,6 +352,64 @@ public class IntentDispatcher2 {
                             fp.sendMessage("§c创建失败: " + msg);
                         }
                     });
+                }
+            }
+        });
+    }
+
+    private void handleModeSwitch(Player player, IntentResponse2 intent, String triggerType) {
+        if (player == null) {
+            return;
+        }
+
+        final String targetMode = (intent != null && intent.modeTarget != null)
+                ? intent.modeTarget.trim().toLowerCase(Locale.ROOT)
+                : "";
+
+        final String endpoint;
+        final String message;
+        if ("personal".equals(targetMode)) {
+            endpoint = "/world/story/start";
+            message = "§a你进入了创作空间。";
+        } else if ("shared".equals(targetMode)) {
+            endpoint = "/world/story/end";
+            message = "§e你回到了共享空间。";
+        } else {
+            player.sendMessage("§c[模式切换] 无效目标模式。可选: personal/shared");
+            return;
+        }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("player_id", player.getName());
+        payload.put("trigger_type", triggerType);
+
+        backend.postJsonAsync(endpoint, GSON.toJson(payload), new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                Bukkit.getScheduler().runTask(plugin,
+                        () -> player.sendMessage("§c[模式切换失败] " + e.getMessage()));
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                try (response) {
+                    String raw = response.body() != null ? response.body().string() : "{}";
+                    JsonObject root = JsonParser.parseString(raw).getAsJsonObject();
+                    JsonObject patchObj = root.has("world_patch") && root.get("world_patch").isJsonObject()
+                            ? root.getAsJsonObject("world_patch")
+                            : null;
+
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        player.sendMessage(message);
+                        if (patchObj != null && patchObj.size() > 0) {
+                            Map<String, Object> patch = GSON.fromJson(patchObj, MAP_TYPE);
+                            syncTutorialState(player, patch);
+                            world.execute(player, patch);
+                        }
+                    });
+                } catch (Exception ex) {
+                    Bukkit.getScheduler().runTask(plugin,
+                            () -> player.sendMessage("§c[模式切换失败] 响应解析异常"));
                 }
             }
         });

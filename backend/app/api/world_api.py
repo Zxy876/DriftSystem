@@ -150,11 +150,13 @@ class WorldApplyResponse(BaseModel):
 class EnterStoryRequest(BaseModel):
     player_id: str
     level_id: Optional[str] = None
+    trigger_type: Optional[str] = "command"
 
 
 class EndStoryRequest(BaseModel):
     player_id: str
     level_id: Optional[str] = None
+    trigger_type: Optional[str] = "command"
 
 
 class RuleTriggerEvent(BaseModel):
@@ -652,6 +654,7 @@ def story_enter(request: EnterStoryRequest):
 
 @router.post("/story/start")
 def story_start(request: EnterStoryRequest):
+    previous_mode = story_engine.get_runtime_mode(request.player_id)
     preferred_level = request.level_id
     if not preferred_level:
         preferred_level = (
@@ -663,7 +666,19 @@ def story_start(request: EnterStoryRequest):
     if preferred_level:
         patch = story_engine.load_level_for_player(request.player_id, preferred_level)
     story_engine.set_runtime_mode(request.player_id, story_engine.MODE_PERSONAL)
+    current_mode = story_engine.get_runtime_mode(request.player_id)
     story_engine.prebuffer_story_beats(request.player_id, count=3)
+
+    logger.info(
+        "mode_switch",
+        extra={
+            "event": "mode_switch",
+            "player_id": request.player_id,
+            "from": previous_mode,
+            "to": current_mode,
+            "trigger_type": (request.trigger_type or "command"),
+        },
+    )
 
     logger.info(
         "story_start",
@@ -680,6 +695,7 @@ def story_start(request: EnterStoryRequest):
 
 @router.post("/story/end")
 def story_end(request: EndStoryRequest):
+    previous_mode = story_engine.get_runtime_mode(request.player_id)
     player_state = story_engine.players.get(request.player_id, {})
     level = player_state.get("level")
     cleanup_patch = None
@@ -688,6 +704,19 @@ def story_end(request: EndStoryRequest):
     else:
         quest_runtime.exit_level(request.player_id)
     story_engine.set_runtime_mode(request.player_id, story_engine.MODE_SHARED)
+    current_mode = story_engine.get_runtime_mode(request.player_id)
+
+    logger.info(
+        "mode_switch",
+        extra={
+            "event": "mode_switch",
+            "player_id": request.player_id,
+            "from": previous_mode,
+            "to": current_mode,
+            "trigger_type": (request.trigger_type or "command"),
+        },
+    )
+
     logger.info("story_end", extra={"player_id": request.player_id, "level_id": getattr(level, "level_id", None)})
     return {
         "status": "ok",

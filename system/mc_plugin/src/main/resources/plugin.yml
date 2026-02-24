@@ -103,6 +103,14 @@ commands:
     description: "管理 CityPhone 终端"
     usage: "/cityphone <give|open|say|pose>"
 
+  enter:
+    description: "进入创作空间（personal 模式）"
+    usage: "/enter"
+
+  exit:
+    description: "退出创作空间（回到 shared 模式）"
+    usage: "/exit"
+
 permissions:
   drift.taskdebug:
     description: "访问任务调试工具"

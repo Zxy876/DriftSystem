@@ -27,6 +27,7 @@ INTENT_PROMPT = """
 
 支持的意图（type）：
 
+- MODE_SWITCH
 - CREATE_STORY
 - SHOW_MINIMAP
 - SET_DAY / SET_NIGHT
@@ -48,6 +49,9 @@ INTENT_PROMPT = """
 3. 涉及关卡数字必须解析成 level_01 / level_05 形式。
 4. 若 AI 不确定，只输出一个 { "type": "SAY_ONLY" }。
 5. 玩家描述“理想之城 / ideal city”建造设想时输出 { "type": "IDEAL_CITY_SUBMIT", "raw_text": 原话 }。
+6. 玩家提出模式切换意图时输出：
+    - 进入创作空间：{ "type": "MODE_SWITCH", "mode_target": "personal" }
+    - 退出创作空间：{ "type": "MODE_SWITCH", "mode_target": "shared" }
 
 严格只允许 JSON。
 """
@@ -121,9 +125,46 @@ def _looks_like_ideal_city_request(raw: str) -> bool:
     return score >= 2
 
 
+MODE_SWITCH_RULES = {
+    "personal": (
+        "进入创作模式",
+        "进入创作空间",
+        "开始创作",
+        "进入创作",
+    ),
+    "shared": (
+        "退出创作模式",
+        "回到共享空间",
+        "退出创作",
+        "回到共享",
+    ),
+}
+
+
+def _classify_mode_switch(raw: str) -> Optional[str]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+
+    for target, phrases in MODE_SWITCH_RULES.items():
+        for phrase in phrases:
+            if phrase in text:
+                return target
+    return None
+
+
 def fallback_intents(text: str) -> List[Dict[str, Any]]:
     raw = text.strip()
     intents = []
+
+    mode_target = _classify_mode_switch(raw)
+    if mode_target is not None:
+        intents.append({
+            "type": "MODE_SWITCH",
+            "mode_target": mode_target,
+            "raw_text": raw,
+        })
+        return intents
 
     if _looks_like_ideal_city_request(raw):
         intents.append({
