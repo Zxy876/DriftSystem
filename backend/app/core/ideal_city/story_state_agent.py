@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 import re
@@ -18,44 +20,137 @@ from .story_state_phase import determine_phase
 
 _PLACEHOLDER_PATTERN = re.compile(r"\b(?:todo|tbd|待补|待定|占位|placeholder|无|暂无)\b", re.IGNORECASE)
 
+logger = logging.getLogger(__name__)
+
+WORLD_PROMPT_VERSION = "reunion_v1"
+NARRATIVE_DENSITY = str(os.getenv("NARRATIVE_DENSITY", "low")).strip().lower() or "low"
+
+_DENSITY_TOKEN_BUDGET = {
+    "low": 640,
+    "medium": 760,
+    "high": 880,
+}
+
+_CONTINUATION_SIGNALS = (
+    "继续",
+    "接着",
+    "然后",
+    "下一步",
+    "再",
+    "go on",
+    "continue",
+    "next",
+)
+
+_SCENE_CONTEXT_SIGNALS = (
+    "新场景",
+    "换到",
+    "进入",
+    "回到",
+    "附近",
+    "入口",
+    "在",
+)
+
 
 _STORY_STATE_SYSTEM_PROMPT = """
-你是理想之城 adjudication pipeline 的 StoryStateAgent，负责把玩家叙述转成完整的审查档案。
-仅返回 JSON，字段必须与下列样例完全一致：
+Drift World Narrative Engine
+
+Reunion World Protocol
+
+Identity
+
+You are the narrative engine of a persistent Minecraft world.
+
+This world exists because three young people, who grew up together under similar forms of intense training, have chosen to meet again.
+
+They do not return to compete.
+They do not return to prove.
+
+They return to create.
+
+Background of the World
+
+The three participants once lived inside systems that valued results, discipline, and proof.
+
+Over time, they realised something else had been fading:
+- unfinished conversations
+- shared silence
+- hesitation before decision
+- the feeling of building something without needing it to win
+
+They enter this world not to reconstruct the past,
+but to build something together without urgency.
+
+This world is their shared space.
+
+Core World Laws
+1. Language can change the world.
+2. The world responds, but does not dominate.
+3. No one is required to finish anything.
+4. Imported fragments become part of the shared structure.
+5. The world remembers states across sessions.
+
+Narrative Behaviour
+
+You may:
+- extend a scene gently
+- add environmental detail
+- respond to intention
+- allow threads to develop
+
+You must not:
+- force emotional resolution
+- summarise meaning
+- assign moral interpretation
+- create dramatic climax unless invited
+
+Push narrative only when participants signal continuation.
+Otherwise, maintain space.
+
+Tone Guidelines
+- Keep responses grounded.
+- Avoid grand declarations.
+- Avoid excessive symbolism.
+- Preserve ambiguity.
+- Let meaning emerge from interaction.
+
+The world is not a stage.
+It is a place being used.
+
+Collaboration Principle
+
+The three participants are equals.
+
+No single voice dominates.
+
+If they disagree, the world may reflect tension subtly,
+but never escalate it artificially.
+
+Creation is the goal,
+not conclusion.
+
+Ending Rule
+
+The world does not end stories.
+
+Participants may leave,
+but the world remains available.
+
+Return JSON only with optional keys from this patch schema:
 {
-    "goals": [],
-    "logic_outline": [],
-    "resources": [],
-    "community_requirements": [],
-    "world_constraints": [],
-    "risk_notes": [],
-    "risk_register": [],
-    "success_criteria": [],
-    "location_hint": "",
-    "follow_up_questions": [],
-    "coverage": {
-        "logic_outline": true,
-        "world_constraints": true,
-        "resource_ledger": true,
-        "success_criteria": true,
-        "risk_register": true
-    },
-    "motivation_score": 0,
-    "blocking": []
+  "goals": ["..."],
+  "logic_outline": ["..."],
+  "resources": ["资源项 - 责任人"],
+  "community_requirements": ["..."],
+  "world_constraints": ["..."],
+  "risk_notes": ["..."],
+  "risk_register": ["风险: 描述 / 缓解"],
+  "success_criteria": ["..."],
+  "location_hint": "...",
+  "follow_up_questions": ["..."]
 }
-审查规则：
-- 核心字段 {logic_outline, world_constraints, resources, success_criteria, risk_register} 不能留空且禁止占位词（TODO、待补、TBD 等）。
-- 每条 resources 必须使用 "资源项 - 责任人" 格式。
-- risk_register 必须使用 "风险: 描述 / 缓解" 格式。
-- 依据 motivation_score：
-    * ≥70：必须补齐所有核心字段，最多允许一个 blocking 理由并解释原因。
-    * 40-69：至少补齐 logic_outline、world_constraints，对其余缺口写入 follow_up_questions。
-    * <40：不要编造资源/风险，聚焦提问，blocking 列出缺失项。
-- coverage 中的布尔值需准确反映是否满足上述格式与数量要求。
-- blocking 列出阻塞建造的条目，使用简洁中文短语。
-- motivation_score 代表建造意愿；建造裁决 = 意愿 + 逻辑表达补全。意愿足够时要主动补全核心字段。
-- 任何字段不得返回 null 或空数组；如果无内容，直接省略对应字段并在 follow_up_questions 或 risk_notes 中说明缺口。
-- 不得使用占位词或“暂无/待补”之类含义的语句。
+Keep outputs concise and stable. Avoid long monologues.
 """.strip()
 
 
@@ -87,48 +182,46 @@ class StoryStateAgent:
         return parsed
 
     def _call_llm(self, ctx: StoryStateAgentContext) -> Optional[StoryStatePatch]:
-        stage = determine_phase(ctx.existing_state)
-        payload = {
-            "narrative": ctx.narrative,
-            "spec": {
-                "intent": ctx.spec.intent_summary,
-                "logic_outline": ctx.spec.logic_outline,
-                "resources": ctx.spec.resource_ledger,
-                "success": ctx.spec.success_criteria,
-            },
-            "scenario": {
-                "id": ctx.scenario.scenario_id,
-                "title": ctx.scenario.title,
-                "problem": ctx.scenario.problem_statement,
-                "constraints": ctx.scenario.contextual_constraints,
-            },
-            "existing_state": ctx.existing_state.model_dump(mode="json"),
-            "phase": stage,
-            "history": self._conversation_memory(ctx.existing_state),
-        }
-        stage_prompt = _STAGE_PROMPTS.get(stage, "")
-        system_prompt = _STORY_STATE_SYSTEM_PROMPT
-        if stage_prompt:
-            system_prompt = f"{system_prompt}\n\n当前阶段：{stage_prompt}"
+        runtime_context = self._build_runtime_context(ctx)
+        push_trigger_reason = self._push_trigger_reason(ctx)
+        allow_push = push_trigger_reason is not None
+
+        system_prompt = (
+            f"{_STORY_STATE_SYSTEM_PROMPT}\n\n"
+            f"WORLD_PROMPT_VERSION={WORLD_PROMPT_VERSION}\n"
+            f"NARRATIVE_DENSITY={NARRATIVE_DENSITY}\n"
+            f"allow_scene_extension={allow_push}\n"
+            f"push_trigger_reason={push_trigger_reason or 'none'}"
+        )
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            {"role": "user", "content": json.dumps(runtime_context, ensure_ascii=False)},
         ]
         response = call_deepseek(
-            payload,
+            runtime_context,
             messages,
-            temperature=0.2,
+            temperature=self._temperature_for_density(),
             connect_timeout=AI_CONNECT_TIMEOUT,
             read_timeout=AI_READ_TIMEOUT,
+            max_tokens=self._max_tokens_for_density(),
         )
         if not isinstance(response, dict):
             return None
         raw = response.get("parsed")
         if not isinstance(raw, dict):
             return None
-        return self._normalise(raw)
+        response_token_count = self._estimate_token_count(raw)
+        logger.debug(
+            "story_state_agent_response",
+            extra={
+                "world_prompt_version": WORLD_PROMPT_VERSION,
+                "response_token_count": response_token_count,
+                "push_trigger_reason": push_trigger_reason,
+            },
+        )
+        return self._normalise(raw, allow_push=allow_push)
 
-    def _normalise(self, raw: dict) -> StoryStatePatch:
+    def _normalise(self, raw: dict, *, allow_push: bool) -> StoryStatePatch:
         def _list(key: str, formatter: Optional[str] = None) -> Optional[List[str]]:
             values = raw.get(key)
             if not isinstance(values, list):
@@ -166,7 +259,7 @@ class StoryStateAgent:
 
         blocking = _list("blocking")
 
-        return StoryStatePatch(
+        patch = StoryStatePatch(
             goals=_list("goals"),
             logic_outline=_list("logic_outline"),
             resources=_list("resources", formatter="resource"),
@@ -180,6 +273,117 @@ class StoryStateAgent:
             blocking=blocking,
             coverage=normalised_coverage or None,
             motivation_score=_as_int(raw.get("motivation_score")),
+        )
+        return self._apply_density_controls(patch, allow_push=allow_push)
+
+    def _build_runtime_context(self, ctx: StoryStateAgentContext) -> Dict[str, object]:
+        player_input = (ctx.narrative or "").strip()
+        scene_hint = _infer_location_hint(player_input) or ctx.existing_state.location_hint
+        world_state: Dict[str, object] = {
+            "ready_for_build": bool(ctx.existing_state.ready_for_build),
+            "open_questions_count": len(ctx.existing_state.open_questions or []),
+            "blocking_count": len(ctx.existing_state.blocking or []),
+        }
+        active_scene: Dict[str, object] = {
+            "scenario_id": ctx.scenario.scenario_id,
+            "location_hint": scene_hint,
+        }
+        recent_history_summary = self._summarise_recent_history(ctx.existing_state)
+
+        runtime_context: Dict[str, object] = {
+            "world_state": world_state,
+            "active_scene": active_scene,
+            "player_input": player_input,
+            "recent_history_summary": recent_history_summary,
+        }
+
+        if ctx.existing_state.motivation_score:
+            runtime_context["emotion_state"] = {
+                "motivation_score": int(ctx.existing_state.motivation_score),
+                "mood": self._mood_from_score(ctx.existing_state.motivation_score),
+            }
+        return runtime_context
+
+    def _summarise_recent_history(self, state: StoryState) -> str:
+        notes = [line.strip() for line in (state.notes or []) if isinstance(line, str) and line.strip()]
+        recent = notes[-3:]
+        summary = " / ".join(recent)
+        if len(summary) > 220:
+            summary = summary[:217] + "..."
+        if summary:
+            return summary
+        return "暂无历史摘要"
+
+    def _push_trigger_reason(self, ctx: StoryStateAgentContext) -> Optional[str]:
+        player_input = (ctx.narrative or "").strip().lower()
+        has_continuation = any(signal in player_input for signal in _CONTINUATION_SIGNALS)
+        is_idle = self._scene_structurally_idle(ctx.existing_state)
+        has_new_scene_context = self._introduces_new_scene_context(ctx)
+
+        if has_continuation and is_idle and has_new_scene_context:
+            return "continuation+idle+new_scene_context"
+        return None
+
+    def _scene_structurally_idle(self, state: StoryState) -> bool:
+        return bool(state.ready_for_build) or (
+            len(state.open_questions or []) == 0 and len(state.blocking or []) == 0
+        )
+
+    def _introduces_new_scene_context(self, ctx: StoryStateAgentContext) -> bool:
+        text = (ctx.narrative or "").strip()
+        lowered = text.lower()
+        hint = _infer_location_hint(text)
+        if hint and hint != (ctx.existing_state.location_hint or ""):
+            return True
+        return any(token in lowered for token in _SCENE_CONTEXT_SIGNALS)
+
+    def _temperature_for_density(self) -> float:
+        if NARRATIVE_DENSITY == "high":
+            return 0.45
+        if NARRATIVE_DENSITY == "medium":
+            return 0.3
+        return 0.2
+
+    def _max_tokens_for_density(self) -> int:
+        return int(_DENSITY_TOKEN_BUDGET.get(NARRATIVE_DENSITY, 640))
+
+    def _estimate_token_count(self, payload: Dict[str, Any]) -> int:
+        text = json.dumps(payload, ensure_ascii=False)
+        return max(1, len(text) // 4)
+
+    def _mood_from_score(self, score: int) -> str:
+        if score >= 80:
+            return "steady"
+        if score >= 50:
+            return "tentative"
+        return "uncertain"
+
+    def _apply_density_controls(self, patch: StoryStatePatch, *, allow_push: bool) -> StoryStatePatch:
+        if NARRATIVE_DENSITY == "high":
+            max_items = 4 if allow_push else 2
+        elif NARRATIVE_DENSITY == "medium":
+            max_items = 3 if allow_push else 2
+        else:
+            max_items = 2 if allow_push else 1
+
+        def _cap(values: Optional[List[str]]) -> Optional[List[str]]:
+            if not values:
+                return values
+            capped = [str(item).strip() for item in values if str(item).strip()][:max_items]
+            return capped or None
+
+        return patch.model_copy(
+            update={
+                "goals": _cap(patch.goals),
+                "logic_outline": _cap(patch.logic_outline),
+                "resources": _cap(patch.resources),
+                "community_requirements": _cap(patch.community_requirements),
+                "world_constraints": _cap(patch.world_constraints),
+                "risk_notes": _cap(patch.risk_notes),
+                "risk_register": _cap(patch.risk_register),
+                "success_criteria": _cap(patch.success_criteria),
+                "follow_up_questions": _cap(patch.follow_up_questions),
+            }
         )
 
     def _fallback(self, ctx: StoryStateAgentContext) -> StoryStatePatch:

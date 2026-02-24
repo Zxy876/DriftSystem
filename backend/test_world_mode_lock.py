@@ -33,6 +33,9 @@ class _DummyStoryEngine:
         state["level"] = type("_L", (), {"level_id": level_id})()
         return {"mc": {"tell": f"loaded {level_id}"}}
 
+    def prebuffer_story_beats(self, _player_id, count=3):
+        return count
+
     def exit_level_with_cleanup(self, player_id, _level):
         state = self.players.setdefault(player_id, {})
         state["level"] = None

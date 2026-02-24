@@ -564,6 +564,7 @@ def call_deepseek(
     *,
     connect_timeout: Optional[float] = None,
     read_timeout: Optional[float] = None,
+    max_tokens: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Generic DeepSeek API wrapper used by story/world tools."""
 
@@ -603,7 +604,7 @@ def call_deepseek(
     payload = {
         "messages": payload_messages,
         "temperature": temperature,
-        "max_tokens": DEFAULT_MAX_TOKENS,
+        "max_tokens": DEFAULT_MAX_TOKENS if max_tokens is None else max_tokens,
     }
     if response_format is not None:
         payload["response_format"] = response_format
