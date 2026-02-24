@@ -102,6 +102,8 @@ node_modules/
 system/taskcrew/node_modules/
 
 # ---- Local rehearsal/log artifacts ----
+logs/
 logs/rollback_rehearsal/
+*.probe.txt
 docs/freeze_evidence/
 backend/backend/
