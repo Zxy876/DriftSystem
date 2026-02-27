@@ -8,6 +8,9 @@ from copy import deepcopy
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+import uuid
+import json
+import hashlib
 
 from app.core.ai.deepseek_agent import deepseek_decide
 from app.core.story.story_loader import (
@@ -597,6 +600,7 @@ class StoryEngine:
                 "last_time": 0.0,
                 "last_say_time": 0.0,
                 "memory_flags": set(),
+                "is_applying": False,
                 "emotional_profile": None,
                 "current_exhibit": None,
                 "scenario_id": None,
@@ -605,6 +609,61 @@ class StoryEngine:
                     "captured": set(),
                 },
             }
+
+    def apply(self, player_id: str, world_state: Dict[str, Any], action: Dict[str, Any]):
+        """Phase1 apply shell: per-player reentrancy guard + snapshot_before digest + delegate to existing advance().
+
+        Behavior: if another apply is active for the same player, reject with busy response.
+        This method MUST NOT modify `advance()` implementation.
+        Returns the same tuple as `advance`: (option, node, patch)
+        """
+        self._ensure_player(player_id)
+        p = self.players[player_id]
+
+        # Reentrancy guard (reject strategy)
+        if p.get("is_applying"):
+            logger.info("apply_rejected_busy", extra={"player_id": player_id})
+            # Return a benign patch indicating busy — callers should treat as rejected
+            return None, None, {"mc": {"tell": "Busy: apply already in progress"}}
+
+        # Mark as applying
+        p["is_applying"] = True
+        try:
+            # Create minimal snapshot_before
+            snapshot = {
+                "player_id": player_id,
+                "last_node_id": (p.get("nodes")[-1].get("id") if p.get("nodes") else None),
+                "timestamp": time.time(),
+                "event_id": str(uuid.uuid4()),
+            }
+
+            # Compute digest
+            try:
+                snapshot_json = json.dumps(snapshot, sort_keys=True, default=str)
+                digest = hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest()
+            except Exception:
+                digest = str(uuid.uuid4())
+
+            # Audit log (structured)
+            logger.info("apply_snapshot", extra={"player_id": player_id, "snapshot": snapshot, "snapshot_digest": digest})
+
+            # Delegate to existing advance() — do not change advance internals
+            result = self.advance(player_id, world_state, action)
+
+            # For observability, attach tx_id/event_id mapping
+            try:
+                option, node, patch = result
+            except Exception:
+                # If advance raised, re-raise after cleanup
+                raise
+
+            # Emit minimal audit for tx
+            tx_record = {"tx_id": snapshot["event_id"], "player_id": player_id, "snapshot_digest": digest}
+            logger.info("apply_committed", extra={"player_id": player_id, "tx": tx_record})
+
+            return option, node, patch
+        finally:
+            p["is_applying"] = False
 
     def _bind_exhibit_to_player(self, player_id: str, level: Level) -> None:
         player_state = self.players.setdefault(player_id, {})
