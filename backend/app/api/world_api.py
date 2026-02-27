@@ -116,6 +116,11 @@ router = APIRouter(prefix="/world", tags=["World"])
 world_engine = WorldEngine()
 logger = logging.getLogger("uvicorn.error")
 
+
+def is_trng_phase1_enabled() -> bool:
+    """Evaluate feature flag per-request. Default false."""
+    return os.environ.get("ENABLE_TRNG_CORE_PHASE1", "false").strip().lower() in {"1", "true", "on", "yes"}
+
 # ============================================================
 # MODELS
 # ============================================================
@@ -538,7 +543,11 @@ def apply_action(inp: ApplyInput):
         )
 
     if say_text:
-        option, node, patch = story_engine.advance(player_id, new_state, act)
+        # Phase1: optionally route through story_engine.apply() which wraps advance()
+        if is_trng_phase1_enabled():
+            option, node, patch = story_engine.apply(player_id, new_state, act)
+        else:
+            option, node, patch = story_engine.advance(player_id, new_state, act)
         final_patch = creation_world_patch if block_story_world_patch else patch
 
         if block_story_world_patch and creation_world_patch:
