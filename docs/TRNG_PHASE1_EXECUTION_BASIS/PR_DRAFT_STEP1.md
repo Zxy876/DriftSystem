@@ -55,3 +55,29 @@ Branch: `feature/trng-phase1`
 
 ## Commit message
 - `feat(trng): step1b harden apply shell (lock + abort audit + flag eval)`
+
+## How to run verification (repo root)
+
+Run from the repository root (no PYTHONPATH changes required):
+
+```bash
+python3 scripts/step1_verify.py
+```
+
+Expected output (summary):
+
+```
+V1 equivalence: PASS
+Reentrancy test: PASS
+Snapshot logging test: PASS
+Concurrency smoke test: PASS
+Abort logging test: PASS
+All Step1 verifications passed.
+```
+
+Feature flag: `ENABLE_TRNG_CORE_PHASE1` — default off. Set to `1|true|on|yes` to enable routing `/world/apply` -> `story_engine.apply()`.
+
+Scope statement and proof pointer:
+
+- `advance()` body unchanged (Step1 scope). See evidence: `docs/TRNG_PHASE1_EXECUTION_BASIS/AUDIT_STEP1B_EVIDENCE.md` and `docs/TRNG_PHASE1_EXECUTION_BASIS/AUDIT_STEP1_EVIDENCE.md`.
+- To verify programmatically: `git diff HEAD~1..HEAD -- backend/app/core/story/story_engine.py | sed -n '/def advance/,/def /p'` — expected no hunks touching the `advance()` body.

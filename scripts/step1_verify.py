@@ -24,10 +24,21 @@ Tests:
 
 Usage: python3 scripts/step1_verify.py
 """
+import sys
+from pathlib import Path
 import logging
 import threading
 import time
 from typing import List
+
+# Ensure script can be run from repo root without setting PYTHONPATH
+repo_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(repo_root))
+# If project uses `backend/app` layout, prefer backend on sys.path so `app` imports resolve
+backend_path = repo_root / "backend"
+if backend_path.exists():
+    sys.path.insert(0, str(backend_path))
+
 from app.core.story.story_engine import story_engine
 
 
