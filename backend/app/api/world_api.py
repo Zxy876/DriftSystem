@@ -115,8 +115,11 @@ def _has_execute_confirmation(message: Optional[str]) -> bool:
 router = APIRouter(prefix="/world", tags=["World"])
 world_engine = WorldEngine()
 logger = logging.getLogger("uvicorn.error")
-# Feature flag for Phase1 TRNG apply shell
-ENABLE_TRNG_CORE_PHASE1 = os.environ.get("ENABLE_TRNG_CORE_PHASE1", "false").strip().lower() in {"1", "true", "on", "yes"}
+
+
+def is_trng_phase1_enabled() -> bool:
+    """Evaluate feature flag per-request. Default false."""
+    return os.environ.get("ENABLE_TRNG_CORE_PHASE1", "false").strip().lower() in {"1", "true", "on", "yes"}
 
 # ============================================================
 # MODELS
@@ -541,7 +544,7 @@ def apply_action(inp: ApplyInput):
 
     if say_text:
         # Phase1: optionally route through story_engine.apply() which wraps advance()
-        if ENABLE_TRNG_CORE_PHASE1:
+        if is_trng_phase1_enabled():
             option, node, patch = story_engine.apply(player_id, new_state, act)
         else:
             option, node, patch = story_engine.advance(player_id, new_state, act)

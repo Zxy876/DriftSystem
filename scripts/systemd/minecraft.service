@@ -1,0 +1,20 @@
+[Unit]
+Description=Drift Minecraft Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{MC_USER}}
+WorkingDirectory={{MC_DIR}}
+EnvironmentFile=-/etc/default/drift-minecraft
+ExecStart=/bin/bash -lc '${MC_START_CMD:-./start.sh}'
+ExecStop=/bin/bash -lc '${MC_STOP_CMD:-pkill -f "paper.*jar|minecraft_server.*jar" || true}'
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

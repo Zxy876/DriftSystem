@@ -53,7 +53,8 @@ public class IntentDispatcher2 {
     private static final Type MAP_TYPE = new TypeToken<Map<String, Object>>() {
     }.getType();
     private static final String PRIMARY_LEVEL_ID = "flagship_03";
-    private static final Pattern BLOCK_ID_PATTERN = Pattern.compile("minecraft:[a-z0-9_./\\-]+", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BLOCK_ID_PATTERN = Pattern.compile("minecraft:[a-z0-9_./\\-]+",
+            Pattern.CASE_INSENSITIVE);
 
     public IntentDispatcher2(Plugin plugin, BackendClient backend, WorldPatchExecutor world) {
         this.plugin = plugin;
@@ -700,9 +701,9 @@ public class IntentDispatcher2 {
                         : null;
 
                 final JsonObject creationPayload = (root.has("creation_result")
-                    && root.get("creation_result").isJsonObject())
-                        ? root.get("creation_result").getAsJsonObject()
-                        : null;
+                        && root.get("creation_result").isJsonObject())
+                                ? root.get("creation_result").getAsJsonObject()
+                                : null;
 
                 Bukkit.getScheduler().runTask(plugin, () -> {
 
@@ -770,85 +771,87 @@ public class IntentDispatcher2 {
         String json = GSON.toJson(payload);
         UUID playerId = player.getUniqueId();
 
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> backend.postJsonAsync("/ideal-city/narrative/ingest", json, new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                if (plugin.getLogger().isLoggable(Level.FINE)) {
-                    plugin.getLogger().fine("[CityPhone] 叙事采集失败: " + e.getMessage());
-                }
-            }
-
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-                try (response) {
-                    if (!response.isSuccessful()) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin,
+                () -> backend.postJsonAsync("/ideal-city/narrative/ingest", json, new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
                         if (plugin.getLogger().isLoggable(Level.FINE)) {
-                            plugin.getLogger().fine("[CityPhone] 叙事采集返回 HTTP " + response.code());
+                            plugin.getLogger().fine("[CityPhone] 叙事采集失败: " + e.getMessage());
                         }
-                        return;
-                    }
-                    ResponseBody responseBody = response.body();
-                    if (responseBody == null) {
-                        return;
-                    }
-                    String body = responseBody.string();
-                    if (body.isEmpty()) {
-                        return;
-                    }
-                    JsonObject root;
-                    try {
-                        root = JsonParser.parseString(body).getAsJsonObject();
-                    } catch (Exception parseError) {
-                        if (plugin.getLogger().isLoggable(Level.FINE)) {
-                            plugin.getLogger().fine("[CityPhone] 叙事采集解析失败: " + parseError.getMessage());
-                        }
-                        return;
-                    }
-                    String status = root.has("status") && !root.get("status").isJsonNull()
-                            ? root.get("status").getAsString()
-                            : "";
-                    if (!"needs_review".equalsIgnoreCase(status) && !"accepted".equalsIgnoreCase(status)) {
-                        return;
                     }
 
-                    String serverMessage = root.has("message") && root.get("message").isJsonPrimitive()
-                            ? root.get("message").getAsString()
-                            : ("needs_review".equalsIgnoreCase(status) ? "解析为草稿，请在 CityPhone 补齐要素。" : "已自动提交裁决。");
-
-                    String missingSummary = null;
-                    if (root.has("missing_fields") && root.get("missing_fields").isJsonArray()) {
-                        JsonArray arr = root.getAsJsonArray("missing_fields");
-                        if (arr.size() > 0) {
-                            StringBuilder builder = new StringBuilder();
-                            int limit = Math.min(arr.size(), 3);
-                            for (int i = 0; i < limit; i++) {
-                                if (i > 0) {
-                                    builder.append("、");
+                    @Override
+                    public void onResponse(Call call, Response response) throws IOException {
+                        try (response) {
+                            if (!response.isSuccessful()) {
+                                if (plugin.getLogger().isLoggable(Level.FINE)) {
+                                    plugin.getLogger().fine("[CityPhone] 叙事采集返回 HTTP " + response.code());
                                 }
-                                builder.append(arr.get(i).getAsString());
+                                return;
                             }
-                            if (arr.size() > limit) {
-                                builder.append("…");
+                            ResponseBody responseBody = response.body();
+                            if (responseBody == null) {
+                                return;
                             }
-                            missingSummary = builder.toString();
+                            String body = responseBody.string();
+                            if (body.isEmpty()) {
+                                return;
+                            }
+                            JsonObject root;
+                            try {
+                                root = JsonParser.parseString(body).getAsJsonObject();
+                            } catch (Exception parseError) {
+                                if (plugin.getLogger().isLoggable(Level.FINE)) {
+                                    plugin.getLogger().fine("[CityPhone] 叙事采集解析失败: " + parseError.getMessage());
+                                }
+                                return;
+                            }
+                            String status = root.has("status") && !root.get("status").isJsonNull()
+                                    ? root.get("status").getAsString()
+                                    : "";
+                            if (!"needs_review".equalsIgnoreCase(status) && !"accepted".equalsIgnoreCase(status)) {
+                                return;
+                            }
+
+                            String serverMessage = root.has("message") && root.get("message").isJsonPrimitive()
+                                    ? root.get("message").getAsString()
+                                    : ("needs_review".equalsIgnoreCase(status) ? "解析为草稿，请在 CityPhone 补齐要素。"
+                                            : "已自动提交裁决。");
+
+                            String missingSummary = null;
+                            if (root.has("missing_fields") && root.get("missing_fields").isJsonArray()) {
+                                JsonArray arr = root.getAsJsonArray("missing_fields");
+                                if (arr.size() > 0) {
+                                    StringBuilder builder = new StringBuilder();
+                                    int limit = Math.min(arr.size(), 3);
+                                    for (int i = 0; i < limit; i++) {
+                                        if (i > 0) {
+                                            builder.append("、");
+                                        }
+                                        builder.append(arr.get(i).getAsString());
+                                    }
+                                    if (arr.size() > limit) {
+                                        builder.append("…");
+                                    }
+                                    missingSummary = builder.toString();
+                                }
+                            }
+
+                            String display = "§b[CityPhone] " + serverMessage;
+                            if (missingSummary != null && !missingSummary.isEmpty()) {
+                                display += " 待补: " + missingSummary;
+                            }
+
+                            String finalDisplay = display;
+                            Bukkit.getScheduler().runTask(plugin, () -> {
+                                Player target = Bukkit.getPlayer(playerId);
+                                if (target != null) {
+                                    target.sendMessage(finalDisplay);
+                                }
+                            });
                         }
                     }
-
-                    String display = "§b[CityPhone] " + serverMessage;
-                    if (missingSummary != null && !missingSummary.isEmpty()) {
-                        display += " 待补: " + missingSummary;
-                    }
-
-                    String finalDisplay = display;
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        Player target = Bukkit.getPlayer(playerId);
-                        if (target != null) {
-                            target.sendMessage(finalDisplay);
-                        }
-                    });
-                }
-            }
-        }));
+                }));
     }
 
     private boolean isLikelyBlockPlacement(String text) {

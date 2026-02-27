@@ -8,6 +8,7 @@ from copy import deepcopy
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+import threading
 import uuid
 import json
 import hashlib
@@ -343,6 +344,9 @@ class StoryEngine:
             ExhibitInstanceRepository() if self._exhibit_instances_enabled else None
         )
         self._exhibit_builder = ExhibitInstanceBuilder()
+        # Per-player apply locks to avoid race conditions across threads/workers
+        # Use threading.Lock and non-blocking acquire for reject-on-contention behavior
+        self._apply_locks: Dict[str, threading.Lock] = {}
         if not self._exhibit_instances_enabled:
             logger.info(
                 "[StoryEngine] Exhibit instance replay disabled (set DRIFT_ENABLE_EXHIBIT_INSTANCES=1 to enable)."
@@ -611,59 +615,111 @@ class StoryEngine:
             }
 
     def apply(self, player_id: str, world_state: Dict[str, Any], action: Dict[str, Any]):
-        """Phase1 apply shell: per-player reentrancy guard + snapshot_before digest + delegate to existing advance().
+        """Phase1 apply shell (Step1b hardened):
 
-        Behavior: if another apply is active for the same player, reject with busy response.
-        This method MUST NOT modify `advance()` implementation.
+        - Non-blocking per-player lock to avoid races across threads/workers
+        - Normalized audit schema for snapshot/commit/abort
+        - Delegate to existing advance() without changing its body
+
         Returns the same tuple as `advance`: (option, node, patch)
         """
         self._ensure_player(player_id)
         p = self.players[player_id]
 
-        # Reentrancy guard (reject strategy)
-        if p.get("is_applying"):
-            logger.info("apply_rejected_busy", extra={"player_id": player_id})
-            # Return a benign patch indicating busy — callers should treat as rejected
-            return None, None, {"mc": {"tell": "Busy: apply already in progress"}}
+        # Obtain or create per-player lock
+        lock = self._apply_locks.setdefault(player_id, threading.Lock())
 
-        # Mark as applying
+        acquired = lock.acquire(blocking=False)
+        if not acquired:
+            logger.info("apply_rejected_busy", extra={"player_id": player_id})
+            busy_patch = {
+                "mc": {"tell": "Busy: apply already in progress"},
+                "meta": {"status": "busy", "code": "APPLY_REENTRANT"},
+            }
+            return None, None, busy_patch
+
+        # We hold the lock; optional debug flag
         p["is_applying"] = True
+        tx_id = str(uuid.uuid4())
         try:
-            # Create minimal snapshot_before
+            # Build resilient root_from_node helper
+            root_from_node = None
+            try:
+                nodes = p.get("nodes")
+                if isinstance(nodes, (list, tuple)) and nodes:
+                    last = nodes[-1]
+                    if isinstance(last, dict):
+                        root_from_node = last.get("id")
+                    else:
+                        root_from_node = getattr(last, "id", None)
+            except Exception:
+                root_from_node = None
+
+            # Determine action_type
+            action_type = None
+            if isinstance(action, dict):
+                action_type = action.get("type")
+                if not action_type and action.get("say"):
+                    action_type = "say"
+
             snapshot = {
+                "tx_id": tx_id,
                 "player_id": player_id,
-                "last_node_id": (p.get("nodes")[-1].get("id") if p.get("nodes") else None),
+                "root_from_node": root_from_node,
                 "timestamp": time.time(),
-                "event_id": str(uuid.uuid4()),
+                "action_type": action_type,
             }
 
-            # Compute digest
+            # Compute digest from compact snapshot
             try:
                 snapshot_json = json.dumps(snapshot, sort_keys=True, default=str)
-                digest = hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest()
+                snapshot_digest = hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest()
             except Exception:
-                digest = str(uuid.uuid4())
+                snapshot_digest = str(uuid.uuid4())
 
-            # Audit log (structured)
-            logger.info("apply_snapshot", extra={"player_id": player_id, "snapshot": snapshot, "snapshot_digest": digest})
+            # Audit: snapshot (stable schema)
+            logger.info("apply_snapshot", extra={
+                "tx_id": snapshot["tx_id"],
+                "player_id": player_id,
+                "root_from_node": root_from_node,
+                "snapshot_digest": snapshot_digest,
+            })
 
-            # Delegate to existing advance() — do not change advance internals
-            result = self.advance(player_id, world_state, action)
+            # Delegate to existing advance(); capture exceptions to emit abort audit
+            try:
+                result = self.advance(player_id, world_state, action)
+            except Exception as exc:
+                # Abort audit with normalized error info, then re-raise
+                error_info = {"type": exc.__class__.__name__, "message": str(exc)}
+                logger.exception("apply_aborted", extra={
+                    "tx_id": snapshot["tx_id"],
+                    "player_id": player_id,
+                    "snapshot_digest": snapshot_digest,
+                    "error": error_info,
+                })
+                raise
 
-            # For observability, attach tx_id/event_id mapping
+            # On success, emit committed audit
             try:
                 option, node, patch = result
             except Exception:
-                # If advance raised, re-raise after cleanup
+                # If result unpacking fails, treat as error (re-raise)
                 raise
 
-            # Emit minimal audit for tx
-            tx_record = {"tx_id": snapshot["event_id"], "player_id": player_id, "snapshot_digest": digest}
-            logger.info("apply_committed", extra={"player_id": player_id, "tx": tx_record})
+            logger.info("apply_committed", extra={
+                "tx_id": snapshot["tx_id"],
+                "player_id": player_id,
+                "snapshot_digest": snapshot_digest,
+            })
 
             return option, node, patch
         finally:
             p["is_applying"] = False
+            try:
+                if acquired:
+                    lock.release()
+            except Exception:
+                logger.exception("apply_lock_release_failed", extra={"player_id": player_id})
 
     def _bind_exhibit_to_player(self, player_id: str, level: Level) -> None:
         player_state = self.players.setdefault(player_id, {})

@@ -143,7 +143,7 @@ public class DriftPlugin extends JavaPlugin {
         this.intentDispatcher2.setQuestLogHud(questLogHud);
         this.intentDispatcher2.setDialoguePanel(dialoguePanel);
         this.intentDispatcher2.setChoicePanel(choicePanel);
-        boolean allowStoryCreation = getConfig().getBoolean("world.allow_story_creation", false);
+        boolean allowStoryCreation = getConfig().getBoolean("world.allow_story_creation", true);
         this.intentDispatcher2.setStoryCreationEnabled(allowStoryCreation);
         this.exitIntentDetector = new ExitIntentDetector(this, backend, worldPatcher, recommendationHud, questLogHud);
 
@@ -213,9 +213,9 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("idealcity", idealCityCommand);
         registerCommand("cityphone", new CityPhoneCommand(cityPhoneManager));
         registerCommand("enter", new ModeSwitchCommand(this, backend, worldPatcher,
-            "/world/story/start", "§a你进入了创作空间。"));
+                "/world/story/start", "§a你进入了创作空间。"));
         registerCommand("exit", new ModeSwitchCommand(this, backend, worldPatcher,
-            "/world/story/end", "§e你回到了共享空间。"));
+                "/world/story/end", "§e你回到了共享空间。"));
 
         this.actorController.start();
 

@@ -45,7 +45,7 @@ INTENT_PROMPT = """
 
 1. 若一句话包含多个动作（如：跳到第三关并把天气改成白天），则必须输出多个 intents。
 2. 出现以下词 → 必须加入 CREATE_STORY：
-   “写剧情”“写故事”“编故事”“创造剧情”“生成剧情”“做一个关卡”
+    “写剧情”“写故事”“编故事”“创造剧情”“生成剧情”“做一个关卡”“导入剧情”“上传剧情”“注入剧情”
 3. 涉及关卡数字必须解析成 level_01 / level_05 形式。
 4. 若 AI 不确定，只输出一个 { "type": "SAY_ONLY" }。
 5. 玩家描述“理想之城 / ideal city”建造设想时输出 { "type": "IDEAL_CITY_SUBMIT", "raw_text": 原话 }。
@@ -141,6 +141,20 @@ MODE_SWITCH_RULES = {
 }
 
 
+STORY_IMPORT_TOPICS = ("剧情", "故事", "关卡", "剧本", "情景", "场景")
+STORY_IMPORT_ACTIONS = ("写", "生成", "创造", "创建", "导入", "导进", "上传", "注入")
+
+
+def _looks_like_story_import_request(raw: str) -> bool:
+    text = (raw or "").strip()
+    if not text:
+        return False
+
+    has_topic = any(topic in text for topic in STORY_IMPORT_TOPICS)
+    has_action = any(action in text for action in STORY_IMPORT_ACTIONS)
+    return has_topic and has_action
+
+
 def _classify_mode_switch(raw: str) -> Optional[str]:
     text = (raw or "").strip()
     if not text:
@@ -175,8 +189,7 @@ def fallback_intents(text: str) -> List[Dict[str, Any]]:
         return intents
 
     # CREATE_STORY
-    if ("剧情" in raw or "故事" in raw or "关卡" in raw) and \
-       ("写" in raw or "生成" in raw or "创造" in raw):
+    if _looks_like_story_import_request(raw):
         intents.append({
             "type": "CREATE_STORY",
             "title": raw[:12],
@@ -243,6 +256,14 @@ def parse_intent(player_id, text, world_state, story_engine):
             "type": "IDEAL_CITY_SUBMIT",
             "raw_text": text.strip(),
             "narrative": text.strip(),
+        }]
+    elif _looks_like_story_import_request(text.strip()):
+        normalized = text.strip()
+        intents = [{
+            "type": "CREATE_STORY",
+            "title": normalized[:12],
+            "text": normalized,
+            "raw_text": normalized,
         }]
     else:
         ai_list = None

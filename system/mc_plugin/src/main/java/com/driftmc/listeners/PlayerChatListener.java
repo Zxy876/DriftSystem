@@ -35,9 +35,13 @@ public class PlayerChatListener implements Listener {
     private final ChoicePanel choicePanel;
 
     private static final String FRONT_KEYWORD = "在我面前";
-    private static final Pattern BLOCK_ID_PATTERN = Pattern.compile("minecraft:[a-z0-9_./\\-]+", Pattern.CASE_INSENSITIVE);
-    private static final Pattern COORD_MARKER_PATTERN = Pattern.compile("(坐标|坐標|coordinate[s]?)\\s*[:：]?\\s*-?\\d+(?:\\.\\d+)?\\s+-?\\d+(?:\\.\\d+)?\\s+-?\\d+(?:\\.\\d+)?", Pattern.CASE_INSENSITIVE);
-    private static final Pattern COORD_TRIPLE_PATTERN = Pattern.compile("-?\\d+(?:\\.\\d+)?\\s+-?\\d+(?:\\.\\d+)?\\s+-?\\d+(?:\\.\\d+)?");
+    private static final Pattern BLOCK_ID_PATTERN = Pattern.compile("minecraft:[a-z0-9_./\\-]+",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern COORD_MARKER_PATTERN = Pattern.compile(
+            "(坐标|坐標|coordinate[s]?)\\s*[:：]?\\s*-?\\d+(?:\\.\\d+)?\\s+-?\\d+(?:\\.\\d+)?\\s+-?\\d+(?:\\.\\d+)?",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern COORD_TRIPLE_PATTERN = Pattern
+            .compile("-?\\d+(?:\\.\\d+)?\\s+-?\\d+(?:\\.\\d+)?\\s+-?\\d+(?:\\.\\d+)?");
 
     public PlayerChatListener(JavaPlugin plugin, IntentRouter2 router, IntentDispatcher2 dispatcher,
             TutorialManager tutorialManager, RuleEventBridge ruleEvents, ExitIntentDetector exitDetector,
@@ -63,7 +67,7 @@ public class PlayerChatListener implements Listener {
         }
 
         p.sendMessage("§7你：" + msg);
-        plugin.getLogger().log(Level.INFO, "[聊天] 玩家 {0} 说: {1}", new Object[]{p.getName(), msg});
+        plugin.getLogger().log(Level.INFO, "[聊天] 玩家 {0} 说: {1}", new Object[] { p.getName(), msg });
 
         if (ruleEvents != null) {
             ruleEvents.emitChat(p, msg);
@@ -108,7 +112,7 @@ public class PlayerChatListener implements Listener {
                 for (IntentResponse2 intent : intents) {
                     plugin.getLogger().log(Level.INFO,
                             "[聊天] 分发意图: {0}, rawText={1}",
-                            new Object[]{intent.type, intent.rawText});
+                            new Object[] { intent.type, intent.rawText });
 
                     IntentType2 targetType = intent.type;
 
@@ -179,14 +183,14 @@ public class PlayerChatListener implements Listener {
         plugin.getLogger().info(String.format(Locale.ROOT,
                 "[IntentRouter] resolved_front_position = (%d, %d, %d)", targetX, targetY, targetZ));
 
-    StringBuilder builder = new StringBuilder(message);
-    if (blockId != null) {
-        builder.append(" 方块 ").append(blockId);
-        plugin.getLogger().info(String.format(Locale.ROOT,
-            "[IntentRouter] resolved_block_id = %s", blockId));
-    }
-    builder.append(String.format(Locale.ROOT, " 坐标 %d %d %d", targetX, targetY, targetZ));
-    return builder.toString();
+        StringBuilder builder = new StringBuilder(message);
+        if (blockId != null) {
+            builder.append(" 方块 ").append(blockId);
+            plugin.getLogger().info(String.format(Locale.ROOT,
+                    "[IntentRouter] resolved_block_id = %s", blockId));
+        }
+        builder.append(String.format(Locale.ROOT, " 坐标 %d %d %d", targetX, targetY, targetZ));
+        return builder.toString();
     }
 
     private boolean shouldForceCreateBlock(String message) {

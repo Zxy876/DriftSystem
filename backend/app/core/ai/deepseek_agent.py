@@ -7,6 +7,7 @@ import time
 import random
 import hashlib
 import threading
+import re
 from collections import OrderedDict
 from concurrent.futures import Future, TimeoutError
 from queue import Full, Queue
@@ -29,7 +30,7 @@ HEADERS = {
 }
 
 CONNECT_TIMEOUT = min(20.0, float(os.getenv("DEEPSEEK_CONNECT_TIMEOUT", "6")))
-READ_TIMEOUT = min(20.0, float(os.getenv("DEEPSEEK_READ_TIMEOUT", "12")))
+READ_TIMEOUT = min(20.0, float(os.getenv("DEEPSEEK_READ_TIMEOUT", "18")))
 MAX_RETRIES = min(2, max(0, int(os.getenv("DEEPSEEK_MAX_RETRIES", "2"))))
 RETRY_BACKOFF = float(os.getenv("DEEPSEEK_RETRY_BACKOFF", "1.5"))
 DEFAULT_MAX_TOKENS = max(64, int(os.getenv("AI_MAX_TOKENS", "800")))
@@ -104,20 +105,78 @@ def _ensure_payload_limits(payload: Dict[str, Any], model_name: str) -> Dict[str
     bounded["max_tokens"] = min(max(64, parsed), MAX_TOKENS_CAP)
     return bounded
 
-AI_RETRY_ON_TIMEOUT = os.getenv("IDEAL_CITY_AI_RETRY_ON_TIMEOUT", "0").lower() in {
+
+def _extract_json_object(raw: Any) -> Optional[Dict[str, Any]]:
+    if isinstance(raw, dict):
+        return dict(raw)
+
+    text = str(raw or "").strip()
+    if not text:
+        return None
+
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        pass
+
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.DOTALL | re.IGNORECASE)
+    if fenced:
+        try:
+            parsed = json.loads(fenced.group(1))
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = text[start : end + 1]
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+
+    return None
+
+
+def _coerce_ai_result(content: Any) -> Dict[str, Any]:
+    parsed = _extract_json_object(content)
+    if isinstance(parsed, dict):
+        return parsed
+
+    text = str(content or "").strip()
+    text = text[:600] if text else "我在聆听你的回忆，请继续告诉我更多细节。"
+    return {
+        "option": None,
+        "node": {
+            "title": "创造之城 · 回声",
+            "text": text,
+        },
+        "world_patch": {"variables": {}, "mc": {}},
+    }
+
+AI_RETRY_ON_TIMEOUT = os.getenv("IDEAL_CITY_AI_RETRY_ON_TIMEOUT", "1").lower() in {
     "1",
     "true",
     "yes",
     "on",
 }
-AI_TIMEOUT_DEADLINE = float(os.getenv("IDEAL_CITY_AI_TIMEOUT_DEADLINE", "12"))
+AI_TIMEOUT_DEADLINE = float(os.getenv("IDEAL_CITY_AI_TIMEOUT_DEADLINE", "20"))
 
 AI_DISABLED = os.getenv("IDEAL_CITY_AI_DISABLE", "").lower() in {"1", "true", "yes", "on"}
-AI_FAILURE_THRESHOLD = max(1, int(os.getenv("IDEAL_CITY_AI_FAILURE_THRESHOLD", "1")))
-AI_CIRCUIT_SECONDS = float(os.getenv("IDEAL_CITY_AI_CIRCUIT_SECONDS", "120"))
+AI_FAILURE_THRESHOLD = max(1, int(os.getenv("IDEAL_CITY_AI_FAILURE_THRESHOLD", "3")))
+AI_CIRCUIT_SECONDS = float(os.getenv("IDEAL_CITY_AI_CIRCUIT_SECONDS", "20"))
+AI_CIRCUIT_PROBE_SECONDS = max(1.0, float(os.getenv("IDEAL_CITY_AI_CIRCUIT_PROBE_SECONDS", "5")))
 
 _lock = threading.Lock()
 _LAST_CALL_TS: Dict[str, float] = {}
+_LAST_DECISION: Dict[str, Dict[str, Any]] = {}
+_LAST_USER_SIGNATURE: Dict[str, str] = {}
 MAX_CACHE_SIZE = int(os.getenv("DEEPSEEK_CACHE_SIZE", str(128)))
 CACHE_LOG_INTERVAL = max(0, int(os.getenv("DEEPSEEK_CACHE_LOG_INTERVAL", "50")))
 
@@ -129,7 +188,7 @@ AI_QUEUE_RESULT_TIMEOUT = float(os.getenv("IDEAL_CITY_AI_QUEUE_RESULT_TIMEOUT", 
 AI_MAX_BACKOFF = float(os.getenv("IDEAL_CITY_AI_MAX_BACKOFF", "12"))
 
 _circuit_lock = threading.Lock()
-_failure_state: Dict[str, float | int] = {"count": 0, "open_until": 0.0}
+_failure_state: Dict[str, float | int] = {"count": 0, "open_until": 0.0, "last_probe": 0.0}
 
 # ⭐ 最重要：缩短冷却时间
 MIN_INTERVAL = 0.6
@@ -330,6 +389,10 @@ def _circuit_status(now: Optional[float] = None) -> Tuple[bool, Optional[str]]:
     with _circuit_lock:
         open_until = float(_failure_state.get("open_until", 0.0))
         if current < open_until:
+            last_probe = float(_failure_state.get("last_probe", 0.0))
+            if (current - last_probe) >= AI_CIRCUIT_PROBE_SECONDS:
+                _failure_state["last_probe"] = current
+                return False, "circuit_probe"
             return True, "circuit_open"
     return False, None
 
@@ -338,6 +401,7 @@ def _record_success() -> None:
     with _circuit_lock:
         _failure_state["count"] = 0
         _failure_state["open_until"] = 0.0
+        _failure_state["last_probe"] = 0.0
 
 
 def _record_failure(now: Optional[float] = None) -> None:
@@ -348,6 +412,7 @@ def _record_failure(now: Optional[float] = None) -> None:
             open_until = current + AI_CIRCUIT_SECONDS
             _failure_state["open_until"] = open_until
             _failure_state["count"] = 0
+            _failure_state["last_probe"] = current
             print(
                 f"[AI WARN] DeepSeek circuit open for {AI_CIRCUIT_SECONDS:.0f}s after repeated failures."
             )
@@ -400,7 +465,7 @@ def _call_deepseek_api_sync(
                 resp.raise_for_status()
                 body = resp.json()
                 content = body["choices"][0]["message"]["content"]
-                result = json.loads(content)
+                result = _coerce_ai_result(content)
                 _set_last_error(None)
                 _record_success()
                 return result
@@ -464,6 +529,20 @@ def deepseek_decide(context, messages_history):
 
     player_id = str(context.get("player_id") or "global")
 
+    latest_user_input = ""
+    if isinstance(messages_history, list):
+        for entry in reversed(messages_history):
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("role") or "").strip().lower() != "user":
+                continue
+            latest_user_input = str(entry.get("content") or "").strip()
+            break
+
+    action = context.get("player_action") if isinstance(context, dict) else None
+    action_type = str((action or {}).get("type") or "").strip().lower() if isinstance(action, dict) else ""
+    is_prebuffer = bool((context or {}).get("story_prebuffer")) or action_type == "prebuffer"
+
     reason = _bypass_reason()
     if reason:
         _inc_metric("fallback_count")
@@ -480,7 +559,13 @@ def deepseek_decide(context, messages_history):
     # ⭐ 节流：改成 0.6 秒
     now = time.time()
     last = _LAST_CALL_TS.get(player_id, 0.0)
-    if (now - last) < MIN_INTERVAL:
+    previous_user_input = _LAST_USER_SIGNATURE.get(player_id, "")
+    duplicate_user_input = latest_user_input and latest_user_input == previous_user_input
+    should_throttle = (not is_prebuffer) and (now - last) < MIN_INTERVAL and duplicate_user_input
+    if should_throttle:
+        recent = _LAST_DECISION.get(player_id)
+        if isinstance(recent, dict) and recent:
+            return dict(recent)
         return {
             "option": None,
             "node": {
@@ -495,6 +580,8 @@ def deepseek_decide(context, messages_history):
     cached = _LRU.get(key)
     if cached:
         _LAST_CALL_TS[player_id] = now
+        _LAST_USER_SIGNATURE[player_id] = latest_user_input
+        _LAST_DECISION[player_id] = dict(cached)
         _maybe_log_cache("hit")
         return cached
 
@@ -542,6 +629,8 @@ def deepseek_decide(context, messages_history):
         _LRU.put(key, parsed)
         _maybe_log_cache("fill")
         _LAST_CALL_TS[player_id] = time.time()
+        _LAST_USER_SIGNATURE[player_id] = latest_user_input
+        _LAST_DECISION[player_id] = dict(parsed)
         return parsed
 
     except Exception as e:
@@ -549,6 +638,7 @@ def deepseek_decide(context, messages_history):
         _set_last_error(str(e))
         _inc_metric("fallback_count")
         _LAST_CALL_TS[player_id] = time.time()
+        _LAST_USER_SIGNATURE[player_id] = latest_user_input
         return {
             "option": None,
             "node": {"title": "创造之城 · 静默", "text": "AI 一时沉默，但工坊的灯火仍在跳跃。"},
