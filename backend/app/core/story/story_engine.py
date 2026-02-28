@@ -8,6 +8,8 @@ from copy import deepcopy
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from dataclasses import dataclass, field
+from collections import deque
 import threading
 import uuid
 import json
@@ -347,6 +349,11 @@ class StoryEngine:
         # Per-player apply locks to avoid race conditions across threads/workers
         # Use threading.Lock and non-blocking acquire for reject-on-contention behavior
         self._apply_locks: Dict[str, threading.Lock] = {}
+        # Transaction observation history (in-memory, bounded)
+        # Per-player deque of TxRecord dicts (filled only in terminal states)
+        self._tx_history: Dict[str, deque] = {}
+        # Global lock protecting append operations when per-player lock is not held
+        self._tx_history_lock = threading.Lock()
         if not self._exhibit_instances_enabled:
             logger.info(
                 "[StoryEngine] Exhibit instance replay disabled (set DRIFT_ENABLE_EXHIBIT_INSTANCES=1 to enable)."
@@ -631,6 +638,42 @@ class StoryEngine:
 
         acquired = lock.acquire(blocking=False)
         if not acquired:
+            # Busy: do not read player state (no p access)
+            tx_id_busy = str(uuid.uuid4())
+            now_ts = time.time()
+            busy_snapshot = {
+                "tx_id": tx_id_busy,
+                "player_id": player_id,
+                "timestamp": now_ts,
+                "status": "busy",
+                "code": "APPLY_REENTRANT",
+            }
+            try:
+                snapshot_digest = hashlib.sha256(json.dumps(busy_snapshot, sort_keys=True).encode("utf-8")).hexdigest()
+            except Exception:
+                snapshot_digest = str(uuid.uuid4())
+
+            busy_record = {
+                "tx_id": tx_id_busy,
+                "player_id": player_id,
+                "root_from_node": None,
+                "action_type": (action.get("type") if isinstance(action, dict) else None),
+                "started_at": now_ts,
+                "finished_at": now_ts,
+                "snapshot_digest": snapshot_digest,
+                "result_summary": None,
+                "status": "busy",
+                "metadata": {"code": "APPLY_REENTRANT"},
+            }
+
+            # Thread-safe append for busy path (we don't hold per-player lock)
+            try:
+                with self._tx_history_lock:
+                    dq = self._tx_history.setdefault(player_id, deque(maxlen=50))
+                    dq.append(busy_record)
+            except Exception:
+                logger.exception("tx_history_append_failed_busy", extra={"player_id": player_id})
+
             logger.info("apply_rejected_busy", extra={"player_id": player_id})
             busy_patch = {
                 "mc": {"tell": "Busy: apply already in progress"},
@@ -641,6 +684,19 @@ class StoryEngine:
         # We hold the lock; optional debug flag
         p["is_applying"] = True
         tx_id = str(uuid.uuid4())
+        # Local (started) TxRecord - do NOT append yet
+        tx_local = {
+            "tx_id": tx_id,
+            "player_id": player_id,
+            "root_from_node": None,
+            "action_type": None,
+            "started_at": time.time(),
+            "finished_at": None,
+            "snapshot_digest": None,
+            "result_summary": None,
+            "status": "started",
+            "metadata": {},
+        }
         try:
             # Build resilient root_from_node helper
             root_from_node = None
@@ -685,12 +741,27 @@ class StoryEngine:
                 "snapshot_digest": snapshot_digest,
             })
 
+            # populate local tx fields that are safe now we hold the lock
+            tx_local["root_from_node"] = root_from_node
+            tx_local["action_type"] = action_type
+            tx_local["snapshot_digest"] = snapshot_digest
+
             # Delegate to existing advance(); capture exceptions to emit abort audit
             try:
                 result = self.advance(player_id, world_state, action)
             except Exception as exc:
                 # Abort audit with normalized error info, then re-raise
                 error_info = {"type": exc.__class__.__name__, "message": str(exc)}
+                tx_local["finished_at"] = time.time()
+                tx_local["status"] = "aborted"
+                tx_local["metadata"]["error"] = error_info
+                # Append terminal aborted record (must not affect flow)
+                try:
+                    with self._tx_history_lock:
+                        dq = self._tx_history.setdefault(player_id, deque(maxlen=50))
+                        dq.append(dict(tx_local))
+                except Exception:
+                    logger.exception("tx_history_append_failed_aborted", extra={"player_id": player_id})
                 logger.exception("apply_aborted", extra={
                     "tx_id": snapshot["tx_id"],
                     "player_id": player_id,
@@ -705,6 +776,50 @@ class StoryEngine:
             except Exception:
                 # If result unpacking fails, treat as error (re-raise)
                 raise
+
+            # Build constrained result_summary
+            try:
+                option_repr = (str(option)[:120]) if option is not None else None
+            except Exception:
+                option_repr = None
+
+            if isinstance(node, dict):
+                node_id = node.get("id") or "__no_id__"
+            else:
+                node_id = "__no_id__"
+
+            patch_keys = []
+            if isinstance(patch, dict):
+                try:
+                    keys = list(patch.keys())
+                    truncated = False
+                    if len(keys) > 32:
+                        keys = keys[:32]
+                        truncated = True
+                    patch_keys = keys
+                    if truncated:
+                        patch_keys = patch_keys + ["__truncated__"]
+                except Exception:
+                    patch_keys = []
+
+            result_summary = {
+                "option_repr": option_repr,
+                "node_id": node_id,
+                "patch_keys": patch_keys,
+            }
+
+            # fill local tx
+            tx_local["finished_at"] = time.time()
+            tx_local["status"] = "success"
+            tx_local["result_summary"] = result_summary
+
+            # Append terminal success record (must not affect return)
+            try:
+                with self._tx_history_lock:
+                    dq = self._tx_history.setdefault(player_id, deque(maxlen=50))
+                    dq.append(dict(tx_local))
+            except Exception:
+                logger.exception("tx_history_append_failed_success", extra={"player_id": player_id})
 
             logger.info("apply_committed", extra={
                 "tx_id": snapshot["tx_id"],
