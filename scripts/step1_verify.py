@@ -215,10 +215,49 @@ def test_abort_logging():
     print("Abort logging test: PASS")
 
 
+def test_tx_history_success_and_busy():
+    # success path
+    player_id = "step2a_test_success"
+    reset_player(player_id)
+    res = story_engine.apply(player_id, {"variables": {}}, {"say": "x"})
+    dq = getattr(story_engine, "_tx_history", {}).get(player_id)
+    assert dq and len(dq) >= 1, f"tx_history missing for player {player_id}"
+    rec = dq[-1]
+    assert rec.get("status") == "success", f"expected success record, got {rec.get('status')}"
+    assert rec.get("result_summary") is not None, "result_summary missing"
+    assert rec.get("started_at") <= rec.get("finished_at"), "timestamps invalid"
+
+    # busy path
+    player_busy = "step2a_test_busy"
+    reset_player(player_busy)
+
+    original_advance = story_engine.advance
+
+    def slow_advance(pid, ws, action):
+        time.sleep(0.25)
+        return (None, None, {"mc": {"ok": True}})
+
+    story_engine.advance = slow_advance
+
+    t = threading.Thread(target=lambda: story_engine.apply(player_busy, {"variables": {}}, {"say": "x"}))
+    t.start()
+    time.sleep(0.05)
+    _, _, patch = story_engine.apply(player_busy, {"variables": {}}, {"say": "x"})
+    meta = patch.get("meta", {}) if isinstance(patch, dict) else {}
+    assert meta.get("status") == "busy", f"expected busy patch, got {patch}"
+    dq_busy = getattr(story_engine, "_tx_history", {}).get(player_busy)
+    assert dq_busy and any(r.get("status") == "busy" for r in dq_busy), "busy tx_record not found"
+
+    story_engine.advance = original_advance
+    t.join()
+    print("Tx history tests: PASS")
+
+
 if __name__ == "__main__":
     test_v1_equivalence()
     test_reentrancy()
     test_snapshot_logging()
     test_concurrency_smoke()
     test_abort_logging()
+    test_tx_history_success_and_busy()
     print("All Step1 verifications passed.")
