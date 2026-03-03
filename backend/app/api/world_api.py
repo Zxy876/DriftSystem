@@ -1,8 +1,11 @@
 import os
+import time
+from collections import defaultdict
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 import logging
 
 from app.core.world.engine import WorldEngine
@@ -14,6 +17,92 @@ from app.core.quest.runtime import quest_runtime
 router = APIRouter(prefix="/world", tags=["World"])
 world_engine = WorldEngine()
 logger = logging.getLogger("uvicorn.error")
+APPLY_REPORTS_LIMIT = 20
+REPORT_STATUS_RANK: Dict[str, int] = {
+    "REJECTED": 1,
+    "PARTIAL": 2,
+    "EXECUTED": 3,
+}
+apply_reports_by_player: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+fallback_state_by_player: Dict[str, Dict[str, Any]] = defaultdict(dict)
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def _rank_for_status(status: str) -> int:
+    return REPORT_STATUS_RANK.get(status, 0)
+
+
+def _upsert_apply_report(report: "ApplyReportInput") -> Dict[str, Any]:
+    player_reports = apply_reports_by_player[report.player_id]
+    build_id = report.build_id
+    now_ms = _now_ms()
+    incoming_rank = _rank_for_status(report.status)
+    existing = player_reports.get(build_id)
+
+    if not existing:
+        record = {
+            "build_id": build_id,
+            "player_id": report.player_id,
+            "report_count": 1,
+            "first_seen_ms": now_ms,
+            "last_seen_ms": now_ms,
+            "status_rank": incoming_rank,
+            "last_status": report.status,
+            "last_failure_code": report.failure_code,
+            "last_executed": report.executed,
+            "last_failed": report.failed,
+            "last_duration_ms": report.duration_ms,
+            "last_payload_hash": report.payload_hash,
+            "received_at": datetime.now(timezone.utc).isoformat(),
+        }
+        player_reports[build_id] = record
+        return record
+
+    existing["report_count"] = int(existing.get("report_count", 0)) + 1
+    existing["last_seen_ms"] = now_ms
+    existing["received_at"] = datetime.now(timezone.utc).isoformat()
+
+    current_rank = int(existing.get("status_rank", 0))
+    should_overwrite = incoming_rank > current_rank or incoming_rank == current_rank
+
+    if should_overwrite:
+        existing["status_rank"] = incoming_rank
+        existing["last_status"] = report.status
+        existing["last_failure_code"] = report.failure_code
+        existing["last_executed"] = report.executed
+        existing["last_failed"] = report.failed
+        existing["last_duration_ms"] = report.duration_ms
+        existing["last_payload_hash"] = report.payload_hash
+
+    return existing
+
+
+def _recent_reports_for_player(player_id: str) -> list[Dict[str, Any]]:
+    reports = list(apply_reports_by_player.get(player_id, {}).values())
+    reports.sort(key=lambda item: int(item.get("last_seen_ms", 0)), reverse=True)
+    return reports[:APPLY_REPORTS_LIMIT]
+
+
+def _record_fallback_state(
+    *,
+    player_id: str,
+    fallback_flag: bool,
+    reason: str,
+    level_id: Optional[str] = None,
+    inject_version: Optional[str] = None,
+) -> Dict[str, Any]:
+    state = {
+        "last_fallback_flag": bool(fallback_flag),
+        "last_fallback_reason": reason,
+        "last_fallback_level_id": level_id,
+        "last_fallback_inject_version": inject_version,
+        "last_fallback_at": datetime.now(timezone.utc).isoformat(),
+    }
+    fallback_state_by_player[player_id] = state
+    return state
 
 # ============================================================
 # MODELS
@@ -59,6 +148,17 @@ class RuleTriggerEvent(BaseModel):
     player_id: str
     event_type: Optional[str] = None
     payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ApplyReportInput(BaseModel):
+    build_id: str = Field(min_length=1)
+    player_id: str = Field(min_length=1)
+    status: Literal["EXECUTED", "REJECTED", "PARTIAL"]
+    failure_code: str = Field(min_length=1)
+    executed: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    duration_ms: int = Field(ge=0)
+    payload_hash: str = Field(min_length=1)
 
 
 # ============================================================
@@ -107,9 +207,45 @@ def apply_action(inp: ApplyInput):
                 payload = InjectPayload(
                     level_id=level_id,
                     title=intent.get("title", "自由创作"),
-                    text=raw_text
+                    text=raw_text,
+                    player_id=player_id,
                 )
                 inject_result = api_story_inject(payload)
+
+                if isinstance(inject_result, dict) and inject_result.get("version") == "plugin_payload_v1":
+                    _record_fallback_state(
+                        player_id=player_id,
+                        fallback_flag=False,
+                        reason="payload_v1",
+                        level_id=level_id,
+                        inject_version="plugin_payload_v1",
+                    )
+                    return WorldApplyResponse(
+                        status="ok",
+                        world_state=new_state,
+                        story_node={
+                            "title": "✨ 世界已创建",
+                            "text": f"AI为你生成了新世界：{intent.get('title', '自由创作')}"
+                        },
+                        world_patch=inject_result,
+                    )
+
+                inject_version = inject_result.get("version") if isinstance(inject_result, dict) else None
+                fallback_reason = "inject_non_payload_v1"
+                _record_fallback_state(
+                    player_id=player_id,
+                    fallback_flag=True,
+                    reason=fallback_reason,
+                    level_id=level_id,
+                    inject_version=str(inject_version) if inject_version is not None else None,
+                )
+                logger.warning(
+                    "[CREATE_STORY] fell back to legacy world_patch; player_id=%s level_id=%s reason=%s inject_version=%s",
+                    player_id,
+                    level_id,
+                    fallback_reason,
+                    inject_version,
+                )
                 
                 # 立即加载生成的关卡
                 patch = story_engine.load_level_for_player(player_id, level_id)
@@ -410,12 +546,33 @@ def story_debug_tasks(player_id: str, request: Request, token: Optional[str] = N
         if provided != expected_token:
             raise HTTPException(status_code=403, detail="Task debug access denied.")
 
+    recent_reports = _recent_reports_for_player(player_id)
+    last_report = recent_reports[0] if recent_reports else None
+    fallback_state = fallback_state_by_player.get(player_id, {})
+
     snapshot = quest_runtime.get_debug_snapshot(player_id)
     if not snapshot:
-        return {"status": "error", "msg": "No active task state for player."}
+        return {
+            "status": "error",
+            "msg": "No active task state for player.",
+            "recent_apply_reports": recent_reports,
+            "last_apply_report": last_report,
+            "last_fallback_flag": fallback_state.get("last_fallback_flag", False),
+            "last_fallback_reason": fallback_state.get("last_fallback_reason", "none"),
+            "last_fallback_level_id": fallback_state.get("last_fallback_level_id"),
+            "last_fallback_inject_version": fallback_state.get("last_fallback_inject_version"),
+            "last_fallback_at": fallback_state.get("last_fallback_at"),
+        }
 
     payload: Dict[str, Any] = {"status": "ok"}
     payload.update(snapshot)
+    payload["recent_apply_reports"] = recent_reports
+    payload["last_apply_report"] = last_report
+    payload["last_fallback_flag"] = fallback_state.get("last_fallback_flag", False)
+    payload["last_fallback_reason"] = fallback_state.get("last_fallback_reason", "none")
+    payload["last_fallback_level_id"] = fallback_state.get("last_fallback_level_id")
+    payload["last_fallback_inject_version"] = fallback_state.get("last_fallback_inject_version")
+    payload["last_fallback_at"] = fallback_state.get("last_fallback_at")
     return payload
 
 
@@ -431,3 +588,31 @@ def story_quest_log(player_id: str):
             if key in snapshot:
                 response[key] = snapshot[key]
     return response
+
+
+@router.post("/apply/report")
+def apply_report(report: ApplyReportInput):
+    merged = _upsert_apply_report(report)
+
+    logger.info(
+        "world_apply_report",
+        extra={
+            "player_id": report.player_id,
+            "build_id": report.build_id,
+            "status": report.status,
+            "failure_code": report.failure_code,
+            "executed": report.executed,
+            "failed": report.failed,
+            "duration_ms": report.duration_ms,
+        },
+    )
+
+    return {
+        "status": "ok",
+        "accepted": True,
+        "player_id": report.player_id,
+        "build_id": report.build_id,
+        "report_count": merged.get("report_count", 1),
+        "last_status": merged.get("last_status"),
+        "status_rank": merged.get("status_rank"),
+    }
