@@ -17,6 +17,7 @@ import com.driftmc.backend.BackendClient;
 import com.driftmc.intent.IntentRouter;
 import com.driftmc.session.PlayerSessionManager;
 import com.driftmc.story.LevelIds;
+import com.driftmc.world.PayloadExecutorV1;
 import com.driftmc.world.WorldPatchExecutor;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
@@ -37,6 +38,7 @@ public class LevelCommand implements CommandExecutor {
     @SuppressWarnings("unused")
     private final IntentRouter router;
     private final WorldPatchExecutor world;
+    private final PayloadExecutorV1 payloadExecutor;
     @SuppressWarnings("unused")
     private final PlayerSessionManager sessions;
 
@@ -45,12 +47,14 @@ public class LevelCommand implements CommandExecutor {
             BackendClient backend,
             IntentRouter router,
             WorldPatchExecutor world,
+            PayloadExecutorV1 payloadExecutor,
             PlayerSessionManager sessions
     ) {
         this.plugin = plugin;
         this.backend = backend;
         this.router = router;
         this.world = world;
+        this.payloadExecutor = payloadExecutor;
         this.sessions = sessions;
     }
 
@@ -166,6 +170,14 @@ public class LevelCommand implements CommandExecutor {
 
             if (patchObj == null) return;
 
+            if (isPayloadV1(patchObj)) {
+                boolean accepted = payloadExecutor != null && payloadExecutor.enqueue(player, patchObj);
+                if (!accepted) {
+                    player.sendMessage(ChatColor.RED + "❌ 关卡 payload 入队失败，请稍后重试或使用 /taskdebug。");
+                }
+                return;
+            }
+
             Type type = new TypeToken<Map<String, Object>>() {}.getType();
             Map<String, Object> patch = GSON.fromJson(patchObj, type);
             if (patch == null || patch.isEmpty()) return;
@@ -182,5 +194,12 @@ public class LevelCommand implements CommandExecutor {
 
         } catch (Exception ignored) {
         }
+    }
+
+    private boolean isPayloadV1(JsonObject obj) {
+        return obj != null
+                && obj.has("version")
+                && obj.get("version").isJsonPrimitive()
+                && "plugin_payload_v1".equals(obj.get("version").getAsString());
     }
 }

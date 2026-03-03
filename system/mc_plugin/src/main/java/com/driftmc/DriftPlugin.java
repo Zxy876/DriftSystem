@@ -49,6 +49,7 @@ import com.driftmc.session.PlayerSessionManager;
 import com.driftmc.story.StoryCreativeManager;
 import com.driftmc.story.StoryManager;
 import com.driftmc.tutorial.TutorialManager;
+import com.driftmc.world.PayloadExecutorV1;
 import com.driftmc.world.WorldPatchExecutor;
 
 public class DriftPlugin extends JavaPlugin {
@@ -72,6 +73,7 @@ public class DriftPlugin extends JavaPlugin {
     private DialoguePanel dialoguePanel;
     private ChoicePanel choicePanel;
     private CinematicController cinematicController;
+    private PayloadExecutorV1 payloadExecutor;
     private String taskDebugToken;
 
     @Override
@@ -99,6 +101,7 @@ public class DriftPlugin extends JavaPlugin {
         this.tutorialManager = new TutorialManager(this, backend, sessionManager);
         this.npcManager = new NPCManager(this);
         this.worldPatcher = new SceneAwareWorldPatchExecutor(this, npcManager);
+        this.payloadExecutor = new PayloadExecutorV1(this, backend);
         this.worldPatcher.attachTutorialStateMachine(tutorialManager.getStateMachine());
         this.worldPatcher.attachTutorialManager(tutorialManager);
         this.cinematicController = new CinematicController(this, worldPatcher);
@@ -119,7 +122,11 @@ public class DriftPlugin extends JavaPlugin {
 
         // 意图系统 (新版多意图管线)
         this.intentRouter2 = new IntentRouter2(this, backend);
-        this.intentDispatcher2 = new IntentDispatcher2(this, backend, worldPatcher);
+        this.intentDispatcher2 = new IntentDispatcher2(
+            (org.bukkit.plugin.Plugin) this,
+            backend,
+            (WorldPatchExecutor) worldPatcher,
+            payloadExecutor);
         this.intentDispatcher2.setTutorialManager(tutorialManager);
         this.intentDispatcher2.setQuestLogHud(questLogHud);
         this.intentDispatcher2.setDialoguePanel(dialoguePanel);
@@ -162,7 +169,7 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("advance", new AdvanceCommand(this, backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("storynext", new CmdStoryNext(this, backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("heartmenu", new HeartMenuCommand(backend, intentRouter, worldPatcher, sessionManager));
-        registerCommand("level", new LevelCommand(this, backend, intentRouter, worldPatcher, sessionManager));
+        registerCommand("level", new LevelCommand(this, backend, intentRouter, worldPatcher, payloadExecutor, sessionManager));
         registerCommand("levels", new LevelsCommand(backend, intentRouter, worldPatcher, sessionManager));
         registerCommand("npc", new NpcMasterCommand(npcManager));
         registerCommand("tp2", new CmdTeleport(backend, intentRouter, worldPatcher, sessionManager));
@@ -202,6 +209,9 @@ public class DriftPlugin extends JavaPlugin {
 
         if (worldPatcher != null) {
             worldPatcher.shutdown();
+        }
+        if (payloadExecutor != null) {
+            payloadExecutor.shutdown();
         }
 
         getLogger().info("======================================");

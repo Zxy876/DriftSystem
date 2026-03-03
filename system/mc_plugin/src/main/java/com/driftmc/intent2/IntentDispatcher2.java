@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -18,14 +19,17 @@ import com.driftmc.backend.BackendClient;
 import com.driftmc.hud.QuestLogHud;
 import com.driftmc.hud.dialogue.ChoicePanel;
 import com.driftmc.hud.dialogue.DialoguePanel;
+import com.driftmc.scene.SceneAwareWorldPatchExecutor;
 import com.driftmc.story.LevelIds;
 import com.driftmc.tutorial.TutorialManager;
 import com.driftmc.tutorial.TutorialState;
+import com.driftmc.world.PayloadExecutorV1;
 import com.driftmc.world.WorldPatchExecutor;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 
 import okhttp3.Call;
@@ -37,6 +41,7 @@ public class IntentDispatcher2 {
     private final Plugin plugin;
     private final BackendClient backend;
     private final WorldPatchExecutor world;
+    private final PayloadExecutorV1 payloadExecutor;
     private TutorialManager tutorialManager;
     private QuestLogHud questLogHud;
     private DialoguePanel dialoguePanel;
@@ -48,10 +53,16 @@ public class IntentDispatcher2 {
     }.getType();
     private static final String PRIMARY_LEVEL_ID = "flagship_03";
 
-    public IntentDispatcher2(Plugin plugin, BackendClient backend, WorldPatchExecutor world) {
+    public IntentDispatcher2(Plugin plugin, BackendClient backend, WorldPatchExecutor world, PayloadExecutorV1 payloadExecutor) {
         this.plugin = plugin;
         this.backend = backend;
         this.world = world;
+        this.payloadExecutor = payloadExecutor;
+    }
+
+    public IntentDispatcher2(Plugin plugin, BackendClient backend, SceneAwareWorldPatchExecutor world,
+            PayloadExecutorV1 payloadExecutor) {
+        this(plugin, backend, (WorldPatchExecutor) world, payloadExecutor);
     }
 
     public void setTutorialManager(TutorialManager manager) {
@@ -129,8 +140,14 @@ public class IntentDispatcher2 {
     // ============================================================
     private void createStory(Player p, IntentResponse2 intent) {
         final Player fp = p;
+        String rawTextForLog = intent.rawText != null ? intent.rawText : "<null>";
 
-        if (!ensureUnlocked(fp, TutorialState.CREATE_STORY, "请继续当前教学提示后再创造剧情。")) {
+        boolean createStoryUnlocked = ensureUnlocked(fp, TutorialState.CREATE_STORY, "请继续当前教学提示后再创造剧情。");
+        plugin.getLogger().log(Level.INFO,
+            "[DEBUG] CREATE_STORY gate={0} player={1} rawText={2}",
+            new Object[]{createStoryUnlocked ? "UNLOCKED" : "LOCKED", fp.getName(), rawTextForLog});
+
+        if (!createStoryUnlocked) {
             return;
         }
 
@@ -142,6 +159,7 @@ public class IntentDispatcher2 {
         body.put("level_id", "flagship_custom_" + System.currentTimeMillis());
         body.put("title", title);
         body.put("text", rawText);
+        body.put("player_id", fp.getName());
 
         String jsonBody = GSON.toJson(body);
 
@@ -152,16 +170,38 @@ public class IntentDispatcher2 {
             @Override
             public void onFailure(Call call, IOException e) {
                 Bukkit.getScheduler().runTask(plugin,
-                        () -> fp.sendMessage("§c[创建剧情失败] " + e.getMessage()));
+                        () -> fp.sendMessage("§c[创建剧情失败][网络错误] " + e.getMessage()));
             }
 
             @Override
             public void onResponse(Call call, Response resp) throws IOException {
                 try (resp) {
                     String respStr = resp.body() != null ? resp.body().string() : "{}";
-                    JsonObject root = JsonParser.parseString(respStr).getAsJsonObject();
+                    final int statusCode = resp.code();
+                    final boolean success = resp.isSuccessful();
+                    final JsonObject root = parseJsonObjectSafely(respStr);
 
                     Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (!success) {
+                            fp.sendMessage("§c创建失败: " + formatHttpError(statusCode, root, respStr));
+                            return;
+                        }
+
+                        if (isPayloadV1(root)) {
+                            boolean accepted = payloadExecutor != null && payloadExecutor.enqueue(fp, root);
+                            if (accepted) {
+                                fp.sendMessage("§a✅ 剧情创建成功（payload v1）");
+                                String buildId = root.has("build_id") ? root.get("build_id").getAsString() : "unknown";
+                                int commandsCount = root.has("commands") && root.get("commands").isJsonArray()
+                                        ? root.getAsJsonArray("commands").size()
+                                        : 0;
+                                fp.sendMessage("§7build_id: " + buildId + "  commands=" + commandsCount);
+                            } else {
+                                fp.sendMessage("§c创建成功但执行器拒绝 payload，请用 /taskdebug 排查。");
+                            }
+                            return;
+                        }
+
                         if (root.has("status") && "ok".equals(root.get("status").getAsString())) {
                             String levelId = root.has("level_id") ? root.get("level_id").getAsString() : "未知";
                             fp.sendMessage("§a✅ 剧情创建成功！");
@@ -170,7 +210,7 @@ public class IntentDispatcher2 {
                             // 立即加载新创建的关卡（这样会应用场景和NPC）
                             loadLevelForPlayer(fp, levelId, intent);
                         } else {
-                            String msg = root.has("detail") ? root.get("detail").getAsString() : "未知错误";
+                            String msg = extractErrorMessage(root, respStr);
                             fp.sendMessage("§c创建失败: " + msg);
                         }
                     });
@@ -449,6 +489,8 @@ public class IntentDispatcher2 {
                         ? root.get("story_node").getAsJsonObject()
                         : null;
 
+                final JsonObject payloadV1 = extractPayloadV1(root);
+
                 final JsonObject wpatch = (root.has("world_patch") && root.get("world_patch").isJsonObject())
                         ? root.get("world_patch").getAsJsonObject()
                         : null;
@@ -480,7 +522,17 @@ public class IntentDispatcher2 {
                         plugin.getLogger().warning("[剧情推进] story_node 为空");
                     }
 
-                    if (wpatch != null && wpatch.size() > 0) {
+                    boolean payloadHandled = false;
+                    if (payloadV1 != null) {
+                        payloadHandled = payloadExecutor != null && payloadExecutor.enqueue(fp, payloadV1);
+                        if (!payloadHandled) {
+                            plugin.getLogger().warning("[剧情推进] plugin_payload_v1 rejected");
+                        } else {
+                            plugin.getLogger().info("[剧情推进] plugin_payload_v1 accepted");
+                        }
+                    }
+
+                    if (!payloadHandled && wpatch != null && wpatch.size() > 0) {
                         plugin.getLogger().info("[剧情推进] 执行世界patch");
                         Map<String, Object> patch = GSON.fromJson(wpatch, MAP_TYPE);
                         syncTutorialState(fp, patch);
@@ -489,6 +541,38 @@ public class IntentDispatcher2 {
                 });
             }
         });
+    }
+
+    private JsonObject extractPayloadV1(JsonObject root) {
+        if (root == null) {
+            return null;
+        }
+
+        if (isPayloadV1(root)) {
+            return root;
+        }
+
+        if (root.has("payload") && root.get("payload").isJsonObject()) {
+            JsonObject payload = root.getAsJsonObject("payload");
+            if (isPayloadV1(payload)) {
+                return payload;
+            }
+        }
+
+        if (root.has("world_patch") && root.get("world_patch").isJsonObject()) {
+            JsonObject payload = root.getAsJsonObject("world_patch");
+            if (isPayloadV1(payload)) {
+                return payload;
+            }
+        }
+
+        return null;
+    }
+
+    private boolean isPayloadV1(JsonObject obj) {
+        return obj.has("version")
+                && obj.get("version").isJsonPrimitive()
+                && "plugin_payload_v1".equals(obj.get("version").getAsString());
     }
 
     // ============================================================
@@ -585,6 +669,67 @@ public class IntentDispatcher2 {
             return null;
         }
         return enforceTutorialExitRedirect(player, intent.levelId, intent.rawText);
+    }
+
+    private JsonObject parseJsonObjectSafely(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return new JsonObject();
+        }
+        try {
+            return JsonParser.parseString(raw).getAsJsonObject();
+        } catch (IllegalStateException | JsonSyntaxException ex) {
+            return new JsonObject();
+        }
+    }
+
+    private String formatHttpError(int statusCode, JsonObject root, String raw) {
+        String category;
+        if (statusCode >= 500) {
+            category = "服务端异常";
+        } else if (statusCode >= 400) {
+            category = "请求参数问题";
+        } else if (statusCode >= 300) {
+            category = "重定向异常";
+        } else {
+            category = "未知HTTP异常";
+        }
+        String detail = extractErrorMessage(root, raw);
+        return category + " (HTTP " + statusCode + ")" + (detail == null || detail.isBlank() ? "" : " - " + detail);
+    }
+
+    private String extractErrorMessage(JsonObject root, String raw) {
+        if (root != null) {
+            if (root.has("detail") && root.get("detail").isJsonPrimitive()) {
+                return root.get("detail").getAsString();
+            }
+            if (root.has("msg") && root.get("msg").isJsonPrimitive()) {
+                return root.get("msg").getAsString();
+            }
+            if (root.has("error") && root.get("error").isJsonPrimitive()) {
+                return root.get("error").getAsString();
+            }
+            if (root.has("story_node") && root.get("story_node").isJsonObject()) {
+                JsonObject node = root.getAsJsonObject("story_node");
+                if (node.has("text") && node.get("text").isJsonPrimitive()) {
+                    return node.get("text").getAsString();
+                }
+            }
+            if (root.has("status") && root.get("status").isJsonPrimitive()) {
+                String status = root.get("status").getAsString();
+                if (!"ok".equalsIgnoreCase(status)) {
+                    return "status=" + status;
+                }
+            }
+        }
+
+        if (raw == null || raw.isBlank()) {
+            return "未知错误";
+        }
+        String compact = raw.replace('\n', ' ').trim();
+        if (compact.length() > 160) {
+            return compact.substring(0, 160) + "...";
+        }
+        return compact;
     }
 
     private String enforceTutorialExitRedirect(Player player, String requestedLevelId, String rawText) {

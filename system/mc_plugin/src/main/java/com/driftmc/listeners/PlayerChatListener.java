@@ -74,6 +74,17 @@ public class PlayerChatListener implements Listener {
         router.askIntent(p.getName(), msg, (List<IntentResponse2> intents) -> {
             plugin.getLogger().log(Level.INFO, "[聊天] 收到 {0} 个意图", intents.size());
             Bukkit.getScheduler().runTask(plugin, () -> {
+                StringBuilder intentSeq = new StringBuilder();
+                for (int i = 0; i < intents.size(); i++) {
+                    if (i > 0) {
+                        intentSeq.append(", ");
+                    }
+                    intentSeq.append(intents.get(i).type);
+                }
+                plugin.getLogger().log(Level.INFO,
+                        "[DEBUG] intents=[{0}] player={1} text={2}",
+                        new Object[]{intentSeq.toString(), p.getName(), originalMsg});
+
                 // 依次分发所有意图，并传递原始消息
                 for (IntentResponse2 intent : intents) {
                     plugin.getLogger().log(Level.INFO,

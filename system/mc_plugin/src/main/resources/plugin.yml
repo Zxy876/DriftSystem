@@ -8,7 +8,7 @@ description: "DriftSystem · 心悦宇宙 · 完全自然语言驱动的AI冒险
 commands:
   drift:
     description: "DriftSystem 主命令 (status/sync/debug)"
-    usage: "/drift <status|sync|debug|tutorial>"
+    usage: "/drift <status|sync|debug|report|where|goto|tutorial>"
     aliases: [ds, heart]
 
   storycreative:
