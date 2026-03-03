@@ -1,1 +1,8 @@
--r backend/requirements.txt
+fastapi
+uvicorn
+pydantic
+requests
+python-dotenv
+httpx
+openai
+Pillow
