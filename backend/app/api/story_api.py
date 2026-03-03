@@ -1,8 +1,9 @@
 # backend/app/api/story_api.py
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import os
 import json
 
@@ -12,8 +13,26 @@ from app.core.story.story_loader import (
     DATA_DIR,          # ⭐ 使用 story_loader 的同一个目录
 )
 from app.core.story.story_engine import story_engine
+from app.core.scene.scene_orchestrator_v1 import compose_scene_and_structure
+from app.core.scene.scene_orchestrator_v2 import compose_scene_and_structure_v2
+from app.core.executor.plugin_payload_v1 import build_plugin_payload_v1
+from app.core.executor.plugin_payload_v2 import build_plugin_payload_v2_with_trace, PayloadV2BuildError
 
 router = APIRouter(prefix="/story")
+
+
+class PayloadV1BuildError(Exception):
+    def __init__(self, failure_code: str, debug_payload: dict | None = None):
+        super().__init__(failure_code)
+        self.failure_code = failure_code
+        self.debug_payload = debug_payload or {}
+
+
+class PayloadV2BuildErrorWrapper(Exception):
+    def __init__(self, failure_code: str, debug_payload: dict | None = None):
+        super().__init__(failure_code)
+        self.failure_code = failure_code
+        self.debug_payload = debug_payload or {}
 
 
 def _normalize_injected_level_id(raw_level_id: str) -> str:
@@ -54,6 +73,115 @@ class InjectPayload(BaseModel):
     level_id: str     # test_inject
     title: str        # 测试剧情
     text: str         # 单段剧情文本（自动转成 list）
+    player_id: Optional[str] = "default"
+
+
+def _build_level_document(level_id: str, title: str, text: str, bootstrap_patch: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": level_id,
+        "title": title,
+        "text": [text],
+        "tags": [],
+        "mood": {"base": "calm", "intensity": 0.5},
+        "choices": [],
+        "meta": {},
+        "npcs": [],
+        "bootstrap_patch": bootstrap_patch,
+        "world_patch": bootstrap_patch,
+        "tree": None,
+    }
+
+
+def _as_bool_env(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _fixed_anchor_from_env() -> dict:
+    return {
+        "base_x": int(os.environ.get("DRIFT_FIXED_ANCHOR_X", "0")),
+        "base_y": int(os.environ.get("DRIFT_FIXED_ANCHOR_Y", "64")),
+        "base_z": int(os.environ.get("DRIFT_FIXED_ANCHOR_Z", "0")),
+        "anchor_mode": "fixed",
+    }
+
+
+def _extract_debug_payload(compose_result: dict) -> dict:
+    mapping_result = compose_result.get("mapping_result") or {}
+    decision_trace = compose_result.get("decision_trace") or mapping_result.get("trace") or {}
+    rule_version = decision_trace.get("rule_version") if isinstance(decision_trace, dict) else None
+    engine_version = decision_trace.get("engine_version") if isinstance(decision_trace, dict) else None
+    return {
+        "mapping_status": mapping_result.get("status", "UNAVAILABLE"),
+        "mapping_failure_code": mapping_result.get("failure_code", "UNAVAILABLE"),
+        "degrade_reason": mapping_result.get("degrade_reason"),
+        "lost_semantics": mapping_result.get("lost_semantics") or [],
+        "rule_version": rule_version,
+        "engine_version": engine_version,
+        "decision_trace": decision_trace,
+        "compose_path": compose_result.get("compose_path", "unknown"),
+    }
+
+
+def _build_payload_v1_for_inject(*, player_id: str, text: str) -> tuple[dict, dict]:
+    use_v2_mapper = _as_bool_env("DRIFT_USE_V2_MAPPER", default=False)
+    strict_mode = _as_bool_env("DRIFT_V2_STRICT_MODE", default=False)
+
+    if use_v2_mapper:
+        compose_result = compose_scene_and_structure_v2(text, strict_mode=strict_mode)
+    else:
+        compose_result = compose_scene_and_structure(text)
+
+    if compose_result.get("status") != "SUCCESS":
+        debug_payload = _extract_debug_payload(compose_result) if _as_bool_env("DRIFT_DEBUG_TRACE", default=False) else {}
+        raise PayloadV1BuildError(compose_result.get("failure_code", "COMPOSE_FAILED"), debug_payload)
+
+    payload_v1 = build_plugin_payload_v1(
+        compose_result,
+        player_id=player_id,
+        origin=_fixed_anchor_from_env(),
+    )
+
+    debug_payload: dict = {}
+    if _as_bool_env("DRIFT_DEBUG_TRACE", default=False):
+        debug_payload = _extract_debug_payload(compose_result)
+
+    return payload_v1, debug_payload
+
+
+def _build_payload_v2_for_inject(*, player_id: str, text: str) -> tuple[dict, dict]:
+    strict_mode = _as_bool_env("DRIFT_V2_STRICT_MODE", default=False)
+
+    compose_result = compose_scene_and_structure_v2(text, strict_mode=strict_mode)
+    if compose_result.get("status") != "SUCCESS":
+        debug_payload = _extract_debug_payload(compose_result) if _as_bool_env("DRIFT_DEBUG_TRACE", default=False) else {}
+        raise PayloadV2BuildErrorWrapper(compose_result.get("failure_code", "COMPOSE_FAILED"), debug_payload)
+
+    try:
+        payload_v2, payload_trace = build_plugin_payload_v2_with_trace(
+            compose_result,
+            player_id=player_id,
+            origin=_fixed_anchor_from_env(),
+            strict_mode=strict_mode,
+        )
+    except PayloadV2BuildError as exc:
+        debug_payload = {}
+        if _as_bool_env("DRIFT_DEBUG_TRACE", default=False):
+            debug_payload = _extract_debug_payload(compose_result)
+            debug_payload.update({
+                "payload_v2_failure_code": exc.failure_code,
+                "payload_v2_trace": exc.trace or {},
+            })
+        raise PayloadV2BuildErrorWrapper(exc.failure_code, debug_payload) from exc
+
+    debug_payload: dict = {}
+    if _as_bool_env("DRIFT_DEBUG_TRACE", default=False):
+        debug_payload = _extract_debug_payload(compose_result)
+        debug_payload["payload_v2_trace"] = payload_trace
+
+    return payload_v2, debug_payload
 
 
 # ============================================================
@@ -139,6 +267,79 @@ def api_story_inject(payload: InjectPayload):
             detail=f"Level {level_id} already exists"
         )
 
+    use_payload_v1 = _as_bool_env("DRIFT_USE_PAYLOAD_V1", default=False)
+    use_payload_v2 = _as_bool_env("DRIFT_USE_PAYLOAD_V2", default=False)
+
+    if use_payload_v2:
+        try:
+            player_id = (payload.player_id or "default").strip() or "default"
+            payload_v2, debug_payload = _build_payload_v2_for_inject(player_id=player_id, text=payload.text)
+
+            level_doc = _build_level_document(
+                level_id=level_id,
+                title=payload.title,
+                text=payload.text,
+                bootstrap_patch=payload_v2,
+            )
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(level_doc, f, ensure_ascii=False, indent=2)
+
+            result = dict(payload_v2)
+            result.update({
+                "status": "ok",
+                "msg": f"Level {level_id} created with payload_v2",
+                "level_id": level_id,
+                "file": file_path,
+            })
+            if debug_payload:
+                result.update(debug_payload)
+            return result
+        except PayloadV2BuildErrorWrapper as exc:
+            response = {
+                "detail": f"payload_v2_build_failed: {exc.failure_code}",
+            }
+            if _as_bool_env("DRIFT_DEBUG_TRACE", default=False) and exc.debug_payload:
+                response.update(exc.debug_payload)
+            return JSONResponse(status_code=422, content=response)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"payload_v2_build_failed: {exc}") from exc
+
+    if use_payload_v1:
+        try:
+            player_id = (payload.player_id or "default").strip() or "default"
+            payload_v1, debug_payload = _build_payload_v1_for_inject(player_id=player_id, text=payload.text)
+
+            level_doc = _build_level_document(
+                level_id=level_id,
+                title=payload.title,
+                text=payload.text,
+                bootstrap_patch=payload_v1,
+            )
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(level_doc, f, ensure_ascii=False, indent=2)
+
+            result = dict(payload_v1)
+            result.update({
+                "status": "ok",
+                "msg": f"Level {level_id} created with payload_v1",
+                "level_id": level_id,
+                "file": file_path,
+            })
+            if debug_payload:
+                result.update(debug_payload)
+            return result
+        except PayloadV1BuildError as exc:
+            response = {
+                "detail": f"payload_v1_build_failed: {exc.failure_code}",
+            }
+            if _as_bool_env("DRIFT_DEBUG_TRACE", default=False) and exc.debug_payload:
+                response.update(exc.debug_payload)
+            return JSONResponse(status_code=422, content=response)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"payload_v1_build_failed: {exc}") from exc
+
     # ⭐ 使用AI生成完整的世界内容（NPC、环境、建筑等）
     from app.core.ai.deepseek_agent import call_deepseek
     
@@ -223,19 +424,12 @@ def api_story_inject(payload: InjectPayload):
             }
         }
 
-    # ⭐ 生成兼容 Level 类的结构（全部字段完整）
-    data = {
-        "id": level_id,
-        "title": payload.title,
-        "text": [payload.text],                 # ⭐ 必须为 list[str]
-        "tags": [],
-        "mood": {"base": "calm", "intensity": 0.5},
-        "choices": [],
-        "meta": {},
-        "npcs": [],
-        "bootstrap_patch": bootstrap_patch,
-        "tree": None
-    }
+    data = _build_level_document(
+        level_id=level_id,
+        title=payload.title,
+        text=payload.text,
+        bootstrap_patch=bootstrap_patch,
+    )
 
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
