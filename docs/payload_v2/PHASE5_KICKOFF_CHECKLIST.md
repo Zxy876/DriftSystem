@@ -4,8 +4,8 @@
 - 评审结论：通过（Design Freeze）。
 - 冻结范围：`begin/apply/commit/rollback` API、事务不变量、测试矩阵。
 - 前置证据：Gate 回归全量通过并已封存快照：
-  - `docs/payload_v2/evidence/gate_regression/snapshot_20260304T113114Z/GATE_REGRESSION_EVIDENCE_SNAPSHOT.md`
-  - `docs/payload_v2/evidence/gate_regression/snapshot_20260304T113114Z/artifact_manifest.json`
+  - `docs/payload_v2/evidence/gate_regression/snapshot_20260304T120639Z/GATE_REGRESSION_EVIDENCE_SNAPSHOT.md`
+  - `docs/payload_v2/evidence/gate_regression/snapshot_20260304T120639Z/artifact_manifest.json`
 - 本文档状态：可作为 Phase5 实现前唯一入口规范；实现阶段不得越权扩展范围。
 
 ## Scope Statement
