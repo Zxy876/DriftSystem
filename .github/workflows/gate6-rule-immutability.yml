@@ -1,0 +1,29 @@
+name: gate6-rule-immutability
+
+on:
+  pull_request:
+    paths:
+      - 'backend/app/core/mapping/projection_rule_registry.py'
+      - 'backend/app/core/mapping/projection_rule_registry_freeze.json'
+      - 'backend/app/core/mapping/rule_immutability_guard.py'
+      - 'tools/gate6_rule_immutability_check.py'
+      - '.github/workflows/gate6-rule-immutability.yml'
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'backend/app/core/mapping/projection_rule_registry.py'
+      - 'backend/app/core/mapping/projection_rule_registry_freeze.json'
+      - 'backend/app/core/mapping/rule_immutability_guard.py'
+      - 'tools/gate6_rule_immutability_check.py'
+
+jobs:
+  gate6-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run Gate 6 immutability guard
+        run: |
+          python3 tools/gate6_rule_immutability_check.py

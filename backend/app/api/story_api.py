@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import os
 import json
+import re
 
 from app.core.story.story_loader import (
     list_levels,
@@ -74,6 +75,102 @@ class InjectPayload(BaseModel):
     title: str        # 测试剧情
     text: str         # 单段剧情文本（自动转成 list）
     player_id: Optional[str] = "default"
+    anchor: Optional[str] = None
+
+
+SCENE_ANCHOR_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+SCENE_ANCHOR_IDS = ("home", "npc_zone", "interaction_zone", "memory_scene")
+
+
+def _normalize_scene_anchor_id(raw_anchor: str | None) -> str | None:
+    if raw_anchor is None:
+        return None
+    if not isinstance(raw_anchor, str):
+        return None
+
+    normalized = raw_anchor.strip().lower()
+    if not normalized:
+        return None
+    if not SCENE_ANCHOR_ID_PATTERN.fullmatch(normalized):
+        return None
+
+    return normalized
+
+
+def _scene_anchor_from_text(text: str) -> str:
+    lowered = (text or "").lower()
+
+    memory_keywords = ("回忆", "记忆", "往事", "梦境", "memory", "flashback")
+    npc_keywords = ("npc", "守卫", "村民", "商人", "villager", "zombie", "skeleton")
+    interaction_keywords = ("互动", "交互", "对话", "任务", "解谜", "interaction")
+
+    if any(keyword in lowered for keyword in memory_keywords):
+        return "memory_scene"
+    if any(keyword in lowered for keyword in npc_keywords):
+        return "npc_zone"
+    if any(keyword in lowered for keyword in interaction_keywords):
+        return "interaction_zone"
+    return "home"
+
+
+def _origin_from_scene_anchor_env(anchor_id: str, fallback: dict) -> dict:
+    env_prefix = f"DRIFT_SCENE_ANCHOR_{anchor_id.upper()}"
+    return {
+        "base_x": int(os.environ.get(f"{env_prefix}_X", str(fallback["base_x"]))),
+        "base_y": int(os.environ.get(f"{env_prefix}_Y", str(fallback["base_y"]))),
+        "base_z": int(os.environ.get(f"{env_prefix}_Z", str(fallback["base_z"]))),
+        "anchor_mode": fallback.get("anchor_mode", "fixed"),
+    }
+
+
+def _scene_anchors_from_env(base_origin: dict) -> dict:
+    home = {
+        "base_x": int(base_origin["base_x"]),
+        "base_y": int(base_origin["base_y"]),
+        "base_z": int(base_origin["base_z"]),
+        "anchor_mode": str(base_origin.get("anchor_mode") or "fixed"),
+    }
+
+    npc_zone_default = {
+        "base_x": home["base_x"] + 24,
+        "base_y": home["base_y"],
+        "base_z": home["base_z"],
+        "anchor_mode": home["anchor_mode"],
+    }
+    interaction_zone_default = {
+        "base_x": home["base_x"],
+        "base_y": home["base_y"],
+        "base_z": home["base_z"] + 24,
+        "anchor_mode": home["anchor_mode"],
+    }
+    memory_scene_default = {
+        "base_x": home["base_x"] - 32,
+        "base_y": home["base_y"] + 6,
+        "base_z": home["base_z"] - 32,
+        "anchor_mode": home["anchor_mode"],
+    }
+
+    return {
+        "home": _origin_from_scene_anchor_env("home", home),
+        "npc_zone": _origin_from_scene_anchor_env("npc_zone", npc_zone_default),
+        "interaction_zone": _origin_from_scene_anchor_env("interaction_zone", interaction_zone_default),
+        "memory_scene": _origin_from_scene_anchor_env("memory_scene", memory_scene_default),
+    }
+
+
+def _resolve_scene_anchor(*, text: str, requested_anchor: str | None) -> str:
+    normalized_requested = _normalize_scene_anchor_id(requested_anchor)
+    if normalized_requested in SCENE_ANCHOR_IDS:
+        return normalized_requested
+
+    env_anchor = _normalize_scene_anchor_id(os.environ.get("DRIFT_SCENE_ANCHOR"))
+    if env_anchor in SCENE_ANCHOR_IDS:
+        return env_anchor
+
+    inferred = _scene_anchor_from_text(text)
+    if inferred in SCENE_ANCHOR_IDS:
+        return inferred
+    return "home"
 
 
 def _build_level_document(level_id: str, title: str, text: str, bootstrap_patch: Dict[str, Any]) -> Dict[str, Any]:
@@ -151,7 +248,7 @@ def _build_payload_v1_for_inject(*, player_id: str, text: str) -> tuple[dict, di
     return payload_v1, debug_payload
 
 
-def _build_payload_v2_for_inject(*, player_id: str, text: str) -> tuple[dict, dict]:
+def _build_payload_v2_for_inject(*, player_id: str, text: str, anchor: str | None = None) -> tuple[dict, dict]:
     strict_mode = _as_bool_env("DRIFT_V2_STRICT_MODE", default=False)
 
     compose_result = compose_scene_and_structure_v2(text, strict_mode=strict_mode)
@@ -159,12 +256,18 @@ def _build_payload_v2_for_inject(*, player_id: str, text: str) -> tuple[dict, di
         debug_payload = _extract_debug_payload(compose_result) if _as_bool_env("DRIFT_DEBUG_TRACE", default=False) else {}
         raise PayloadV2BuildErrorWrapper(compose_result.get("failure_code", "COMPOSE_FAILED"), debug_payload)
 
+    base_origin = _fixed_anchor_from_env()
+    scene_anchors = _scene_anchors_from_env(base_origin)
+    selected_anchor = _resolve_scene_anchor(text=text, requested_anchor=anchor)
+
     try:
         payload_v2, payload_trace = build_plugin_payload_v2_with_trace(
             compose_result,
             player_id=player_id,
-            origin=_fixed_anchor_from_env(),
+            origin=base_origin,
             strict_mode=strict_mode,
+            anchor=selected_anchor,
+            anchors=scene_anchors,
         )
     except PayloadV2BuildError as exc:
         debug_payload = {}
@@ -180,6 +283,7 @@ def _build_payload_v2_for_inject(*, player_id: str, text: str) -> tuple[dict, di
     if _as_bool_env("DRIFT_DEBUG_TRACE", default=False):
         debug_payload = _extract_debug_payload(compose_result)
         debug_payload["payload_v2_trace"] = payload_trace
+        debug_payload["scene_anchor"] = selected_anchor
 
     return payload_v2, debug_payload
 
@@ -273,7 +377,11 @@ def api_story_inject(payload: InjectPayload):
     if use_payload_v2:
         try:
             player_id = (payload.player_id or "default").strip() or "default"
-            payload_v2, debug_payload = _build_payload_v2_for_inject(player_id=player_id, text=payload.text)
+            payload_v2, debug_payload = _build_payload_v2_for_inject(
+                player_id=player_id,
+                text=payload.text,
+                anchor=payload.anchor,
+            )
 
             level_doc = _build_level_document(
                 level_id=level_id,

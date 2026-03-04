@@ -80,6 +80,13 @@ backend/server/*.pid
 *.swo
 *.bak
 
+# ---- Local runtime / validation artifacts ----
+**/server.properties
+**/usercache.json
+**/DriftSystem.jar*
+backend/data/flagship_levels/*
+**/ops.json
+
 # ---- Build outputs ----
 **/target/
 **/build/

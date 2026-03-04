@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from app.core.executor.canonical_v2 import (
@@ -17,6 +18,8 @@ from app.core.patch.patch_validate_v1 import validate_blocks
 ENGINE_VERSION = "engine_v2_1"
 NPC_PLACEHOLDER_BLOCK = "npc_placeholder"
 NPC_EFFECT_KEY = "npc_behavior.lake_guard"
+DEFAULT_ANCHOR_ID = "home"
+ANCHOR_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 
 DEFAULT_ORIGIN = {
     "base_x": 0,
@@ -49,6 +52,19 @@ class PayloadV2BuildError(Exception):
         self.trace = trace or {}
 
 
+def _normalize_anchor_id(anchor_id: str | None) -> str:
+    if anchor_id is None:
+        return DEFAULT_ANCHOR_ID
+    if not isinstance(anchor_id, str) or not anchor_id.strip():
+        raise ValueError("anchor must be non-empty string")
+
+    normalized = anchor_id.strip().lower()
+    if not ANCHOR_ID_PATTERN.fullmatch(normalized):
+        raise ValueError("anchor must match ^[a-z0-9][a-z0-9_-]{0,31}$")
+
+    return normalized
+
+
 def _normalize_origin(origin: dict | None) -> dict:
     merged = dict(DEFAULT_ORIGIN)
     if isinstance(origin, dict):
@@ -70,6 +86,32 @@ def _normalize_origin(origin: dict | None) -> dict:
         "base_z": base_z,
         "anchor_mode": anchor_mode,
     }
+
+
+def _normalize_anchors(
+    *,
+    normalized_origin: dict,
+    active_anchor: str,
+    anchors: dict | None,
+) -> dict[str, dict]:
+    normalized_anchors: dict[str, dict] = {
+        active_anchor: dict(normalized_origin),
+    }
+
+    if anchors is not None:
+        if not isinstance(anchors, dict):
+            raise ValueError("anchors must be dict[str, origin]")
+
+        for raw_anchor_id, raw_origin in anchors.items():
+            anchor_id = _normalize_anchor_id(str(raw_anchor_id))
+            if not isinstance(raw_origin, dict):
+                raise ValueError("anchors entries must be objects")
+            normalized_anchors[anchor_id] = _normalize_origin(raw_origin)
+
+    if active_anchor not in normalized_anchors:
+        normalized_anchors[active_anchor] = dict(normalized_origin)
+
+    return {key: normalized_anchors[key] for key in sorted(normalized_anchors.keys())}
 
 
 def _resolve_rule_version(result: dict) -> str:
@@ -170,6 +212,8 @@ def build_plugin_payload_v2_with_trace(
     player_id: str,
     origin: dict | None = None,
     strict_mode: bool = True,
+    anchor: str | None = None,
+    anchors: dict | None = None,
 ) -> tuple[dict, dict]:
     if not isinstance(result, dict):
         raise ValueError("result must be dict")
@@ -179,6 +223,13 @@ def build_plugin_payload_v2_with_trace(
         raise ValueError("player_id must be non-empty string")
 
     normalized_origin = _normalize_origin(origin)
+    active_anchor = _normalize_anchor_id(anchor)
+    anchor_map = _normalize_anchors(
+        normalized_origin=normalized_origin,
+        active_anchor=active_anchor,
+        anchors=anchors,
+    )
+    active_origin = dict(anchor_map[active_anchor])
     merged = result.get("merged") or {}
     merged_blocks = merged.get("blocks") or []
 
@@ -196,24 +247,65 @@ def build_plugin_payload_v2_with_trace(
     rule_version = _resolve_rule_version(result)
     merged_block_only, entity_ops, trace = _extract_entity_ops_from_merged(
         merged_blocks,
-        normalized_origin=normalized_origin,
+        normalized_origin=active_origin,
         strict_mode=bool(strict_mode),
         rule_version=rule_version,
     )
     if trace.status == "REJECTED":
         raise PayloadV2BuildError(trace.failure_code, trace.to_dict())
 
+    relative_block_ops_canonical = canonicalize_block_ops(
+        [
+            {
+                "x": int(block["x"]),
+                "y": int(block["y"]),
+                "z": int(block["z"]),
+                "block": block["block"],
+            }
+            for block in merged_block_only
+            if isinstance(block, dict)
+        ]
+    )
+
     block_ops_input = [
         {
-            "x": int(block["x"]) + normalized_origin["base_x"],
-            "y": int(block["y"]) + normalized_origin["base_y"],
-            "z": int(block["z"]) + normalized_origin["base_z"],
+            "x": int(block["x"]) + active_origin["base_x"],
+            "y": int(block["y"]) + active_origin["base_y"],
+            "z": int(block["z"]) + active_origin["base_z"],
             "block": block["block"],
         }
-        for block in merged_block_only
-        if isinstance(block, dict)
+        for block in relative_block_ops_canonical
     ]
     block_ops = canonicalize_block_ops(block_ops_input)
+
+    block_ops_payload = [
+        {
+            "anchor": active_anchor,
+            "offset": [int(op["x"]), int(op["y"]), int(op["z"])],
+            "block": op["block"],
+        }
+        for op in relative_block_ops_canonical
+    ]
+
+    entity_ops_payload = [
+        {
+            "type": "summon",
+            "entity_type": str(entity_op.get("entity_type")),
+            "anchor": active_anchor,
+            "offset": [
+                int(entity_op.get("x")) - active_origin["base_x"],
+                int(entity_op.get("y")) - active_origin["base_y"],
+                int(entity_op.get("z")) - active_origin["base_z"],
+            ],
+            "name": str(entity_op.get("name")),
+            "profession": str(entity_op.get("profession")),
+            "no_ai": bool(entity_op.get("no_ai")),
+            "silent": bool(entity_op.get("silent")),
+            "rotation": int(entity_op.get("rotation")),
+        }
+        for entity_op in entity_ops
+        if isinstance(entity_op, dict)
+    ]
 
     commands = canonicalize_final_commands(block_ops, entity_ops)
     final_hash = final_commands_hash_v2(block_ops, entity_ops)
@@ -224,8 +316,8 @@ def build_plugin_payload_v2_with_trace(
 
     payload = {
         "version": "plugin_payload_v2",
-        "payload_version": "v2",
-        "build_id": _build_id(final_hash, player_id.strip(), normalized_origin),
+        "payload_version": "v2.1",
+        "build_id": _build_id(final_hash, player_id.strip(), active_origin),
         "player_id": player_id.strip(),
         "build_path": structure_patch.get("build_path", "spec_engine_v1"),
         "patch_source": structure_patch.get("patch_source", "deterministic_engine"),
@@ -246,7 +338,11 @@ def build_plugin_payload_v2_with_trace(
             "conflicts_total": merged.get("conflicts_total", 0),
             "spec_dropped_total": merged.get("spec_dropped_total", 0),
         },
-        "origin": normalized_origin,
+        "origin": active_origin,
+        "anchor": active_anchor,
+        "anchors": anchor_map,
+        "block_ops": block_ops_payload,
+        "entity_ops": entity_ops_payload,
         "commands": commands,
     }
     return payload, trace.to_dict()
@@ -258,11 +354,15 @@ def build_plugin_payload_v2(
     player_id: str,
     origin: dict | None = None,
     strict_mode: bool = True,
+    anchor: str | None = None,
+    anchors: dict | None = None,
 ) -> dict:
     payload, _trace = build_plugin_payload_v2_with_trace(
         result,
         player_id=player_id,
         origin=origin,
         strict_mode=strict_mode,
+        anchor=anchor,
+        anchors=anchors,
     )
     return payload
