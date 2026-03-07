@@ -68,6 +68,98 @@ def _compose_theme_with_hint(story_theme: str, scene_hint: str | None) -> str:
     return f"{base_theme} {hint}"
 
 
+def _default_theme_context(combined_theme: str) -> Dict[str, Any]:
+    normalized_theme = str(combined_theme or "").strip()
+    return {
+        "theme": normalized_theme or None,
+        "applied": False,
+        "matched_themes": [],
+        "allowed_fragments": [],
+        "bonus_tags": {},
+        "selected_theme": None,
+        "theme_registry_version": None,
+        "theme_count": 0,
+        "builtin_theme_count": 0,
+        "pack_theme_count": 0,
+        "theme_registry_enabled_packs": [],
+    }
+
+
+def _resolve_theme_context(combined_theme: str) -> Dict[str, Any]:
+    context = _default_theme_context(combined_theme)
+    try:
+        from app.core.themes.theme_loader import get_theme_registry, theme_registry_info
+
+        info = theme_registry_info()
+        if isinstance(info, dict):
+            context["theme_registry_version"] = info.get("version")
+            context["theme_count"] = _safe_int(info.get("theme_count"), 0)
+            context["builtin_theme_count"] = _safe_int(info.get("builtin_theme_count"), 0)
+            context["pack_theme_count"] = _safe_int(info.get("pack_theme_count"), 0)
+            raw_enabled = info.get("enabled_packs") if isinstance(info.get("enabled_packs"), list) else []
+            context["theme_registry_enabled_packs"] = [
+                _normalize_token(row)
+                for row in raw_enabled
+                if _normalize_token(row)
+            ]
+
+        normalized_theme = str(combined_theme or "").strip()
+        if not normalized_theme:
+            return context
+
+        registry = get_theme_registry()
+        matched = registry.match_theme(normalized_theme) if hasattr(registry, "match_theme") else {}
+        if isinstance(matched, dict):
+            context["theme"] = matched.get("theme") or context.get("theme")
+            context["applied"] = bool(matched.get("applied"))
+            context["matched_themes"] = list(matched.get("matched_themes") or [])
+            context["allowed_fragments"] = [
+                _normalize_token(row)
+                for row in (matched.get("allowed_fragments") or [])
+                if _normalize_token(row)
+            ]
+            context["selected_theme"] = matched.get("selected_theme")
+            raw_bonus_tags = matched.get("bonus_tags") if isinstance(matched.get("bonus_tags"), dict) else {}
+            context["bonus_tags"] = {
+                _normalize_token(key): _safe_float(value, 0.0)
+                for key, value in raw_bonus_tags.items()
+                if _normalize_token(key)
+            }
+    except Exception:
+        return context
+
+    return context
+
+
+def _theme_allowed_fragment_set(theme_context: Dict[str, Any] | None) -> set[str]:
+    if not isinstance(theme_context, dict):
+        return set()
+    rows = theme_context.get("allowed_fragments") if isinstance(theme_context.get("allowed_fragments"), list) else []
+    allowed: set[str] = set()
+    for row in rows:
+        token = _normalize_token(row)
+        if token:
+            allowed.add(token)
+    return allowed
+
+
+def _fragment_in_theme_filter(fragment: Dict[str, Any], theme_context: Dict[str, Any] | None) -> bool:
+    allowed = _theme_allowed_fragment_set(theme_context)
+    if not allowed:
+        return True
+
+    fragment_id = _normalize_token(fragment.get("id"))
+    if not fragment_id:
+        return False
+    if fragment_id in allowed:
+        return True
+    if ":" in fragment_id:
+        suffix = fragment_id.split(":", 1)[1]
+        if suffix and suffix in allowed:
+            return True
+    return False
+
+
 def _scene_hint_variant(scene_hint: str | None) -> str | None:
     hint = str(scene_hint or "").strip().lower()
     if not hint:
@@ -111,7 +203,9 @@ def _asset_registry_observability_payload(
     selected_fragments: List[str],
     semantic_scores: Dict[str, int],
     combined_theme: str,
+    theme_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
+    resolved_theme_context = theme_context if isinstance(theme_context, dict) else _default_theme_context(combined_theme)
     payload: Dict[str, Any] = {
         "asset_registry_version": None,
         "fragment_registry_version": None,
@@ -119,6 +213,11 @@ def _asset_registry_observability_payload(
         "builtin_fragment_count": 0,
         "pack_fragment_count": 0,
         "fragment_registry_enabled_packs": [],
+        "theme_registry_version": resolved_theme_context.get("theme_registry_version"),
+        "theme_count": _safe_int(resolved_theme_context.get("theme_count"), 0),
+        "builtin_theme_count": _safe_int(resolved_theme_context.get("builtin_theme_count"), 0),
+        "pack_theme_count": _safe_int(resolved_theme_context.get("pack_theme_count"), 0),
+        "theme_registry_enabled_packs": list(resolved_theme_context.get("theme_registry_enabled_packs") or []),
         "selected_assets": [],
         "asset_sources": [],
         "asset_selection": {
@@ -127,9 +226,11 @@ def _asset_registry_observability_payload(
         },
         "fragment_source": [],
         "theme_filter": {
-            "theme": str(combined_theme or "").strip() or None,
-            "applied": False,
-            "allowed_fragments": [],
+            "theme": resolved_theme_context.get("theme") or (str(combined_theme or "").strip() or None),
+            "applied": bool(resolved_theme_context.get("applied")),
+            "allowed_fragments": list(resolved_theme_context.get("allowed_fragments") or []),
+            "matched_themes": list(resolved_theme_context.get("matched_themes") or []),
+            "selected_theme": resolved_theme_context.get("selected_theme"),
         },
     }
 
@@ -221,7 +322,8 @@ def _asset_registry_observability_payload(
     payload["fragment_source"] = fragment_source
 
     theme_filter = payload.get("theme_filter") if isinstance(payload.get("theme_filter"), dict) else {}
-    theme_filter["allowed_fragments"] = list(candidate_assets)
+    if not isinstance(theme_filter.get("allowed_fragments"), list) or not list(theme_filter.get("allowed_fragments") or []):
+        theme_filter["allowed_fragments"] = list(candidate_assets)
     payload["theme_filter"] = theme_filter
 
     return payload
@@ -484,22 +586,34 @@ def _resource_weight(token: str, profile: Dict[str, Any]) -> float:
     return _safe_float(resource_weights.get(token), 1.0)
 
 
-def _fragment_theme_score(fragment: Dict[str, Any], combined_theme: str, *, theme_keyword_bonus: float) -> float:
+def _fragment_theme_score(
+    fragment: Dict[str, Any],
+    combined_theme: str,
+    *,
+    theme_keyword_bonus: float,
+    theme_context: Dict[str, Any] | None = None,
+) -> float:
+    score = 0.0
+
     keywords = fragment.get("theme_keywords")
-    if not isinstance(keywords, list) or not keywords:
-        return 0.0
-
     theme_text = str(combined_theme or "")
-    if not theme_text:
-        return 0.0
+    if isinstance(keywords, list) and keywords and theme_text:
+        matched = 0
+        for keyword in keywords:
+            keyword_text = str(keyword).strip()
+            if keyword_text and keyword_text in theme_text:
+                matched += 1
+        score += float(matched) * float(theme_keyword_bonus)
 
-    matched = 0
-    for keyword in keywords:
-        keyword_text = str(keyword).strip()
-        if keyword_text and keyword_text in theme_text:
-            matched += 1
+    bonus_tags = theme_context.get("bonus_tags") if isinstance(theme_context, dict) and isinstance(theme_context.get("bonus_tags"), dict) else {}
+    if isinstance(bonus_tags, dict):
+        for tag in fragment.get("tags") or []:
+            token = _normalize_token(tag)
+            if not token:
+                continue
+            score += _safe_float(bonus_tags.get(token), 0.0)
 
-    return float(matched) * float(theme_keyword_bonus)
+    return score
 
 
 def _fragment_semantic_score(
@@ -546,6 +660,7 @@ def _fragment_reason_tokens(
     semantic_scores: Dict[str, int],
     combined_theme: str,
     profile: Dict[str, Any],
+    theme_context: Dict[str, Any] | None = None,
 ) -> List[str]:
     tokens: List[str] = []
     seen: set[str] = set()
@@ -599,6 +714,9 @@ def _fragment_reason_tokens(
                 _push("theme")
                 break
 
+    if bool((theme_context or {}).get("applied")) and _fragment_in_theme_filter(fragment, theme_context):
+        _push("theme")
+
     return tokens
 
 
@@ -609,6 +727,7 @@ def _fragment_reason_text(
     semantic_scores: Dict[str, int],
     combined_theme: str,
     profile: Dict[str, Any],
+    theme_context: Dict[str, Any] | None = None,
 ) -> str:
     tokens = _fragment_reason_tokens(
         fragment,
@@ -616,13 +735,20 @@ def _fragment_reason_text(
         semantic_scores=semantic_scores,
         combined_theme=combined_theme,
         profile=profile,
+        theme_context=theme_context,
     )
     if not tokens:
         return "priority"
     return " + ".join(tokens)
 
 
-def _fragment_score_details(fragment: Dict[str, Any], semantic_scores: Dict[str, int], combined_theme: str) -> Dict[str, Any]:
+def _fragment_score_details(
+    fragment: Dict[str, Any],
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+    *,
+    theme_context: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     profile = _load_semantic_scoring_profile()
     weights = profile.get("weights") or {}
 
@@ -675,6 +801,7 @@ def _fragment_score_details(fragment: Dict[str, Any], semantic_scores: Dict[str,
         fragment,
         combined_theme,
         theme_keyword_bonus=theme_keyword_bonus,
+        theme_context=theme_context,
     )
 
     return {
@@ -685,18 +812,40 @@ def _fragment_score_details(fragment: Dict[str, Any], semantic_scores: Dict[str,
             semantic_scores=semantic_scores,
             combined_theme=combined_theme,
             profile=profile,
+            theme_context=theme_context,
         ),
     }
 
 
-def _fragment_score(fragment: Dict[str, Any], semantic_scores: Dict[str, int], combined_theme: str) -> int:
-    return int(_fragment_score_details(fragment, semantic_scores, combined_theme).get("score", 0))
+def _fragment_score(
+    fragment: Dict[str, Any],
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+    *,
+    theme_context: Dict[str, Any] | None = None,
+) -> int:
+    return int(
+        _fragment_score_details(
+            fragment,
+            semantic_scores,
+            combined_theme,
+            theme_context=theme_context,
+        ).get("score", 0)
+    )
 
 
-def _blocked_reason(fragment: Dict[str, Any], semantic_scores: Dict[str, int], combined_theme: str) -> str:
+def _blocked_reason(
+    fragment: Dict[str, Any],
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+    *,
+    theme_context: Dict[str, Any] | None = None,
+) -> str:
     missing = _fragment_missing_requirements(fragment, semantic_scores)
     if missing:
         return "missing_required: " + ", ".join(missing)
+    if not _fragment_in_theme_filter(fragment, theme_context):
+        return "theme_filter"
     if not _fragment_theme_allowed(fragment, combined_theme):
         return "theme_mismatch"
     return "blocked"
@@ -707,9 +856,15 @@ def _candidate_score_entry(
     *,
     semantic_scores: Dict[str, int],
     combined_theme: str,
+    theme_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     fragment_id = _normalize_token(fragment.get("id"))
-    details = _fragment_score_details(fragment, semantic_scores, combined_theme)
+    details = _fragment_score_details(
+        fragment,
+        semantic_scores,
+        combined_theme,
+        theme_context=theme_context,
+    )
     score = int(details.get("score", 0))
     reason = str(details.get("reason") or "priority")
     return {
@@ -725,6 +880,7 @@ def _choose_root_fragment_with_debug(
     *,
     semantic_scores: Dict[str, int],
     combined_theme: str,
+    theme_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     root_pool = [fragment for fragment in fragments.values() if bool(fragment.get("root"))]
 
@@ -736,7 +892,12 @@ def _choose_root_fragment_with_debug(
             if not fragment_id:
                 continue
 
-            reason = _blocked_reason(fragment, semantic_scores, combined_theme)
+            reason = _blocked_reason(
+                fragment,
+                semantic_scores,
+                combined_theme,
+                theme_context=theme_context,
+            )
             if reason != "blocked":
                 blocked.append(
                     {
@@ -752,6 +913,7 @@ def _choose_root_fragment_with_debug(
                     fragment,
                     semantic_scores=semantic_scores,
                     combined_theme=combined_theme,
+                    theme_context=theme_context,
                 )
             )
         return candidates, blocked
@@ -805,11 +967,13 @@ def _choose_root_fragment(
     *,
     semantic_scores: Dict[str, int],
     combined_theme: str,
+    theme_context: Dict[str, Any] | None = None,
 ) -> str | None:
     debug_result = _choose_root_fragment_with_debug(
         fragments,
         semantic_scores=semantic_scores,
         combined_theme=combined_theme,
+        theme_context=theme_context,
     )
     selected_root = _normalize_token(debug_result.get("selected_root"))
     return selected_root or None
@@ -843,6 +1007,7 @@ def _expand_scene_graph_with_debug(
     fragments: Dict[str, Dict[str, Any]],
     semantic_scores: Dict[str, int],
     combined_theme: str,
+    theme_context: Dict[str, Any] | None = None,
 ) -> tuple[SceneGraph, List[str], List[Dict[str, Any]]]:
     graph_spec = _load_fragment_graph()
     scene_graph = SceneGraph(root=root_fragment)
@@ -875,7 +1040,12 @@ def _expand_scene_graph_with_debug(
             )
             continue
 
-        reason = _blocked_reason(child_fragment, semantic_scores, combined_theme)
+        reason = _blocked_reason(
+            child_fragment,
+            semantic_scores,
+            combined_theme,
+            theme_context=theme_context,
+        )
         if reason != "blocked":
             blocked.append(
                 {
@@ -891,6 +1061,7 @@ def _expand_scene_graph_with_debug(
                 child_fragment,
                 semantic_scores=semantic_scores,
                 combined_theme=combined_theme,
+                theme_context=theme_context,
             )
         )
 
@@ -928,12 +1099,14 @@ def _expand_fragment_graph_with_debug(
     fragments: Dict[str, Dict[str, Any]],
     semantic_scores: Dict[str, int],
     combined_theme: str,
+    theme_context: Dict[str, Any] | None = None,
 ) -> tuple[List[str], List[Dict[str, Any]]]:
     scene_graph, _, blocked = _expand_scene_graph_with_debug(
         root_fragment,
         fragments=fragments,
         semantic_scores=semantic_scores,
         combined_theme=combined_theme,
+        theme_context=theme_context,
     )
     return list(scene_graph.nodes), blocked
 
@@ -944,12 +1117,14 @@ def _expand_fragment_graph(
     fragments: Dict[str, Dict[str, Any]],
     semantic_scores: Dict[str, int],
     combined_theme: str,
+    theme_context: Dict[str, Any] | None = None,
 ) -> List[str]:
     selected, _ = _expand_fragment_graph_with_debug(
         root_fragment,
         fragments=fragments,
         semantic_scores=semantic_scores,
         combined_theme=combined_theme,
+        theme_context=theme_context,
     )
     return selected
 
@@ -960,6 +1135,14 @@ def select_fragments_with_debug(
     scene_hint: str | None = None,
 ) -> Dict[str, Any]:
     combined_theme = _compose_theme_with_hint(str(story_theme or ""), scene_hint)
+    theme_context = _resolve_theme_context(combined_theme)
+    theme_filter_payload = {
+        "theme": theme_context.get("theme"),
+        "applied": bool(theme_context.get("applied")),
+        "allowed_fragments": list(theme_context.get("allowed_fragments") or []),
+        "matched_themes": list(theme_context.get("matched_themes") or []),
+        "selected_theme": theme_context.get("selected_theme"),
+    }
 
     normalized_resources: Dict[str, int] = {}
     for key, value in (resources or {}).items():
@@ -992,12 +1175,19 @@ def select_fragments_with_debug(
             "semantic_registry_version": semantic_registry_version,
             "semantic_registry_item_count": semantic_registry_item_count,
             "semantic_registry_enabled_packs": list(semantic_registry_enabled_packs),
+            "theme_registry_version": theme_context.get("theme_registry_version"),
+            "theme_count": _safe_int(theme_context.get("theme_count"), 0),
+            "builtin_theme_count": _safe_int(theme_context.get("builtin_theme_count"), 0),
+            "pack_theme_count": _safe_int(theme_context.get("pack_theme_count"), 0),
+            "theme_registry_enabled_packs": list(theme_context.get("theme_registry_enabled_packs") or []),
+            "theme_filter": dict(theme_filter_payload),
         }
         debug_payload.update(
             _asset_registry_observability_payload(
                 selected_fragments=[],
                 semantic_scores=semantic_scores,
                 combined_theme=combined_theme,
+                theme_context=theme_context,
             )
         )
         return {
@@ -1019,6 +1209,7 @@ def select_fragments_with_debug(
         fragments,
         semantic_scores=semantic_scores,
         combined_theme=combined_theme,
+        theme_context=theme_context,
     )
     root_fragment = _normalize_token(root_debug.get("selected_root"))
     if not root_fragment:
@@ -1035,12 +1226,19 @@ def select_fragments_with_debug(
             "semantic_registry_version": semantic_registry_version,
             "semantic_registry_item_count": semantic_registry_item_count,
             "semantic_registry_enabled_packs": list(semantic_registry_enabled_packs),
+            "theme_registry_version": theme_context.get("theme_registry_version"),
+            "theme_count": _safe_int(theme_context.get("theme_count"), 0),
+            "builtin_theme_count": _safe_int(theme_context.get("builtin_theme_count"), 0),
+            "pack_theme_count": _safe_int(theme_context.get("pack_theme_count"), 0),
+            "theme_registry_enabled_packs": list(theme_context.get("theme_registry_enabled_packs") or []),
+            "theme_filter": dict(theme_filter_payload),
         }
         debug_payload.update(
             _asset_registry_observability_payload(
                 selected_fragments=[],
                 semantic_scores=semantic_scores,
                 combined_theme=combined_theme,
+                theme_context=theme_context,
             )
         )
         return {
@@ -1063,6 +1261,7 @@ def select_fragments_with_debug(
         fragments=fragments,
         semantic_scores=semantic_scores,
         combined_theme=combined_theme,
+        theme_context=theme_context,
     )
     selected = list(scene_graph.nodes)
     layout = layout_scene_graph(scene_graph, fragments=fragments)
@@ -1092,12 +1291,19 @@ def select_fragments_with_debug(
         "semantic_registry_version": semantic_registry_version,
         "semantic_registry_item_count": semantic_registry_item_count,
         "semantic_registry_enabled_packs": list(semantic_registry_enabled_packs),
+        "theme_registry_version": theme_context.get("theme_registry_version"),
+        "theme_count": _safe_int(theme_context.get("theme_count"), 0),
+        "builtin_theme_count": _safe_int(theme_context.get("builtin_theme_count"), 0),
+        "pack_theme_count": _safe_int(theme_context.get("pack_theme_count"), 0),
+        "theme_registry_enabled_packs": list(theme_context.get("theme_registry_enabled_packs") or []),
+        "theme_filter": dict(theme_filter_payload),
     }
     debug_payload.update(
         _asset_registry_observability_payload(
             selected_fragments=selected,
             semantic_scores=semantic_scores,
             combined_theme=combined_theme,
+            theme_context=theme_context,
         )
     )
 
