@@ -99,6 +99,8 @@ public class PlayerChatListener implements Listener {
                                 intent.levelId,
                                 intent.minimap,
                                 originalMsg, // 使用原始消息
+                                intent.sceneTheme,
+                            intent.sceneHint,
                                 intent.worldPatch);
                         plugin.getLogger().log(Level.INFO,
                                 "[聊天] 修正后的rawText: {0}", originalMsg);

@@ -10,8 +10,11 @@ from enum import Enum
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from app.core.story.story_loader import Level, TUTORIAL_CANONICAL_ID
+from app.core.runtime.resource_canonical import normalize_inventory_resource_token
 from app.core.story.level_schema import RuleListener
 from app.core.npc import npc_engine
+from .inventory_store import inventory_store
+from .quest_state_store import quest_state_store
 
 
 logger = logging.getLogger(__name__)
@@ -247,6 +250,10 @@ class TaskSession:
 class QuestRuntime:
     """In-memory quest runtime coordinating per-player task state."""
 
+    LEVEL_STATE_VERSION = "level_state_v1"
+    LEVEL_EVOLUTION_VERSION = "level_evolution_v1"
+    LEVEL_STAGE_ORDER: Tuple[str, ...] = ("forest", "camp", "camp_npc", "camp_quest")
+
     def __init__(self) -> None:
         self._players: Dict[str, Dict[str, Any]] = {}
         self._phase3_announced = False
@@ -255,6 +262,698 @@ class QuestRuntime:
         self._orphan_callback: Optional[
             Callable[[str, Dict[str, Any], Dict[str, Any]], Optional[Dict[str, Any]]]
         ] = None
+        self._rule_event_history: Dict[str, List[Dict[str, Any]]] = {}
+        self._inventory_store = inventory_store
+        self._quest_state_store = quest_state_store
+
+    @staticmethod
+    def _coerce_positive_int(value: Any, default: int = 1) -> int:
+        try:
+            parsed = int(float(value))
+        except (TypeError, ValueError):
+            parsed = int(default)
+        return parsed if parsed > 0 else int(default)
+
+    @staticmethod
+    def _normalize_collect_resource_token(raw_value: Any) -> str:
+        return normalize_inventory_resource_token(raw_value)
+
+    def _extract_collect_resource_from_payload(
+        self,
+        event_type: str,
+        payload: Dict[str, Any],
+        normalized: Dict[str, Any],
+    ) -> Optional[Tuple[str, int]]:
+        event_type_normalized = str(event_type or "").strip().lower()
+        if event_type_normalized not in {"collect", "pickup", "pickup_item", "item_pickup", "quest_event"} and not event_type_normalized.startswith("collect_"):
+            return None
+
+        payload_body = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+        payload_meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+        normalized_meta = normalized.get("meta") if isinstance(normalized.get("meta"), dict) else {}
+
+        candidates = [
+            payload,
+            payload_body,
+            payload_meta,
+            normalized,
+            normalized_meta,
+        ]
+
+        resource_name = ""
+        for candidate in candidates:
+            for key in ("resource", "item", "item_type", "block_type"):
+                normalized_token = self._normalize_collect_resource_token(candidate.get(key))
+                if normalized_token:
+                    resource_name = normalized_token
+                    break
+            if resource_name:
+                break
+
+        if not resource_name:
+            quest_token = (
+                payload.get("quest_event")
+                or payload_body.get("quest_event")
+                or payload_meta.get("quest_event")
+                or normalized.get("quest_event")
+                or normalized_meta.get("quest_event")
+            )
+            resource_name = self._normalize_collect_resource_token(quest_token)
+
+        if not resource_name and event_type_normalized.startswith("collect_"):
+            resource_name = self._normalize_collect_resource_token(event_type_normalized)
+
+        if not resource_name:
+            return None
+
+        amount_source: Any = None
+        for candidate in candidates:
+            amount_source = candidate.get("amount") or candidate.get("count")
+            if amount_source is not None:
+                break
+
+        amount = self._coerce_positive_int(amount_source, 1)
+        return resource_name, amount
+
+    def _persist_collect_inventory(self, player_id: str, payload: Dict[str, Any], normalized: Dict[str, Any]) -> None:
+        store = getattr(self, "_inventory_store", None)
+        if store is None:
+            return
+
+        raw_type = payload.get("event_type") or payload.get("type") or normalized.get("event_type")
+        event_type = str(raw_type or "").strip().lower()
+        extracted = self._extract_collect_resource_from_payload(event_type, payload, normalized)
+        if not extracted:
+            return
+
+        resource_name, amount = extracted
+        try:
+            store.add_resource(player_id, resource_name, amount)
+        except Exception:
+            logger.exception("QuestRuntime persist collect inventory failed")
+
+    def get_inventory_resources(self, player_id: str) -> Dict[str, int]:
+        store = getattr(self, "_inventory_store", None)
+        if store is None:
+            return {}
+        try:
+            raw_resources = store.get_resources(player_id)
+        except Exception:
+            logger.exception("QuestRuntime read inventory resources failed")
+            return {}
+
+        normalized: Dict[str, int] = {}
+        if isinstance(raw_resources, dict):
+            for key, value in raw_resources.items():
+                token = self._normalize_collect_resource_token(key)
+                if not token:
+                    continue
+                try:
+                    amount = int(value)
+                except (TypeError, ValueError):
+                    continue
+                if amount > 0:
+                    normalized[token] = int(normalized.get(token, 0)) + amount
+        return normalized
+
+    def _append_rule_event_history(self, player_id: str, event_row: Dict[str, Any]) -> None:
+        if not isinstance(event_row, dict):
+            return
+
+        history = self._rule_event_history.setdefault(player_id, [])
+        history.append(dict(event_row))
+        if len(history) > 30:
+            del history[:-30]
+
+    def get_recent_rule_events(self, player_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        state = self._players.get(player_id)
+        rows: List[Dict[str, Any]] = []
+
+        if isinstance(state, dict):
+            recent_state_events = state.get("recent_rule_events")
+            if isinstance(recent_state_events, list):
+                rows.extend([dict(item) for item in recent_state_events if isinstance(item, dict)])
+
+            state_last = state.get("last_rule_event")
+            if isinstance(state_last, dict):
+                rows.append(dict(state_last))
+
+        history = self._rule_event_history.get(player_id)
+        if isinstance(history, list):
+            rows.extend([dict(item) for item in history if isinstance(item, dict)])
+
+        normalized_limit = int(limit) if isinstance(limit, int) and limit > 0 else 20
+        if normalized_limit > 0 and len(rows) > normalized_limit:
+            rows = rows[-normalized_limit:]
+
+        return rows
+
+    @classmethod
+    def _normalize_level_stage(cls, value: Any) -> str:
+        token = str(value or "").strip().lower()
+        if token in cls.LEVEL_STAGE_ORDER:
+            return token
+        return cls.LEVEL_STAGE_ORDER[0]
+
+    @classmethod
+    def _level_stage_index(cls, stage: Any) -> int:
+        normalized = cls._normalize_level_stage(stage)
+        return cls.LEVEL_STAGE_ORDER.index(normalized)
+
+    def _default_level_state_payload(self) -> Dict[str, Any]:
+        stage = self.LEVEL_STAGE_ORDER[0]
+        return {
+            "version": self.LEVEL_STATE_VERSION,
+            "current_stage": stage,
+            "stage_index": 0,
+            "stage_path": [stage],
+            "history": [],
+            "updated_at": time.time(),
+        }
+
+    def _default_level_evolution_payload(self) -> Dict[str, Any]:
+        stage = self.LEVEL_STAGE_ORDER[0]
+        return {
+            "version": self.LEVEL_EVOLUTION_VERSION,
+            "current_stage": stage,
+            "next_stage": self.LEVEL_STAGE_ORDER[1],
+            "transition_ready": False,
+            "signals": {
+                "collect_total": 0,
+                "inventory_resources": {},
+                "npc_event_count": 0,
+                "npc_trigger_count": 0,
+                "quest_event_count": 0,
+            },
+            "blocked_by": ["collect:wood", "collect:pork_or_torch"],
+            "updated_at": time.time(),
+        }
+
+    @staticmethod
+    def _event_type_from_rule_row(row: Dict[str, Any]) -> str:
+        if not isinstance(row, dict):
+            return ""
+
+        event_payload = row.get("event") if isinstance(row.get("event"), dict) else {}
+        raw_payload = row.get("raw_payload") if isinstance(row.get("raw_payload"), dict) else {}
+
+        for candidate in (
+            raw_payload.get("event_type"),
+            event_payload.get("event_type"),
+            row.get("event_type"),
+            event_payload.get("type"),
+            row.get("type"),
+        ):
+            token = str(candidate or "").strip().lower()
+            if token:
+                return token
+        return ""
+
+    def _refresh_level_evolution_state(self, player_id: str, state: Dict[str, Any]) -> None:
+        if not isinstance(state, dict):
+            return
+
+        now_ts = time.time()
+        inventory_resources = self.get_inventory_resources(player_id)
+        collect_total = sum(max(0, int(amount)) for amount in inventory_resources.values())
+
+        recent_rows = state.get("recent_rule_events") if isinstance(state.get("recent_rule_events"), list) else []
+        event_types = [
+            self._event_type_from_rule_row(row)
+            for row in recent_rows
+            if isinstance(row, dict)
+        ]
+        event_types = [event_type for event_type in event_types if event_type]
+
+        npc_event_count = sum(
+            1
+            for event_type in event_types
+            if event_type in {"npc_talk", "npc_trade", "npc_attack", "npc_trigger"}
+        )
+        npc_trigger_count = sum(1 for event_type in event_types if event_type == "npc_trigger")
+        quest_event_count = sum(1 for event_type in event_types if event_type == "quest_event")
+
+        has_camp_resources = int(inventory_resources.get("wood", 0)) > 0 and (
+            int(inventory_resources.get("pork", 0)) > 0
+            or int(inventory_resources.get("torch", 0)) > 0
+        )
+        has_npc_contact = npc_event_count > 0
+        has_quest_signal = npc_trigger_count > 0
+
+        inferred_stage = self.LEVEL_STAGE_ORDER[0]
+        transition_reason = "bootstrap"
+        if has_camp_resources or collect_total >= 3:
+            inferred_stage = "camp"
+            transition_reason = "resources"
+        if has_npc_contact:
+            inferred_stage = "camp_npc"
+            transition_reason = "npc_interaction"
+        if has_quest_signal:
+            inferred_stage = "camp_quest"
+            transition_reason = "npc_trigger"
+
+        previous_state = state.get("level_state") if isinstance(state.get("level_state"), dict) else {}
+        previous_stage = self._normalize_level_stage(previous_state.get("current_stage"))
+        previous_index = self._level_stage_index(previous_stage)
+        inferred_index = self._level_stage_index(inferred_stage)
+        resolved_index = max(previous_index, inferred_index)
+        current_stage = self.LEVEL_STAGE_ORDER[resolved_index]
+
+        history = self._safe_dict_list(previous_state.get("history"), max_items=20)
+        if current_stage != previous_stage:
+            history.append(
+                {
+                    "from": previous_stage,
+                    "to": current_stage,
+                    "reason": transition_reason,
+                    "timestamp": now_ts,
+                }
+            )
+            if len(history) > 20:
+                del history[:-20]
+
+        stage_path = list(self.LEVEL_STAGE_ORDER[: resolved_index + 1])
+        level_state = {
+            "version": self.LEVEL_STATE_VERSION,
+            "current_stage": current_stage,
+            "stage_index": resolved_index,
+            "stage_path": stage_path,
+            "history": history,
+            "updated_at": now_ts,
+        }
+
+        next_stage = self.LEVEL_STAGE_ORDER[resolved_index + 1] if resolved_index + 1 < len(self.LEVEL_STAGE_ORDER) else None
+        transition_ready = False
+        blocked_by: List[str] = []
+        if next_stage == "camp":
+            transition_ready = has_camp_resources or collect_total >= 3
+            if not transition_ready:
+                blocked_by = ["collect:wood", "collect:pork_or_torch"]
+        elif next_stage == "camp_npc":
+            transition_ready = has_npc_contact
+            if not transition_ready:
+                blocked_by = ["npc_interaction"]
+        elif next_stage == "camp_quest":
+            transition_ready = has_quest_signal
+            if not transition_ready:
+                blocked_by = ["npc_trigger"]
+
+        level_evolution = {
+            "version": self.LEVEL_EVOLUTION_VERSION,
+            "current_stage": current_stage,
+            "next_stage": next_stage,
+            "transition_ready": bool(transition_ready),
+            "signals": {
+                "collect_total": int(collect_total),
+                "inventory_resources": dict(inventory_resources),
+                "npc_event_count": int(npc_event_count),
+                "npc_trigger_count": int(npc_trigger_count),
+                "quest_event_count": int(quest_event_count),
+            },
+            "blocked_by": blocked_by,
+            "updated_at": now_ts,
+        }
+
+        state["level_state"] = level_state
+        state["level_evolution"] = level_evolution
+
+    @staticmethod
+    def _coerce_non_negative_int(value: Any, default: int = 0) -> int:
+        try:
+            parsed = int(float(value))
+        except (TypeError, ValueError):
+            parsed = int(default)
+        return parsed if parsed >= 0 else int(default)
+
+    @staticmethod
+    def _coerce_bool(value: Any, default: bool = False) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            token = value.strip().lower()
+            if token in {"1", "true", "yes", "y", "on"}:
+                return True
+            if token in {"0", "false", "no", "n", "off", ""}:
+                return False
+        return bool(default)
+
+    @staticmethod
+    def _safe_dict(value: Any) -> Dict[str, Any]:
+        return copy.deepcopy(value) if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _safe_dict_list(value: Any, max_items: int = 0) -> List[Dict[str, Any]]:
+        if not isinstance(value, list):
+            return []
+
+        rows = [copy.deepcopy(row) for row in value if isinstance(row, dict)]
+        if max_items > 0 and len(rows) > max_items:
+            rows = rows[-max_items:]
+        return rows
+
+    @staticmethod
+    def _normalize_rule_ref_list(raw_values: Any) -> List[str]:
+        if not isinstance(raw_values, list):
+            return []
+        normalized: List[str] = []
+        for value in raw_values:
+            if not isinstance(value, str):
+                continue
+            token = value.strip()
+            if token and token not in normalized:
+                normalized.append(token)
+        return normalized
+
+    def _serialize_milestone(self, milestone: TaskMilestone) -> Dict[str, Any]:
+        return {
+            "id": milestone.id,
+            "title": milestone.title,
+            "hint": milestone.hint,
+            "target": milestone.target,
+            "event": milestone.event,
+            "alternates": list(milestone.alternates or []),
+            "count": int(milestone.count),
+            "progress": int(milestone.progress),
+            "status": milestone.status,
+            "history": self._safe_dict_list(milestone.history),
+        }
+
+    def _deserialize_milestone(self, data: Dict[str, Any], fallback_id: str) -> TaskMilestone:
+        milestone_id = str(data.get("id") or fallback_id)
+        milestone = TaskMilestone(
+            id=milestone_id,
+            title=data.get("title") if isinstance(data.get("title"), str) else None,
+            hint=data.get("hint") if isinstance(data.get("hint"), str) else None,
+            target=data.get("target") if isinstance(data.get("target"), str) else None,
+            event=data.get("event") if isinstance(data.get("event"), str) else None,
+            alternates=self._normalize_rule_ref_list(data.get("alternates") or []),
+            count=self._coerce_positive_int(data.get("count"), 1),
+        )
+        milestone.progress = self._coerce_non_negative_int(data.get("progress"), 0)
+        milestone.status = str(data.get("status") or "pending")
+        milestone.history = self._safe_dict_list(data.get("history"))
+        if milestone.status == "completed" and milestone.progress < milestone.count:
+            milestone.progress = milestone.count
+        return milestone
+
+    def _serialize_session(self, session: TaskSession) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "id": session.id,
+            "type": session.type,
+            "target": copy.deepcopy(session.target),
+            "title": session.title,
+            "hint": session.hint,
+            "count": int(session.count),
+            "reward": self._safe_dict(session.reward),
+            "dialogue": self._safe_dict(session.dialogue),
+            "status": session.status,
+            "progress": int(session.progress),
+            "history": self._safe_dict_list(session.history),
+            "rule_refs": self._normalize_rule_ref_list(session.rule_refs),
+            "milestones": [self._serialize_milestone(milestone) for milestone in (session.milestones or [])],
+        }
+
+        if getattr(session, "rewarded", False):
+            payload["rewarded"] = True
+
+        issue_node = getattr(session, "issue_node", None)
+        if isinstance(issue_node, dict) and issue_node:
+            payload["issue_node"] = copy.deepcopy(issue_node)
+
+        return payload
+
+    def _deserialize_session(self, data: Dict[str, Any], index: int) -> TaskSession:
+        session_id = str(data.get("id") or f"task_{index:02d}")
+        session = TaskSession(
+            id=session_id,
+            type=str(data.get("type") or "custom"),
+            target=copy.deepcopy(data.get("target")),
+            title=str(data.get("title") or ""),
+            hint=data.get("hint") if isinstance(data.get("hint"), str) else None,
+            count=self._coerce_positive_int(data.get("count"), 1),
+            reward=self._safe_dict(data.get("reward")),
+            dialogue=self._safe_dict(data.get("dialogue")),
+            status=str(data.get("status") or "pending"),
+            milestones=[],
+            rule_refs=self._normalize_rule_ref_list(data.get("rule_refs") or []),
+        )
+
+        session.progress = self._coerce_non_negative_int(data.get("progress"), 0)
+        session.history = self._safe_dict_list(data.get("history"))
+
+        if session.status not in {"pending", "issued", "completed"}:
+            session.status = "pending"
+        if session.status == "completed" and session.progress < session.count:
+            session.progress = session.count
+
+        milestones_raw = data.get("milestones") if isinstance(data.get("milestones"), list) else []
+        session.milestones = [
+            self._deserialize_milestone(row, f"{session.id}_milestone_{idx:02d}")
+            for idx, row in enumerate(milestones_raw)
+            if isinstance(row, dict)
+        ]
+
+        if self._coerce_bool(data.get("rewarded"), False):
+            setattr(session, "rewarded", True)
+
+        issue_node = data.get("issue_node")
+        if isinstance(issue_node, dict) and issue_node:
+            setattr(session, "issue_node", copy.deepcopy(issue_node))
+
+        return session
+
+    def _merge_persisted_sessions(
+        self,
+        fresh_sessions: List[TaskSession],
+        persisted_sessions: List[TaskSession],
+    ) -> List[TaskSession]:
+        if not persisted_sessions:
+            return fresh_sessions
+
+        persisted_by_id: Dict[str, TaskSession] = {
+            session.id: session for session in persisted_sessions if session.id
+        }
+        fresh_ids: Set[str] = {session.id for session in fresh_sessions if session.id}
+
+        merged: List[TaskSession] = []
+        for fresh in fresh_sessions:
+            persisted = persisted_by_id.get(fresh.id)
+            if not persisted:
+                merged.append(fresh)
+                continue
+
+            if not persisted.title:
+                persisted.title = fresh.title
+            if not persisted.hint:
+                persisted.hint = fresh.hint
+            if not persisted.reward and fresh.reward:
+                persisted.reward = copy.deepcopy(fresh.reward)
+            if not persisted.dialogue and fresh.dialogue:
+                persisted.dialogue = copy.deepcopy(fresh.dialogue)
+            if not persisted.rule_refs and fresh.rule_refs:
+                persisted.rule_refs = list(fresh.rule_refs)
+            if not persisted.milestones and fresh.milestones:
+                persisted.milestones = copy.deepcopy(fresh.milestones)
+
+            persisted_issue_node = getattr(persisted, "issue_node", None)
+            fresh_issue_node = getattr(fresh, "issue_node", None)
+            if not isinstance(persisted_issue_node, dict) and isinstance(fresh_issue_node, dict):
+                setattr(persisted, "issue_node", copy.deepcopy(fresh_issue_node))
+
+            merged.append(persisted)
+
+        for persisted in persisted_sessions:
+            if persisted.id and persisted.id not in fresh_ids:
+                merged.append(persisted)
+
+        return merged
+
+    def _build_base_state(self, level: Level, player_id: str, tasks: List[TaskSession]) -> Dict[str, Any]:
+        level_state = self._default_level_state_payload()
+        level_evolution = self._default_level_evolution_payload()
+        state: Dict[str, Any] = {
+            "player_id": player_id,
+            "level_id": level.level_id,
+            "level_title": level.title,
+            "level": level,
+            "tasks": tasks,
+            "issued_index": -1,
+            "completed_count": 0,
+            "summary_emitted": False,
+            "last_completed_type": None,
+            "active_rule_refs": set(),
+            "last_rule_event": None,
+            "recent_rule_events": [],
+            "level_state": level_state,
+            "level_evolution": level_evolution,
+        }
+
+        if level.level_id == TUTORIAL_CANONICAL_ID:
+            raw_payload = getattr(level, "_raw_payload", {}) or {}
+            state["tutorial_tracker"] = {
+                "intro_started": False,
+                "meet_guide": False,
+                "complete": False,
+                "completed": False,
+            }
+            exit_patch = raw_payload.get("tutorial_exit_patch")
+            if isinstance(exit_patch, dict) and exit_patch:
+                state["tutorial_exit_patch"] = copy.deepcopy(exit_patch)
+
+        return state
+
+    def _serialize_state_payload(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        issued_index_raw = state.get("issued_index")
+        if isinstance(issued_index_raw, (int, float)):
+            issued_index = int(issued_index_raw)
+            if issued_index < -1:
+                issued_index = -1
+        else:
+            issued_index = -1
+
+        payload: Dict[str, Any] = {
+            "issued_index": issued_index,
+            "completed_count": self._coerce_non_negative_int(state.get("completed_count"), 0),
+            "summary_emitted": self._coerce_bool(state.get("summary_emitted"), False),
+            "last_completed_type": state.get("last_completed_type") if isinstance(state.get("last_completed_type"), str) else None,
+            "active_rule_refs": self._normalize_rule_ref_list(sorted(list(state.get("active_rule_refs", set())))),
+            "tasks": [self._serialize_session(session) for session in self._iter_sessions(state)],
+            "last_rule_event": self._safe_dict(state.get("last_rule_event")),
+            "recent_rule_events": self._safe_dict_list(state.get("recent_rule_events"), max_items=10),
+            "rule_events": self._safe_dict_list(state.get("rule_events"), max_items=20),
+            "orphan_events": self._safe_dict_list(state.get("orphan_events"), max_items=10),
+            "auto_heal_suggestions": self._safe_dict_list(state.get("auto_heal_suggestions"), max_items=10),
+            "level_state": self._safe_dict(state.get("level_state")),
+            "level_evolution": self._safe_dict(state.get("level_evolution")),
+        }
+
+        if isinstance(state.get("tutorial_tracker"), dict):
+            payload["tutorial_tracker"] = self._safe_dict(state.get("tutorial_tracker"))
+        if isinstance(state.get("tutorial_exit_patch"), dict):
+            payload["tutorial_exit_patch"] = self._safe_dict(state.get("tutorial_exit_patch"))
+
+        for key in ("tutorial_complete_emitted", "tutorial_completed"):
+            if key in state:
+                payload[key] = self._coerce_bool(state.get(key), False)
+
+        next_level = state.get("next_level_id")
+        if isinstance(next_level, str) and next_level.strip():
+            payload["next_level_id"] = next_level.strip()
+
+        return payload
+
+    def _restore_state_from_payload(
+        self,
+        level: Level,
+        player_id: str,
+        fresh_tasks: List[TaskSession],
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        state = self._build_base_state(level, player_id, fresh_tasks)
+        if not isinstance(payload, dict):
+            return state
+
+        persisted_task_rows = payload.get("tasks") if isinstance(payload.get("tasks"), list) else []
+        persisted_tasks = [
+            self._deserialize_session(row, index)
+            for index, row in enumerate(persisted_task_rows)
+            if isinstance(row, dict)
+        ]
+        state["tasks"] = self._merge_persisted_sessions(fresh_tasks, persisted_tasks)
+
+        issued_index_raw = payload.get("issued_index", -1)
+        try:
+            issued_index = int(issued_index_raw)
+        except (TypeError, ValueError):
+            issued_index = -1
+        if issued_index < -1:
+            issued_index = -1
+        if issued_index >= len(state["tasks"]):
+            issued_index = len(state["tasks"]) - 1
+        state["issued_index"] = issued_index
+
+        rewarded_count = sum(
+            1 for session in state["tasks"] if self._coerce_bool(getattr(session, "rewarded", False), False)
+        )
+        state["completed_count"] = max(
+            self._coerce_non_negative_int(payload.get("completed_count"), 0),
+            rewarded_count,
+        )
+        state["summary_emitted"] = self._coerce_bool(payload.get("summary_emitted"), False)
+
+        last_completed_type = payload.get("last_completed_type")
+        state["last_completed_type"] = last_completed_type if isinstance(last_completed_type, str) else None
+
+        active_refs = self._normalize_rule_ref_list(payload.get("active_rule_refs") or [])
+        state["active_rule_refs"] = set(active_refs)
+
+        last_rule_event = payload.get("last_rule_event")
+        state["last_rule_event"] = copy.deepcopy(last_rule_event) if isinstance(last_rule_event, dict) else None
+
+        for key, size in (("recent_rule_events", 10), ("rule_events", 20), ("orphan_events", 10), ("auto_heal_suggestions", 10)):
+            state[key] = self._safe_dict_list(payload.get(key), max_items=size)
+
+        level_state_payload = payload.get("level_state")
+        state["level_state"] = copy.deepcopy(level_state_payload) if isinstance(level_state_payload, dict) else self._default_level_state_payload()
+
+        level_evolution_payload = payload.get("level_evolution")
+        state["level_evolution"] = copy.deepcopy(level_evolution_payload) if isinstance(level_evolution_payload, dict) else self._default_level_evolution_payload()
+
+        tutorial_tracker = payload.get("tutorial_tracker")
+        if isinstance(state.get("tutorial_tracker"), dict) and isinstance(tutorial_tracker, dict):
+            tracker = state["tutorial_tracker"]
+            for key in ("intro_started", "meet_guide", "complete", "completed"):
+                tracker[key] = self._coerce_bool(tutorial_tracker.get(key), tracker.get(key, False))
+
+        tutorial_exit_patch = payload.get("tutorial_exit_patch")
+        if isinstance(tutorial_exit_patch, dict) and tutorial_exit_patch:
+            state["tutorial_exit_patch"] = copy.deepcopy(tutorial_exit_patch)
+
+        for key in ("tutorial_complete_emitted", "tutorial_completed"):
+            if key in payload:
+                state[key] = self._coerce_bool(payload.get(key), False)
+
+        next_level_id = payload.get("next_level_id")
+        if isinstance(next_level_id, str) and next_level_id.strip():
+            state["next_level_id"] = next_level_id.strip()
+
+        self._refresh_level_evolution_state(player_id, state)
+
+        return state
+
+    def _load_quest_state_payload(self, player_id: str, level_id: str) -> Optional[Dict[str, Any]]:
+        store = getattr(self, "_quest_state_store", None)
+        if store is None:
+            return None
+
+        try:
+            payload = store.load_state(player_id, level_id)
+        except Exception:
+            logger.exception("QuestRuntime load quest state failed")
+            return None
+
+        return payload if isinstance(payload, dict) else None
+
+    def _persist_quest_state(self, player_id: str, state: Optional[Dict[str, Any]] = None) -> None:
+        store = getattr(self, "_quest_state_store", None)
+        if store is None:
+            return
+
+        active_state = state or self._players.get(player_id)
+        if not isinstance(active_state, dict):
+            return
+
+        level_id = str(active_state.get("level_id") or "").strip()
+        if not level_id:
+            return
+
+        try:
+            payload = self._serialize_state_payload(active_state)
+            store.save_state(player_id, level_id, payload)
+        except Exception:
+            logger.exception("QuestRuntime persist quest state failed")
 
     # ------------------------------------------------------------------
     # Phase 1.5 scaffolding
@@ -284,12 +983,23 @@ class QuestRuntime:
     def handle_rule_trigger(self, player_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Handle an incoming rule trigger and advance relevant tasks."""
 
+        payload_dict = payload if isinstance(payload, dict) else {}
         state = self._players.get(player_id)
-        if not state:
+        normalized = self._normalize_event(payload_dict)
+        if not normalized:
             return None
 
-        normalized = self._normalize_event(payload)
-        if not normalized:
+        self._persist_collect_inventory(player_id, payload_dict, normalized)
+
+        if not state:
+            detached_event = {
+                "timestamp": time.time(),
+                "event": normalized,
+                "matched": False,
+                "matched_tasks": [],
+                "raw_payload": dict(payload_dict),
+            }
+            self._append_rule_event_history(player_id, detached_event)
             return None
 
         events_history = state.setdefault("rule_events", [])
@@ -365,10 +1075,13 @@ class QuestRuntime:
         if suggestion:
             last_rule_event["auto_heal_suggestion"] = suggestion
         state["last_rule_event"] = last_rule_event
+        self._append_rule_event_history(player_id, last_rule_event)
         recent_events = state.setdefault("recent_rule_events", [])
         recent_events.append(last_rule_event)
         if len(recent_events) > 10:
             del recent_events[:-10]
+
+        self._refresh_level_evolution_state(player_id, state)
 
         npc_payload = None
         level_id = state.get("level_id")
@@ -389,9 +1102,16 @@ class QuestRuntime:
             combined["active_tasks"] = active_snapshot
             self._inject_snapshot_summary(combined, active_snapshot)
 
+        if combined is None:
+            combined = {}
+        combined["level_state"] = self._safe_dict(state.get("level_state"))
+        combined["level_evolution"] = self._safe_dict(state.get("level_evolution"))
+
+        self._persist_quest_state(player_id, state)
+
         if combined is not None and self._rule_callback:
             try:
-                self._rule_callback(player_id, payload)
+                self._rule_callback(player_id, payload_dict)
             except Exception:
                 pass
 
@@ -488,37 +1208,96 @@ class QuestRuntime:
     # ------------------------------------------------------------------
     def load_level_tasks(self, level: Level, player_id: str) -> None:
         tasks = [self._create_session(raw, index) for index, raw in enumerate(level.tasks or [])]
-        state = {
-            "player_id": player_id,
-            "level_id": level.level_id,
-            "level_title": level.title,
-            "level": level,
-            "tasks": tasks,
-            "issued_index": -1,
-            "completed_count": 0,
-            "summary_emitted": False,
-            "last_completed_type": None,
-            "active_rule_refs": set(),
-            "last_rule_event": None,
-            "recent_rule_events": [],
-        }
+        state = self._build_base_state(level, player_id, tasks)
 
-        if level.level_id == TUTORIAL_CANONICAL_ID:
-            raw_payload = getattr(level, "_raw_payload", {}) or {}
-            state["tutorial_tracker"] = {
-                "intro_started": False,
-                "meet_guide": False,
-                "complete": False,
-                "completed": False,
-            }
-            exit_patch = raw_payload.get("tutorial_exit_patch")
-            if isinstance(exit_patch, dict) and exit_patch:
-                state["tutorial_exit_patch"] = copy.deepcopy(exit_patch)
+        persisted = self._load_quest_state_payload(player_id, level.level_id)
+        if isinstance(persisted, dict):
+            state = self._restore_state_from_payload(level, player_id, tasks, persisted)
+
+        self._refresh_level_evolution_state(player_id, state)
 
         self._players[player_id] = state
 
+        active_refs = sorted(list(state.get("active_rule_refs") or []))
+        if active_refs:
+            npc_engine.activate_rule_refs(level.level_id, active_refs)
+
+        self._persist_quest_state(player_id, state)
+
     def exit_level(self, player_id: str) -> None:
+        state = self._players.get(player_id)
+        if isinstance(state, dict):
+            self._persist_quest_state(player_id, state)
         self._players.pop(player_id, None)
+
+    def reset_player_state(
+        self,
+        player_id: str,
+        *,
+        clear_persisted: bool = True,
+        clear_inventory: bool = True,
+    ) -> Dict[str, Any]:
+        normalized_player = str(player_id or "").strip()
+        if not normalized_player:
+            return {
+                "player_id": "",
+                "had_active_state": False,
+                "cleared_runtime": False,
+                "cleared_persisted": 0,
+                "cleared_inventory": 0,
+            }
+
+        removed_state = self._players.pop(normalized_player, None)
+        self._rule_event_history.pop(normalized_player, None)
+
+        cleared_persisted = 0
+        if clear_persisted:
+            store = getattr(self, "_quest_state_store", None)
+            if store is not None:
+                delete_player_states = getattr(store, "delete_player_states", None)
+                if callable(delete_player_states):
+                    try:
+                        cleared_persisted = int(delete_player_states(normalized_player) or 0)
+                    except Exception:
+                        logger.exception("QuestRuntime clear persisted quest state failed")
+                else:
+                    level_ids: Set[str] = set()
+                    if isinstance(removed_state, dict):
+                        level_id = str(removed_state.get("level_id") or "").strip()
+                        if level_id:
+                            level_ids.add(level_id)
+                        level = removed_state.get("level")
+                        runtime_level_id = getattr(level, "level_id", None)
+                        if isinstance(runtime_level_id, str) and runtime_level_id.strip():
+                            level_ids.add(runtime_level_id.strip())
+
+                    delete_state = getattr(store, "delete_state", None)
+                    if callable(delete_state):
+                        for level_id in level_ids:
+                            try:
+                                delete_state(normalized_player, level_id)
+                                cleared_persisted += 1
+                            except Exception:
+                                logger.exception("QuestRuntime fallback clear level state failed")
+
+        cleared_inventory = 0
+        if clear_inventory:
+            store = getattr(self, "_inventory_store", None)
+            if store is not None:
+                clear_player_resources = getattr(store, "clear_player_resources", None)
+                if callable(clear_player_resources):
+                    try:
+                        cleared_inventory = int(clear_player_resources(normalized_player) or 0)
+                    except Exception:
+                        logger.exception("QuestRuntime clear inventory resources failed")
+
+        return {
+            "player_id": normalized_player,
+            "had_active_state": isinstance(removed_state, dict),
+            "cleared_runtime": True,
+            "cleared_persisted": int(cleared_persisted),
+            "cleared_inventory": int(cleared_inventory),
+        }
 
     # ------------------------------------------------------------------
     # Event ingestion and beat coordination
@@ -551,7 +1330,9 @@ class QuestRuntime:
                         "task_count": session.count,
                     })
 
-        return self._aggregate_rule_responses(state, responses)
+        merged_response = self._aggregate_rule_responses(state, responses)
+        self._persist_quest_state(player_id, state)
+        return merged_response
 
     def issue_tasks_on_beat(
         self,
@@ -570,6 +1351,8 @@ class QuestRuntime:
         issued = self._issue_next_task(state, level, beat or {})
         if not issued:
             return None
+
+        self._persist_quest_state(player_id, state)
 
         return {
             "nodes": [issued],
@@ -606,6 +1389,7 @@ class QuestRuntime:
                 })
 
         npc_engine.activate_rule_refs(level.level_id, rule_refs)
+        self._persist_quest_state(player_id, state)
 
     def check_completion(self, level_or_id: Union[Level, str], player_id: str) -> Optional[Dict[str, Any]]:
         level = self._extract_level(level_or_id, player_id)
@@ -621,14 +1405,17 @@ class QuestRuntime:
             "world_patch": {},
             "completed_tasks": [],
         }
+        state_changed = False
 
         rewards = self._collect_rewards(state, level)
         if rewards:
+            state_changed = True
             updates["world_patch"] = self._merge_patch(updates["world_patch"], rewards.get("world_patch"))
             updates["nodes"].extend(rewards.get("nodes", []))
             updates["completed_tasks"].extend(rewards.get("completed_tasks", []))
 
         if self._all_tasks_completed(state) and not state.get("summary_emitted"):
+            state_changed = True
             summary = self._build_summary_node(level, state)
             updates["nodes"].append(summary)
             updates["summary"] = summary
@@ -647,6 +1434,9 @@ class QuestRuntime:
         ):
             return None
 
+        if state_changed:
+            self._persist_quest_state(player_id, state)
+
         return updates
 
     # ------------------------------------------------------------------
@@ -658,6 +1448,7 @@ class QuestRuntime:
             return None
         session = self._create_session(task_def, len(state["tasks"]))
         state["tasks"].append(session)
+        self._persist_quest_state(player_id, state)
         return {
             "id": session.id,
             "type": session.type,
@@ -667,9 +1458,13 @@ class QuestRuntime:
 
     def get_runtime_snapshot(self, player_id: str) -> Dict[str, Any]:
         state = self._players.get(player_id, {})
+        if isinstance(state, dict) and state:
+            self._refresh_level_evolution_state(player_id, state)
         return {
             "level_id": state.get("level_id"),
             "exit_ready": bool(state.get("summary_emitted")),
+            "level_state": self._safe_dict(state.get("level_state")),
+            "level_evolution": self._safe_dict(state.get("level_evolution")),
             "tasks": [
                 {
                     "id": session.id,
@@ -1212,6 +2007,8 @@ class QuestRuntime:
         if not state:
             return None
 
+        self._refresh_level_evolution_state(player_id, state)
+
         active = self._build_active_tasks_snapshot(state)
         completed = self._collect_completed_milestones(state)
         pending = self._collect_pending_conditions(state)
@@ -1225,6 +2022,9 @@ class QuestRuntime:
             "completed_milestones": completed,
             "pending_conditions": pending,
             "last_rule_event": last_event,
+            "inventory_resources": self.get_inventory_resources(player_id),
+            "level_state": self._safe_dict(state.get("level_state")),
+            "level_evolution": self._safe_dict(state.get("level_evolution")),
         }
 
         if state.get("recent_rule_events"):

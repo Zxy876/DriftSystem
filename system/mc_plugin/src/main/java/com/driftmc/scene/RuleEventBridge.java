@@ -239,6 +239,59 @@ public final class RuleEventBridge {
         emit(player, "interact_entity", payload);
     }
 
+    public void emitNpcTalk(Player player, Entity entity, String npcId, String npcName, String interaction) {
+        Map<String, Object> payload = createNpcPayload(player, entity, npcId, npcName);
+        payload.put("interaction", interaction != null && !interaction.isBlank() ? interaction : "talk");
+        emit(player, "npc_talk", payload);
+    }
+
+    public void emitNpcTrade(Player player, Entity entity, String npcId, String npcName) {
+        Map<String, Object> payload = createNpcPayload(player, entity, npcId, npcName);
+        payload.put("interaction", "trade");
+        emit(player, "npc_trade", payload);
+    }
+
+    public void emitNpcAttack(Player player, Entity entity, String npcId, String npcName, double damage) {
+        Map<String, Object> payload = createNpcPayload(player, entity, npcId, npcName);
+        payload.put("interaction", "attack");
+        payload.put("damage", Math.max(0.0D, damage));
+        emit(player, "npc_attack", payload);
+    }
+
+    public void emitNpcTrigger(
+            Player player,
+            Entity entity,
+            String npcId,
+            String npcName,
+            String triggerEvent,
+            Map<String, Object> extraPayload) {
+        Map<String, Object> payload = createNpcPayload(player, entity, npcId, npcName);
+        String triggerToken = normalize(triggerEvent);
+        if (triggerToken.isEmpty()) {
+            triggerToken = "npc_trigger";
+        }
+        payload.put("trigger", triggerToken);
+        payload.put("target", triggerToken);
+        if (extraPayload != null && !extraPayload.isEmpty()) {
+            payload.putAll(extraPayload);
+        }
+        emit(player, "npc_trigger", payload);
+    }
+
+    public void emitCollect(Player player, Material material, int amount, Location location) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        String matName = material != null ? material.name().toLowerCase() : "unknown";
+        payload.put("item_type", matName);
+        payload.put("resource", matName);
+        payload.put("amount", Math.max(1, amount));
+        payload.put("quest_event", QuestEventCanonicalizer.canonicalize(canonicalize("collect", matName)));
+        Map<String, Object> pos = extractLocation(location, player);
+        if (!pos.isEmpty()) {
+            payload.put("location", pos);
+        }
+        emit(player, "collect", payload);
+    }
+
     public void emitQuestEvent(Player player, String questEvent) {
         emitQuestEvent(player, questEvent, player != null ? player.getLocation() : null, Collections.emptyMap());
     }
@@ -1025,6 +1078,41 @@ public final class RuleEventBridge {
         pos.put("y", source.getY());
         pos.put("z", source.getZ());
         return pos;
+    }
+
+    private Map<String, Object> createNpcPayload(Player player, Entity entity, String npcId, String npcName) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+
+        String resolvedNpcId = npcId != null ? npcId.trim() : "";
+        if (resolvedNpcId.isEmpty() && npcName != null) {
+            resolvedNpcId = npcName.trim();
+        }
+        if (!resolvedNpcId.isEmpty()) {
+            payload.put("npc_id", resolvedNpcId);
+            payload.put("target", resolvedNpcId);
+        }
+
+        String resolvedNpcName = npcName != null ? npcName.trim() : "";
+        if (resolvedNpcName.isEmpty() && entity != null) {
+            String rawNpcName = entity.getCustomName();
+            if (rawNpcName != null) {
+                resolvedNpcName = rawNpcName.trim();
+            }
+        }
+        if (!resolvedNpcName.isEmpty()) {
+            payload.put("npc_name", resolvedNpcName);
+        }
+
+        if (entity != null) {
+            payload.put("entity_type", entity.getType().name().toLowerCase(Locale.ROOT));
+        }
+
+        Map<String, Object> pos = extractLocation(entity != null ? entity.getLocation() : null, player);
+        if (!pos.isEmpty()) {
+            payload.put("location", pos);
+        }
+
+        return payload;
     }
 
     private String canonicalize(String prefix, String value) {

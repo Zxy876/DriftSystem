@@ -2,6 +2,7 @@ import os
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
+import json
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -13,6 +14,7 @@ from app.core.story.story_engine import story_engine
 from app.core.world.trigger import trigger_engine
 from app.core.ai.intent_engine import parse_intent
 from app.core.quest.runtime import quest_runtime
+from app.core.runtime.interaction_event import create_interaction_event, interaction_event_to_dict
 
 router = APIRouter(prefix="/world", tags=["World"])
 world_engine = WorldEngine()
@@ -29,6 +31,143 @@ fallback_state_by_player: Dict[str, Dict[str, Any]] = defaultdict(dict)
 
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def _as_bool_env(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _interaction_type_from_rule_event(event_type: str) -> str:
+    normalized = str(event_type or "").strip().lower()
+    if normalized in {"chat", "talk", "npc_talk"}:
+        return "talk"
+    if normalized in {"collect", "pickup", "pickup_item", "item_pickup"}:
+        return "collect"
+    return "trigger"
+
+
+def _trigger_key_from_rule_payload(incoming_type: str, payload: Dict[str, Any]) -> str:
+    candidates = [
+        payload.get("trigger"),
+        payload.get("quest_event"),
+        payload.get("event_type"),
+        payload.get("type"),
+        incoming_type,
+    ]
+    for candidate in candidates:
+        token = str(candidate or "").strip().lower()
+        if token:
+            return token
+    return "trigger"
+
+
+def _npc_id_from_rule_payload(payload: Dict[str, Any]) -> str | None:
+    for key in ("npc_id", "npc", "target", "entity_name"):
+        value = payload.get(key)
+        token = str(value or "").strip()
+        if token:
+            return token
+    return None
+
+
+def _anchor_from_rule_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    location = payload.get("location") if isinstance(payload.get("location"), dict) else {}
+    explicit_anchor = payload.get("anchor") if isinstance(payload.get("anchor"), dict) else {}
+
+    if explicit_anchor:
+        return {
+            "base_x": _safe_int(explicit_anchor.get("base_x"), 0),
+            "base_y": _safe_int(explicit_anchor.get("base_y"), 64),
+            "base_z": _safe_int(explicit_anchor.get("base_z"), 0),
+            "anchor_mode": str(explicit_anchor.get("anchor_mode") or "player"),
+        }
+
+    return {
+        "base_x": _safe_int(location.get("x"), 0),
+        "base_y": _safe_int(location.get("y"), 64),
+        "base_z": _safe_int(location.get("z"), 0),
+        "anchor_mode": "player",
+    }
+
+
+def _text_from_interaction_event(event_payload: Dict[str, Any]) -> str:
+    event_type = str(event_payload.get("type") or "trigger")
+    data = event_payload.get("data") if isinstance(event_payload.get("data"), dict) else {}
+
+    if event_type == "talk":
+        text = str(data.get("text") or data.get("message") or "").strip()
+        return text or "talk"
+
+    if event_type == "collect":
+        resource = str(data.get("resource") or data.get("item_type") or "unknown_resource")
+        amount = _safe_int(data.get("amount") or data.get("count"), 1)
+        return f"collect:{resource}:{amount}"
+
+    trigger_key = str(data.get("trigger") or data.get("quest_event") or data.get("event_type") or "trigger")
+    return f"trigger:{trigger_key}"
+
+
+def _ingest_rule_event_via_trng(event: "RuleTriggerEvent") -> Dict[str, Any]:
+    payload = dict(event.payload or {})
+    incoming_type = str(event.event_type or "trigger").strip().lower() or "trigger"
+    interaction_type = _interaction_type_from_rule_event(incoming_type)
+
+    data = dict(payload)
+    data.setdefault("event_type", incoming_type)
+    npc_id = _npc_id_from_rule_payload(data)
+
+    if interaction_type == "talk":
+        if npc_id:
+            data.setdefault("npc_id", npc_id)
+
+    if interaction_type == "collect":
+        data.setdefault("resource", data.get("item_type") or data.get("block_type") or "resource")
+        data.setdefault("amount", _safe_int(data.get("amount") or data.get("count"), 1))
+    elif interaction_type == "trigger":
+        data.setdefault("trigger", _trigger_key_from_rule_payload(incoming_type, data))
+
+    interaction_event = create_interaction_event(
+        event_type=interaction_type,
+        player_id=event.player_id,
+        npc_id=npc_id,
+        anchor=_anchor_from_rule_payload(payload),
+        data=data,
+        event_id=str(payload.get("event_id") or f"plugin_{incoming_type}_{_now_ms()}"),
+        timestamp_ms=_safe_int(payload.get("timestamp_ms"), _now_ms()),
+    )
+    interaction_payload = interaction_event_to_dict(interaction_event)
+
+    from app.api.story_api import run_transaction
+
+    tx_result = run_transaction(
+        [
+            {
+                "event_id": interaction_payload["event_id"],
+                "type": interaction_payload["type"],
+                "text": _text_from_interaction_event(interaction_payload),
+            }
+        ],
+        rule_version="rule_v2_2",
+        engine_version="engine_v2_1",
+    )
+
+    return {
+        "tx_id": tx_result.get("tx_id"),
+        "committed_state_hash": tx_result.get("committed_state_hash"),
+        "committed_graph_hash": tx_result.get("committed_graph_hash"),
+        "event_count": tx_result.get("event_count"),
+        "interaction_event": interaction_payload,
+    }
 
 
 def _rank_for_status(status: str) -> int:
@@ -84,6 +223,94 @@ def _recent_reports_for_player(player_id: str) -> list[Dict[str, Any]]:
     reports = list(apply_reports_by_player.get(player_id, {}).values())
     reports.sort(key=lambda item: int(item.get("last_seen_ms", 0)), reverse=True)
     return reports[:APPLY_REPORTS_LIMIT]
+
+
+def _scene_generation_for_player(player_id: str) -> Optional[Dict[str, Any]]:
+    players_state = getattr(quest_runtime, "_players", None)
+    if not isinstance(players_state, dict):
+        return None
+
+    state = players_state.get(player_id)
+    if not isinstance(state, dict):
+        return None
+
+    level = state.get("level")
+    if level is None:
+        return None
+
+    level_meta = getattr(level, "meta", None)
+    if isinstance(level_meta, dict):
+        scene_generation = level_meta.get("scene_generation")
+        if isinstance(scene_generation, dict):
+            return dict(scene_generation)
+
+    raw_payload = getattr(level, "_raw_payload", None)
+    if isinstance(raw_payload, dict):
+        raw_meta = raw_payload.get("meta")
+        if isinstance(raw_meta, dict):
+            scene_generation = raw_meta.get("scene_generation")
+            if isinstance(scene_generation, dict):
+                return dict(scene_generation)
+
+    return None
+
+
+def _narrative_state_for_player(
+    player_id: str,
+    *,
+    snapshot: Optional[Dict[str, Any]] = None,
+    scene_generation: Optional[Dict[str, Any]] = None,
+    story_snapshot: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    try:
+        from app.core.story.narrative_graph_evaluator import evaluate_narrative_state
+
+        level_state = snapshot.get("level_state") if isinstance(snapshot, dict) else None
+        recent_rule_events = snapshot.get("recent_rule_events") if isinstance(snapshot, dict) else None
+        current_node_hint = None
+        if isinstance(scene_generation, dict):
+            current_node_hint = (
+                (scene_generation.get("narrative_state") or {}).get("current_node")
+                if isinstance(scene_generation.get("narrative_state"), dict)
+                else None
+            )
+
+        return evaluate_narrative_state(
+            level_state=level_state if isinstance(level_state, dict) else None,
+            scene_generation=scene_generation if isinstance(scene_generation, dict) else None,
+            recent_rule_events=recent_rule_events if isinstance(recent_rule_events, list) else None,
+            current_node_hint=current_node_hint,
+        )
+    except Exception:
+        fallback_current_level = None
+        if isinstance(story_snapshot, dict):
+            fallback_current_level = story_snapshot.get("player_current_level")
+
+        return {
+            "version": "narrative_state_v1",
+            "graph_version": "p8a_v1",
+            "current_arc": "main",
+            "current_node": "",
+            "unlocked_nodes": [],
+            "completed_nodes": [],
+            "transition_candidates": [],
+            "blocked_by": [],
+            "observed_signals": [],
+            "level_id": fallback_current_level,
+            "player_id": player_id,
+        }
+
+
+def _narrative_fields_payload(narrative_state: Dict[str, Any]) -> Dict[str, Any]:
+    state = dict(narrative_state) if isinstance(narrative_state, dict) else {}
+    candidates = state.get("transition_candidates") if isinstance(state.get("transition_candidates"), list) else []
+    blocked_by = state.get("blocked_by") if isinstance(state.get("blocked_by"), list) else []
+    return {
+        "narrative_state": state,
+        "current_node": state.get("current_node"),
+        "transition_candidates": list(candidates),
+        "blocked_by": list(blocked_by),
+    }
 
 
 def _record_fallback_state(
@@ -150,6 +377,20 @@ class RuleTriggerEvent(BaseModel):
     payload: Dict[str, Any] = Field(default_factory=dict)
 
 
+class SpawnFragmentRequest(BaseModel):
+    scene_theme: Optional[str] = None
+    scene_hint: Optional[str] = None
+    anchor: Optional[str] = None
+    player_position: Optional[Dict[str, Any]] = None
+
+
+class StoryResetRequest(BaseModel):
+    clear_memory: bool = True
+    clear_history: bool = True
+    clear_inventory: bool = True
+    clear_persisted_state: bool = True
+
+
 class ApplyReportInput(BaseModel):
     build_id: str = Field(min_length=1)
     player_id: str = Field(min_length=1)
@@ -209,6 +450,8 @@ def apply_action(inp: ApplyInput):
                     title=intent.get("title", "自由创作"),
                     text=raw_text,
                     player_id=player_id,
+                    scene_theme=intent.get("scene_theme"),
+                    scene_hint=intent.get("scene_hint"),
                 )
                 inject_result = api_story_inject(payload)
 
@@ -407,13 +650,23 @@ def world_state(player_id: str):
         "variables": dict(state.get("variables", {})),
         "entities": dict(state.get("entities", {})),
     }
+    debug_snapshot = quest_runtime.get_debug_snapshot(player_id)
+    scene_generation = _scene_generation_for_player(player_id)
+    narrative_state = _narrative_state_for_player(
+        player_id,
+        snapshot=debug_snapshot,
+        scene_generation=scene_generation,
+        story_snapshot=story_snapshot if isinstance(story_snapshot, dict) else None,
+    )
 
-    return {
+    response = {
         "status": "ok",
         "player_id": player_id,
         "world": world_snapshot,
         "story": story_snapshot,
     }
+    response.update(_narrative_fields_payload(narrative_state))
+    return response
 
 
 # ============================================================
@@ -486,6 +739,23 @@ def story_rule_event(event: RuleTriggerEvent):
         "story_rule_event",
         extra={"player_id": event.player_id, "event_type": event.event_type},
     )
+
+    interaction_tx: Dict[str, Any] | None = None
+    interaction_tx_error: str | None = None
+    if _as_bool_env("DRIFT_ENABLE_PLUGIN_TRNG", default=True):
+        try:
+            interaction_tx = _ingest_rule_event_via_trng(event)
+        except Exception as exc:
+            interaction_tx_error = str(exc)
+            logger.warning(
+                "plugin_rule_event_trng_ingest_failed",
+                extra={
+                    "player_id": event.player_id,
+                    "event_type": event.event_type,
+                    "error": interaction_tx_error,
+                },
+            )
+
     result = {"status": "ok", "result": response}
     if isinstance(response, dict):
         story_engine.apply_quest_updates(event.player_id, response)
@@ -506,6 +776,47 @@ def story_rule_event(event: RuleTriggerEvent):
         for key in ("task_titles", "milestone_names", "remaining_total", "active_count", "milestone_count"):
             if key in response:
                 result[key] = response[key]
+
+    scene_evolution: Dict[str, Any] | None = None
+    scene_evolution_error: str | None = None
+    try:
+        from app.api.story_api import evolve_scene_for_rule_event, merge_world_patches
+
+        scene_evolution = evolve_scene_for_rule_event(
+            player_id=event.player_id,
+            event_type=event.event_type,
+            payload=event.payload,
+        )
+
+        if isinstance(scene_evolution, dict):
+            scene_patch = scene_evolution.get("scene_world_patch")
+            if isinstance(scene_patch, dict) and scene_patch:
+                existing_patch = result.get("world_patch") if isinstance(result.get("world_patch"), dict) else {}
+                result["world_patch"] = merge_world_patches(existing_patch, scene_patch)
+
+            scene_diff = scene_evolution.get("scene_diff")
+            if isinstance(scene_diff, dict):
+                result["scene_diff"] = scene_diff
+    except Exception as exc:
+        scene_evolution_error = str(exc)
+        logger.warning(
+            "scene_evolution_apply_failed",
+            extra={
+                "player_id": event.player_id,
+                "event_type": event.event_type,
+                "error": scene_evolution_error,
+            },
+        )
+
+    if _as_bool_env("DRIFT_DEBUG_TRACE", default=False):
+        if interaction_tx is not None:
+            result["interaction_transaction"] = interaction_tx
+        if interaction_tx_error:
+            result["interaction_transaction_error"] = interaction_tx_error
+        if scene_evolution is not None:
+            result["scene_evolution"] = scene_evolution
+        if scene_evolution_error:
+            result["scene_evolution_error"] = scene_evolution_error
     return result
 
 
@@ -549,31 +860,164 @@ def story_debug_tasks(player_id: str, request: Request, token: Optional[str] = N
     recent_reports = _recent_reports_for_player(player_id)
     last_report = recent_reports[0] if recent_reports else None
     fallback_state = fallback_state_by_player.get(player_id, {})
+    scene_generation = _scene_generation_for_player(player_id)
 
     snapshot = quest_runtime.get_debug_snapshot(player_id)
+    narrative_state = _narrative_state_for_player(
+        player_id,
+        snapshot=snapshot,
+        scene_generation=scene_generation,
+    )
     if not snapshot:
-        return {
+        result = {
             "status": "error",
             "msg": "No active task state for player.",
             "recent_apply_reports": recent_reports,
             "last_apply_report": last_report,
+            "scene_generation": scene_generation,
             "last_fallback_flag": fallback_state.get("last_fallback_flag", False),
             "last_fallback_reason": fallback_state.get("last_fallback_reason", "none"),
             "last_fallback_level_id": fallback_state.get("last_fallback_level_id"),
             "last_fallback_inject_version": fallback_state.get("last_fallback_inject_version"),
             "last_fallback_at": fallback_state.get("last_fallback_at"),
         }
+        result.update(_narrative_fields_payload(narrative_state))
+        return result
 
     payload: Dict[str, Any] = {"status": "ok"}
     payload.update(snapshot)
     payload["recent_apply_reports"] = recent_reports
     payload["last_apply_report"] = last_report
+    payload["scene_generation"] = scene_generation
     payload["last_fallback_flag"] = fallback_state.get("last_fallback_flag", False)
     payload["last_fallback_reason"] = fallback_state.get("last_fallback_reason", "none")
     payload["last_fallback_level_id"] = fallback_state.get("last_fallback_level_id")
     payload["last_fallback_inject_version"] = fallback_state.get("last_fallback_inject_version")
     payload["last_fallback_at"] = fallback_state.get("last_fallback_at")
+    payload.update(_narrative_fields_payload(narrative_state))
     return payload
+
+
+@router.post("/story/{player_id}/spawnfragment")
+def story_spawn_fragment(player_id: str, payload: Optional[SpawnFragmentRequest] = None):
+    normalized_player = str(player_id or "").strip()
+    if not normalized_player:
+        raise HTTPException(status_code=400, detail="player_id is required")
+
+    request_payload = payload or SpawnFragmentRequest()
+    scene_generation = _scene_generation_for_player(normalized_player) or {}
+
+    requested_theme = request_payload.scene_theme
+    if not isinstance(requested_theme, str) or not requested_theme.strip():
+        requested_theme = scene_generation.get("scene_theme")
+    if not isinstance(requested_theme, str) or not requested_theme.strip():
+        requested_theme = os.environ.get("DRIFT_DEFAULT_SCENE_THEME", "camp")
+    scene_theme = str(requested_theme or "camp").strip() or "camp"
+
+    requested_hint = request_payload.scene_hint
+    if not isinstance(requested_hint, str) or not requested_hint.strip():
+        requested_hint = scene_generation.get("scene_hint")
+    scene_hint = str(requested_hint).strip() if isinstance(requested_hint, str) and requested_hint.strip() else None
+
+    anchor = request_payload.anchor
+    if isinstance(anchor, str) and anchor.strip():
+        anchor = anchor.strip()
+    else:
+        anchor = None
+
+    player_position = request_payload.player_position if isinstance(request_payload.player_position, dict) else None
+    request_text = scene_hint or f"spawn fragment {scene_theme}"
+
+    from app.api.story_api import build_scene_events, _scene_event_plan_to_world_patch
+
+    scene_output = build_scene_events(
+        player_id=normalized_player,
+        scene_theme=scene_theme,
+        scene_hint=scene_hint,
+        text=request_text,
+        anchor=anchor,
+        player_position=player_position,
+    )
+    scene_patch = _scene_event_plan_to_world_patch(scene_output)
+
+    scene_plan = scene_output.get("scene_plan") if isinstance(scene_output.get("scene_plan"), dict) else {}
+    event_plan = scene_output.get("event_plan") if isinstance(scene_output.get("event_plan"), list) else []
+    fragments = scene_plan.get("fragments") if isinstance(scene_plan.get("fragments"), list) else []
+
+    world_patch = scene_patch if isinstance(scene_patch, dict) else {}
+    has_patch = bool(world_patch)
+
+    logger.info(
+        "story_spawn_fragment",
+        extra={
+            "player_id": normalized_player,
+            "scene_theme": scene_theme,
+            "fragment_count": len(fragments),
+            "event_count": len(event_plan),
+            "has_world_patch": has_patch,
+        },
+    )
+
+    return {
+        "status": "ok",
+        "msg": "Scene fragment generated." if has_patch else "Scene fragment generated (no executable patch).",
+        "player_id": normalized_player,
+        "scene_theme": scene_theme,
+        "scene_hint": scene_hint,
+        "fragment_count": len(fragments),
+        "event_count": len(event_plan),
+        "scene": scene_output,
+        "world_patch": world_patch,
+    }
+
+
+@router.post("/story/{player_id}/reset")
+def story_reset(player_id: str, payload: Optional[StoryResetRequest] = None):
+    normalized_player = str(player_id or "").strip()
+    if not normalized_player:
+        raise HTTPException(status_code=400, detail="player_id is required")
+
+    request_payload = payload or StoryResetRequest()
+
+    reset_summary = story_engine.reset_player_runtime(
+        normalized_player,
+        clear_memory=bool(request_payload.clear_memory),
+        clear_history=bool(request_payload.clear_history),
+        clear_persisted_state=bool(request_payload.clear_persisted_state),
+        clear_inventory=bool(request_payload.clear_inventory),
+    )
+
+    cleared_scene_state = 0
+    try:
+        from app.core.narrative.scene_state_store import scene_state_store
+
+        cleared_scene_state = scene_state_store.delete_player_states(normalized_player)
+    except Exception:
+        cleared_scene_state = 0
+
+    if isinstance(reset_summary, dict):
+        reset_summary["cleared_scene_state"] = int(cleared_scene_state)
+
+    apply_reports_by_player.pop(normalized_player, None)
+    fallback_state_by_player.pop(normalized_player, None)
+
+    logger.info(
+        "story_reset",
+        extra={
+            "player_id": normalized_player,
+            "clear_memory": bool(request_payload.clear_memory),
+            "clear_history": bool(request_payload.clear_history),
+            "clear_persisted_state": bool(request_payload.clear_persisted_state),
+            "clear_inventory": bool(request_payload.clear_inventory),
+        },
+    )
+
+    return {
+        "status": "ok",
+        "msg": "Story runtime reset completed.",
+        "player_id": normalized_player,
+        "reset": reset_summary,
+    }
 
 
 @router.get("/story/{player_id}/quest-log")

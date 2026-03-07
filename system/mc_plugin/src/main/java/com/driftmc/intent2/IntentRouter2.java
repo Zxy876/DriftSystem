@@ -49,7 +49,7 @@ public class IntentRouter2 {
                 plugin.getLogger().warning("[IntentRouter2] 请求失败: " + e.getMessage());
                 List<IntentResponse2> fallback = new ArrayList<>();
                 fallback.add(new IntentResponse2(
-                        IntentType2.UNKNOWN, null, null, text, null));
+                    IntentType2.UNKNOWN, null, null, text, null, null, null));
                 callback.accept(fallback);
             }
 
@@ -72,7 +72,7 @@ public class IntentRouter2 {
 
                     if (intents.isEmpty()) {
                         intents.add(new IntentResponse2(
-                                IntentType2.UNKNOWN, null, null, text, null));
+                                IntentType2.UNKNOWN, null, null, text, null, null, null));
                     }
 
                     callback.accept(intents);
@@ -81,7 +81,7 @@ public class IntentRouter2 {
                     plugin.getLogger().warning("[IntentRouter2] 解析错误: " + ex.getMessage());
                     List<IntentResponse2> fallback = new ArrayList<>();
                     fallback.add(new IntentResponse2(
-                            IntentType2.UNKNOWN, null, null, text, null));
+                            IntentType2.UNKNOWN, null, null, text, null, null, null));
                     callback.accept(fallback);
                 }
             }

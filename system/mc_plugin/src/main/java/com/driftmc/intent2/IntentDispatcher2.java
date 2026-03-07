@@ -151,19 +151,76 @@ public class IntentDispatcher2 {
             return;
         }
 
-        // 从 rawText 中提取标题和内容
-        String rawText = intent.rawText != null ? intent.rawText : "新剧情";
-        String title = rawText.length() > 12 ? rawText.substring(0, 12) : rawText;
+        // 从 rawText 中提取标题、正文和 scene_theme
+        String rawText = intent.rawText != null ? intent.rawText.trim() : "";
+        if (rawText.isEmpty()) {
+            rawText = "新剧情";
+        }
+
+        SceneSpec sceneSpec = extractSceneSpecFromRawText(rawText);
+
+        String sceneTheme = normalizeSceneTheme(intent.sceneTheme);
+        if (sceneTheme == null) {
+            sceneTheme = sceneSpec.sceneTheme;
+        }
+
+        String sceneHint = normalizeSceneHint(intent.sceneHint);
+        if (sceneHint == null) {
+            sceneHint = sceneSpec.sceneHint;
+        }
+
+        String titleSource = sceneTheme != null ? sceneTheme : rawText;
+        String title = titleSource.length() > 12 ? titleSource.substring(0, 12) : titleSource;
+        if (title == null || title.isBlank()) {
+            title = "玩家剧情";
+        }
+
+        final String finalSceneTheme = sceneTheme;
+        final String finalSceneHint = sceneHint;
 
         Map<String, Object> body = new HashMap<>();
+        Location playerLocation = fp.getLocation();
+        Map<String, Object> playerPosition = new HashMap<>();
+        playerPosition.put("world", playerLocation.getWorld() != null ? playerLocation.getWorld().getName() : "world");
+        playerPosition.put("x", playerLocation.getX());
+        playerPosition.put("y", playerLocation.getY());
+        playerPosition.put("z", playerLocation.getZ());
+
         body.put("level_id", "flagship_custom_" + System.currentTimeMillis());
         body.put("title", title);
         body.put("text", rawText);
         body.put("player_id", fp.getName());
+        body.put("anchor", "player");
+        body.put("player_position", playerPosition);
+        if (finalSceneTheme != null) {
+            body.put("scene_theme", finalSceneTheme);
+        }
+        if (finalSceneHint != null) {
+            body.put("scene_hint", finalSceneHint);
+        }
+
+        plugin.getLogger().log(Level.INFO,
+            "[DEBUG] CREATE_STORY scene_theme={0} scene_hint={1} player={2} pos=({3},{4},{5})",
+            new Object[]{
+                finalSceneTheme != null ? finalSceneTheme : "<none>",
+                finalSceneHint != null ? finalSceneHint : "<none>",
+                fp.getName(),
+                String.format(Locale.ROOT, "%.1f", playerLocation.getX()),
+                String.format(Locale.ROOT, "%.1f", playerLocation.getY()),
+                String.format(Locale.ROOT, "%.1f", playerLocation.getZ()),
+            });
 
         String jsonBody = GSON.toJson(body);
 
-        fp.sendMessage("§e✨ 正在创建新剧情...");
+        if (finalSceneTheme != null && finalSceneHint != null) {
+            fp.sendMessage("§e✨ 正在根据主题「" + finalSceneTheme + "」在「" + finalSceneHint + "」生成场景...");
+        } else if (finalSceneTheme != null) {
+            fp.sendMessage("§e✨ 正在根据主题「" + finalSceneTheme + "」生成场景...");
+        } else if (finalSceneHint != null) {
+            fp.sendMessage("§e✨ 正在根据地点「" + finalSceneHint + "」生成场景...");
+        } else {
+            fp.sendMessage("§e✨ 正在创建新剧情...");
+        }
 
         backend.postJsonAsync("/story/inject", jsonBody, new Callback() {
 
@@ -208,7 +265,7 @@ public class IntentDispatcher2 {
                             fp.sendMessage("§7关卡ID: " + levelId);
 
                             // 立即加载新创建的关卡（这样会应用场景和NPC）
-                            loadLevelForPlayer(fp, levelId, intent);
+                            loadLevelForPlayer(fp, levelId, intent, finalSceneTheme, finalSceneHint);
                         } else {
                             String msg = extractErrorMessage(root, respStr);
                             fp.sendMessage("§c创建失败: " + msg);
@@ -222,10 +279,12 @@ public class IntentDispatcher2 {
     // ============================================================
     // 为玩家加载关卡（应用场景和NPC）
     // ============================================================
-    private void loadLevelForPlayer(Player p, String levelId, IntentResponse2 intent) {
+    private void loadLevelForPlayer(Player p, String levelId, IntentResponse2 intent, String sceneTheme, String sceneHint) {
         final Player fp = p;
         final String canonicalLevel = LevelIds.canonicalizeOrDefault(
                 enforceTutorialExitRedirect(fp, levelId, intent != null ? intent.rawText : null));
+        final String normalizedSceneTheme = normalizeSceneTheme(sceneTheme);
+        final String normalizedSceneHint = normalizeSceneHint(sceneHint);
 
         fp.sendMessage("§e🌍 正在加载关卡场景...");
 
@@ -243,6 +302,11 @@ public class IntentDispatcher2 {
                         Map<String, Object> patch = GSON.fromJson(intent.worldPatch, MAP_TYPE);
                         syncTutorialState(fp, patch);
                         world.execute(fp, patch);
+                        fp.sendMessage("§a✨ 场景已加载！（备用路径）");
+                        String sceneReadyMessage = buildSceneReadyMessage(normalizedSceneTheme, normalizedSceneHint);
+                        if (sceneReadyMessage != null) {
+                            fp.sendMessage(sceneReadyMessage);
+                        }
                     }
                 });
             }
@@ -265,6 +329,10 @@ public class IntentDispatcher2 {
                         syncTutorialState(fp, patch);
                         world.execute(fp, patch);
                         fp.sendMessage("§a✨ 场景已加载！");
+                        String sceneReadyMessage = buildSceneReadyMessage(normalizedSceneTheme, normalizedSceneHint);
+                        if (sceneReadyMessage != null) {
+                            fp.sendMessage(sceneReadyMessage);
+                        }
                     } else {
                         plugin.getLogger().warning("[加载关卡] bootstrap_patch为空");
 
@@ -275,7 +343,17 @@ public class IntentDispatcher2 {
                             syncTutorialState(fp, patch);
                             world.execute(fp, patch);
                             fp.sendMessage("§a✨ 场景已加载！");
+                            String sceneReadyMessage = buildSceneReadyMessage(normalizedSceneTheme, normalizedSceneHint);
+                            if (sceneReadyMessage != null) {
+                                fp.sendMessage(sceneReadyMessage);
+                            }
                         } else {
+                            plugin.getLogger().log(Level.WARNING,
+                                    "[CREATE_STORY] no patch applied level={0} player={1} scene_theme={2} scene_hint={3}",
+                                    new Object[]{canonicalLevel, fp.getName(),
+                                            normalizedSceneTheme != null ? normalizedSceneTheme : "<none>",
+                                            normalizedSceneHint != null ? normalizedSceneHint : "<none>"});
+                            fp.sendMessage("§c⚠ 剧情已创建，但场景补丁未下发。请重试或用 /taskdebug 排查。");
                             fp.sendMessage("§7（场景数据为空）");
                         }
                     }
@@ -730,6 +808,142 @@ public class IntentDispatcher2 {
             return compact.substring(0, 160) + "...";
         }
         return compact;
+    }
+
+    private String normalizeSceneTheme(String rawTheme) {
+        if (rawTheme == null) {
+            return null;
+        }
+        String theme = rawTheme.trim();
+        if (theme.isEmpty()) {
+            return null;
+        }
+
+        theme = theme.replaceFirst("^[\\s:：,，\\-—\\\"'“”‘’]+", "");
+        theme = theme.replaceFirst("[\\s。！!？?]+$", "").trim();
+
+        if (theme.isEmpty()) {
+            return null;
+        }
+        return theme;
+    }
+
+    private String normalizeSceneHint(String rawHint) {
+        if (rawHint == null) {
+            return null;
+        }
+        String hint = rawHint.trim();
+        if (hint.isEmpty()) {
+            return null;
+        }
+
+        hint = hint.replaceFirst("^[\\s:：,，\\-—\\\"'“”‘’]+", "");
+        hint = hint.replaceFirst("[\\s。！!？?]+$", "").trim();
+
+        String[] suffixes = {"里面", "里边", "附近", "周围", "一带", "这里", "那里", "场景", "里", "中"};
+        for (String suffix : suffixes) {
+            if (hint.endsWith(suffix) && hint.length() > suffix.length()) {
+                hint = hint.substring(0, hint.length() - suffix.length()).trim();
+                break;
+            }
+        }
+
+        if (hint.startsWith("在") && hint.length() > 1) {
+            hint = hint.substring(1).trim();
+        }
+
+        if (hint.isEmpty()) {
+            return null;
+        }
+        return hint;
+    }
+
+    private String buildSceneReadyMessage(String sceneTheme, String sceneHint) {
+        String normalizedTheme = normalizeSceneTheme(sceneTheme);
+        String normalizedHint = normalizeSceneHint(sceneHint);
+
+        if (normalizedTheme != null && normalizedHint != null) {
+            return "§a系统：主题「" + normalizedTheme + "」在「" + normalizedHint + "」场景已生成。";
+        }
+        if (normalizedTheme != null) {
+            return "§a系统：主题「" + normalizedTheme + "」场景已生成。";
+        }
+        if (normalizedHint != null) {
+            return "§a系统：地点「" + normalizedHint + "」场景已生成。";
+        }
+        return null;
+    }
+
+    private SceneSpec extractSceneSpecFromRawText(String rawText) {
+        String normalizedRaw = rawText == null ? "" : rawText.trim();
+        if (normalizedRaw.isEmpty()) {
+            return new SceneSpec(null, null);
+        }
+
+        String sceneHint = null;
+        int tailHintIndex = normalizedRaw.lastIndexOf(" 在");
+        if (tailHintIndex > 0 && tailHintIndex + 2 < normalizedRaw.length()) {
+            String tailHint = normalizeSceneHint(normalizedRaw.substring(tailHintIndex + 2));
+            if (tailHint != null) {
+                sceneHint = tailHint;
+                normalizedRaw = normalizedRaw.substring(0, tailHintIndex).trim();
+            }
+        }
+
+        String[] prefixes = {
+                "创建剧情",
+                "创建关卡",
+                "导入剧情",
+                "写剧情",
+                "写故事",
+                "编故事",
+                "创造剧情",
+                "生成剧情"
+        };
+
+        for (String prefix : prefixes) {
+            if (normalizedRaw.startsWith(prefix)) {
+                String content = normalizedRaw.substring(prefix.length()).trim();
+                int inlineHintIndex = content.lastIndexOf(" 在");
+                if (inlineHintIndex > 0 && inlineHintIndex + 2 < content.length()) {
+                    String inlineHint = normalizeSceneHint(content.substring(inlineHintIndex + 2));
+                    if (inlineHint != null && sceneHint == null) {
+                        sceneHint = inlineHint;
+                        content = content.substring(0, inlineHintIndex).trim();
+                    }
+                }
+
+                String candidate = normalizeSceneTheme(content);
+                if (candidate != null) {
+                    return new SceneSpec(candidate, sceneHint);
+                }
+                break;
+            }
+        }
+
+        if (normalizedRaw.startsWith("我要") && normalizedRaw.endsWith("的场景")
+                && normalizedRaw.length() > "我要".length() + "的场景".length()) {
+            String middle = normalizedRaw.substring("我要".length(), normalizedRaw.length() - "的场景".length());
+            if (middle.startsWith("一个")) {
+                middle = middle.substring("一个".length());
+            }
+            String candidate = normalizeSceneTheme(middle);
+            if (candidate != null) {
+                return new SceneSpec(candidate, sceneHint);
+            }
+        }
+
+        return new SceneSpec(null, sceneHint);
+    }
+
+    private static final class SceneSpec {
+        private final String sceneTheme;
+        private final String sceneHint;
+
+        private SceneSpec(String sceneTheme, String sceneHint) {
+            this.sceneTheme = sceneTheme;
+            this.sceneHint = sceneHint;
+        }
     }
 
     private String enforceTutorialExitRedirect(Player player, String requestedLevelId, String rawText) {

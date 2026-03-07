@@ -12,10 +12,14 @@ import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.entity.AbstractVillager;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -166,6 +170,30 @@ public class NearbyNPCListener implements Listener {
         if (handleNpcInteraction(event.getPlayer(), event.getRightClicked())) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onNpcDamaged(EntityDamageByEntityEvent event) {
+        if (ruleEvents == null || npcManager == null) {
+            return;
+        }
+
+        Entity target = event.getEntity();
+        if (!npcManager.isNpc(target)) {
+            return;
+        }
+
+        Player attacker = resolvePlayerDamager(event.getDamager());
+        if (attacker == null) {
+            return;
+        }
+
+        String npcName = target.getCustomName();
+        if (npcName == null || npcName.isBlank()) {
+            npcName = "未知NPC";
+        }
+
+        ruleEvents.emitNpcAttack(attacker, target, extractNpcId(target), npcName, event.getFinalDamage());
     }
 
     private boolean shouldNotifyProximity(UUID playerId, UUID entityId) {
@@ -357,6 +385,10 @@ public class NearbyNPCListener implements Listener {
 
         if (ruleEvents != null) {
             if (!(tutorialGuide && flagshipTutorial)) {
+                ruleEvents.emitNpcTalk(player, target, npcId, displayName, "right_click");
+                if (isTradeNpc(target)) {
+                    ruleEvents.emitNpcTrade(player, target, npcId, displayName);
+                }
                 ruleEvents.emitInteractEntity(player, target, "right_click");
 
                 String questEvent = npcManager.lookupQuestEvent(target);
@@ -369,25 +401,37 @@ public class NearbyNPCListener implements Listener {
 
                 String canonicalQuestEvent = QuestEventCanonicalizer.canonicalize(questEvent);
                 String eventType = !canonicalQuestEvent.isEmpty() ? canonicalQuestEvent : questEvent;
+                String canonicalNpcName = npcId.isBlank() ? displayName : npcId;
+                String triggerEvent = eventType;
+                if (triggerEvent.isBlank()) {
+                    triggerEvent = buildDefaultNpcTriggerEvent(canonicalNpcName, displayName, target);
+                }
 
-                if (!eventType.isBlank() && consumeNpcQuest(player.getUniqueId(), eventType)) {
+                if (!triggerEvent.isBlank() && consumeNpcQuest(player.getUniqueId(), "npc_trigger:" + triggerEvent)) {
                     Map<String, Object> payload = new LinkedHashMap<>();
                     payload.put("source", "npc_interact");
-                    String canonicalNpcName = npcId.isBlank() ? displayName : npcId;
                     payload.put("npc", canonicalNpcName);
                     if (!levelId.isBlank()) {
                         payload.put("level_id", levelId);
                     }
                     appendLocation(payload, target.getLocation());
-                    ruleEvents.emit(player, eventType, payload);
-                    player.sendMessage(ChatColor.GOLD + "触发事件: " + eventType);
-                    plugin.getLogger().log(Level.INFO,
-                            "[NearbyNPCListener] Emitted event {0} for player {1} (npc={2})",
-                            new Object[] { eventType, player.getName(), canonicalNpcName });
+                    ruleEvents.emitNpcTrigger(player, target, canonicalNpcName, displayName, triggerEvent, payload);
+
+                    if (!eventType.isBlank()) {
+                        ruleEvents.emit(player, eventType, payload);
+                        player.sendMessage(ChatColor.GOLD + "触发事件: " + eventType);
+                        plugin.getLogger().log(Level.INFO,
+                                "[NearbyNPCListener] Emitted event {0} + npc_trigger({1}) for player {2} (npc={3})",
+                                new Object[] { eventType, triggerEvent, player.getName(), canonicalNpcName });
+                    } else {
+                        plugin.getLogger().log(Level.INFO,
+                                "[NearbyNPCListener] Emitted default npc_trigger {0} for player {1} (npc={2})",
+                                new Object[] { triggerEvent, player.getName(), canonicalNpcName });
+                    }
                 } else {
                     plugin.getLogger().log(Level.INFO,
-                            "[NearbyNPCListener] Interaction throttled or unresolved: player={0}, npc={1}, event={2}",
-                            new Object[] { player.getName(), npcId.isBlank() ? displayName : npcId, eventType });
+                            "[NearbyNPCListener] Interaction throttled or unresolved: player={0}, npc={1}, event={2}, trigger={3}",
+                            new Object[] { player.getName(), npcId.isBlank() ? displayName : npcId, eventType, triggerEvent });
                 }
             }
         }
@@ -539,6 +583,56 @@ public class NearbyNPCListener implements Listener {
     private boolean isFlagshipTutorialLevel(Player player) {
         String levelId = resolveCurrentLevel(player);
         return LevelIds.isFlagshipTutorial(levelId);
+    }
+
+    private boolean isTradeNpc(Entity entity) {
+        return entity instanceof AbstractVillager;
+    }
+
+    private Player resolvePlayerDamager(Entity damager) {
+        if (damager instanceof Player) {
+            return (Player) damager;
+        }
+
+        if (damager instanceof Projectile) {
+            Projectile projectile = (Projectile) damager;
+            Object shooter = projectile.getShooter();
+            if (shooter instanceof Player) {
+                return (Player) shooter;
+            }
+        }
+
+        return null;
+    }
+
+    private String buildDefaultNpcTriggerEvent(String npcId, String displayName, Entity target) {
+        String base = npcId;
+        if (base == null || base.isBlank()) {
+            base = displayName;
+        }
+
+        String stripped = base != null ? ChatColor.stripColor(base) : "";
+        String normalized = stripped != null ? stripped.trim().toLowerCase(Locale.ROOT) : "";
+
+        normalized = normalized.replaceAll("[\\s\\-]+", "_");
+        normalized = normalized.replaceAll("[^\\p{L}\\p{N}_]+", "_");
+        normalized = normalized.replaceAll("_+", "_");
+
+        if (normalized.startsWith("_")) {
+            normalized = normalized.substring(1);
+        }
+        if (normalized.endsWith("_")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+
+        if (normalized.isBlank() && target != null) {
+            normalized = target.getType().name().toLowerCase(Locale.ROOT);
+        }
+        if (normalized.isBlank()) {
+            normalized = "npc";
+        }
+
+        return "npc_interact_" + normalized;
     }
 
     private void appendLocation(Map<String, Object> payload, Location location) {

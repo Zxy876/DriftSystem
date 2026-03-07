@@ -1,0 +1,1041 @@
+from __future__ import annotations
+
+import json
+from copy import deepcopy
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, Iterable, List
+
+from .layout_engine import event_offset_for_fragment, layout_scene_graph
+from .scene_graph import SceneGraph
+
+
+SCENE_CONTENT_DIR = Path(__file__).resolve().parents[2] / "content" / "scenes"
+FRAGMENTS_DIR = SCENE_CONTENT_DIR / "fragments"
+SEMANTIC_TAGS_FILE = SCENE_CONTENT_DIR / "semantic_tags.json"
+FRAGMENT_GRAPH_FILE = SCENE_CONTENT_DIR / "fragment_graph.json"
+SEMANTIC_SCORING_FILE = SCENE_CONTENT_DIR / "semantic_scoring.json"
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _safe_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _normalize_token(raw_value: Any) -> str:
+    token = str(raw_value or "").strip().lower()
+    if not token:
+        return ""
+    token = token.replace("-", "_").replace(" ", "_")
+    return token.strip("_")
+
+
+def _normalize_token_list(raw_values: Any) -> List[str]:
+    if not isinstance(raw_values, list):
+        return []
+
+    normalized: List[str] = []
+    seen: set[str] = set()
+    for value in raw_values:
+        token = _normalize_token(value)
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        normalized.append(token)
+    return normalized
+
+
+def _compose_theme_with_hint(story_theme: str, scene_hint: str | None) -> str:
+    hint = str(scene_hint or "").strip()
+    base_theme = str(story_theme or "").strip()
+    if not hint:
+        return base_theme
+    if not base_theme:
+        return hint
+    return f"{base_theme} {hint}"
+
+
+def _scene_hint_variant(scene_hint: str | None) -> str | None:
+    hint = str(scene_hint or "").strip().lower()
+    if not hint:
+        return None
+
+    if any(token in hint for token in ("森林", "林", "forest")):
+        return "forest"
+    if any(token in hint for token in ("海", "岸", "滩", "coast", "beach", "sea")):
+        return "coastal"
+    return None
+
+
+def _build_anchor_payload(anchor_position: Dict[str, Any] | None, *, anchor_ref: str) -> Dict[str, Any]:
+    if not isinstance(anchor_position, dict):
+        return {
+            "mode": "player",
+            "ref": anchor_ref,
+        }
+
+    return {
+        "mode": "absolute",
+        "ref": anchor_ref,
+        "world": str(anchor_position.get("world") or "world"),
+        "x": _safe_float(anchor_position.get("x"), 0.0),
+        "y": _safe_float(anchor_position.get("y"), 64.0),
+        "z": _safe_float(anchor_position.get("z"), 0.0),
+    }
+
+
+def _read_json_file(path: Path) -> Any:
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _normalize_float_map(raw_values: Any) -> Dict[str, float]:
+    if not isinstance(raw_values, dict):
+        return {}
+
+    normalized: Dict[str, float] = {}
+    for key, value in raw_values.items():
+        token = _normalize_token(key)
+        if not token:
+            continue
+        normalized[token] = _safe_float(value, 0.0)
+    return normalized
+
+
+def _normalize_nested_float_map(raw_values: Any) -> Dict[str, Dict[str, float]]:
+    if not isinstance(raw_values, dict):
+        return {}
+
+    normalized: Dict[str, Dict[str, float]] = {}
+    for outer_key, inner_value in raw_values.items():
+        outer_token = _normalize_token(outer_key)
+        if not outer_token:
+            continue
+        normalized_inner = _normalize_float_map(inner_value)
+        if normalized_inner:
+            normalized[outer_token] = normalized_inner
+    return normalized
+
+
+def _default_semantic_scoring_profile() -> Dict[str, Any]:
+    return {
+        "weights": {
+            "priority_weight": 2.0,
+            "semantic_weight": 5.0,
+            "requirement_weight": 3.0,
+            "optional_weight": 1.25,
+            "tag_weight": 0.75,
+            "root_bonus": 1.5,
+            "theme_keyword_bonus": 4.0,
+        },
+        "resource_weights": {},
+        "fragment_semantic_weights": {},
+    }
+
+
+@lru_cache(maxsize=1)
+def _load_semantic_scoring_profile() -> Dict[str, Any]:
+    default_profile = _default_semantic_scoring_profile()
+    raw = _read_json_file(SEMANTIC_SCORING_FILE)
+    if not isinstance(raw, dict):
+        return default_profile
+
+    weights = dict(default_profile["weights"])
+    raw_weights = raw.get("weights")
+    if isinstance(raw_weights, dict):
+        for key, fallback in weights.items():
+            weights[key] = _safe_float(raw_weights.get(key), fallback)
+
+    return {
+        "weights": weights,
+        "resource_weights": _normalize_float_map(raw.get("resource_weights")),
+        "fragment_semantic_weights": _normalize_nested_float_map(raw.get("fragment_semantic_weights")),
+    }
+
+
+@lru_cache(maxsize=1)
+def _load_semantic_tags() -> Dict[str, tuple[str, ...]]:
+    raw = _read_json_file(SEMANTIC_TAGS_FILE)
+    if not isinstance(raw, dict):
+        return {}
+
+    normalized: Dict[str, tuple[str, ...]] = {}
+    for key, value in raw.items():
+        token = _normalize_token(key)
+        if not token:
+            continue
+
+        if isinstance(value, list):
+            tags = _normalize_token_list(value)
+        else:
+            tags = _normalize_token_list([value])
+
+        if tags:
+            normalized[token] = tuple(tags)
+
+    return normalized
+
+
+@lru_cache(maxsize=1)
+def _load_fragment_graph() -> Dict[str, Dict[str, Any]]:
+    raw = _read_json_file(FRAGMENT_GRAPH_FILE)
+    if not isinstance(raw, dict):
+        return {}
+
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for key, value in raw.items():
+        parent = _normalize_token(key)
+        if not parent:
+            continue
+
+        if isinstance(value, dict):
+            children = _normalize_token_list(value.get("children"))
+            max_children = _safe_int(value.get("max_children"), len(children))
+        else:
+            children = _normalize_token_list(value)
+            max_children = len(children)
+
+        normalized[parent] = {
+            "children": tuple(children),
+            "max_children": max(0, max_children),
+        }
+
+    return normalized
+
+
+@lru_cache(maxsize=1)
+def _load_fragments() -> Dict[str, Dict[str, Any]]:
+    if not FRAGMENTS_DIR.exists() or not FRAGMENTS_DIR.is_dir():
+        return {}
+
+    fragments: Dict[str, Dict[str, Any]] = {}
+    for file_path in sorted(FRAGMENTS_DIR.glob("*.json"), key=lambda path: path.name):
+        raw = _read_json_file(file_path)
+        if not isinstance(raw, dict):
+            continue
+
+        fragment_id = _normalize_token(raw.get("id") or file_path.stem)
+        if not fragment_id:
+            continue
+
+        connections = _normalize_token_list(raw.get("connections"))
+        theme_keywords = [str(item) for item in (raw.get("theme_keywords") or []) if str(item).strip()]
+
+        events: List[Dict[str, Any]] = []
+        if isinstance(raw.get("events"), list):
+            for event in raw.get("events"):
+                if not isinstance(event, dict):
+                    continue
+                events.append(dict(event))
+
+        structures: List[Dict[str, Any]] = []
+        if isinstance(raw.get("structures"), list):
+            for structure in raw.get("structures"):
+                if isinstance(structure, dict):
+                    structures.append(dict(structure))
+
+        npcs: List[Dict[str, Any]] = []
+        if isinstance(raw.get("npcs"), list):
+            for npc in raw.get("npcs"):
+                if isinstance(npc, dict):
+                    npcs.append(dict(npc))
+
+        fragments[fragment_id] = {
+            "id": fragment_id,
+            "root": bool(raw.get("root", False)),
+            "priority": _safe_int(raw.get("priority"), 0),
+            "tags": _normalize_token_list(raw.get("tags")),
+            "requires": _normalize_token_list(raw.get("requires")),
+            "optional_resources": _normalize_token_list(raw.get("optional_resources")),
+            "size": [
+                max(1, _safe_int((raw.get("size") or [3, 3])[0] if isinstance(raw.get("size"), list) and len(raw.get("size")) > 0 else 3, 3)),
+                max(1, _safe_int((raw.get("size") or [3, 3])[1] if isinstance(raw.get("size"), list) and len(raw.get("size")) > 1 else 3, 3)),
+            ],
+            "layout_anchor": str(raw.get("layout_anchor") or "center").strip().lower() or "center",
+            "structures": structures,
+            "npcs": npcs,
+            "connections": connections,
+            "theme_keywords": theme_keywords,
+            "events": events,
+        }
+
+    return fragments
+
+
+def _semantic_scores_from_resources(resources: Dict[str, int]) -> Dict[str, int]:
+    semantic_map = _load_semantic_tags()
+    scores: Dict[str, int] = {}
+
+    for raw_key, raw_value in resources.items():
+        token = _normalize_token(raw_key)
+        amount = _safe_int(raw_value, 0)
+        if not token or amount <= 0:
+            continue
+
+        tags = semantic_map.get(token)
+        if not tags:
+            tags = (token,)
+
+        for tag in tags:
+            if not tag:
+                continue
+            scores[tag] = int(scores.get(tag, 0)) + amount
+
+    return scores
+
+
+def _fragment_theme_allowed(fragment: Dict[str, Any], combined_theme: str) -> bool:
+    keywords = fragment.get("theme_keywords") or []
+    if not isinstance(keywords, list) or not keywords:
+        return True
+
+    theme_text = str(combined_theme or "")
+    if not theme_text:
+        return False
+
+    return any(str(keyword) in theme_text for keyword in keywords if str(keyword).strip())
+
+
+def _fragment_missing_requirements(fragment: Dict[str, Any], semantic_scores: Dict[str, int]) -> List[str]:
+    missing: List[str] = []
+    requires = fragment.get("requires")
+    if not isinstance(requires, list):
+        return missing
+
+    for required in requires:
+        token = _normalize_token(required)
+        if not token:
+            continue
+        if int(semantic_scores.get(token, 0)) <= 0:
+            missing.append(token)
+    return missing
+
+
+def _fragment_requirements_met(fragment: Dict[str, Any], semantic_scores: Dict[str, int]) -> bool:
+    return len(_fragment_missing_requirements(fragment, semantic_scores)) == 0
+
+
+def _resource_weight(token: str, profile: Dict[str, Any]) -> float:
+    resource_weights = profile.get("resource_weights")
+    if not isinstance(resource_weights, dict):
+        return 1.0
+    return _safe_float(resource_weights.get(token), 1.0)
+
+
+def _fragment_theme_score(fragment: Dict[str, Any], combined_theme: str, *, theme_keyword_bonus: float) -> float:
+    keywords = fragment.get("theme_keywords")
+    if not isinstance(keywords, list) or not keywords:
+        return 0.0
+
+    theme_text = str(combined_theme or "")
+    if not theme_text:
+        return 0.0
+
+    matched = 0
+    for keyword in keywords:
+        keyword_text = str(keyword).strip()
+        if keyword_text and keyword_text in theme_text:
+            matched += 1
+
+    return float(matched) * float(theme_keyword_bonus)
+
+
+def _fragment_semantic_score(
+    fragment: Dict[str, Any],
+    *,
+    fragment_id: str,
+    semantic_scores: Dict[str, int],
+    profile: Dict[str, Any],
+) -> float:
+    score = 0.0
+
+    fragment_weights = profile.get("fragment_semantic_weights")
+    weighted_tags: Dict[str, float] = {}
+    if isinstance(fragment_weights, dict):
+        weighted_tags = fragment_weights.get(fragment_id) or {}
+
+    if isinstance(weighted_tags, dict) and weighted_tags:
+        for tag, tag_weight in weighted_tags.items():
+            token = _normalize_token(tag)
+            if not token:
+                continue
+            semantic_amount = int(semantic_scores.get(token, 0))
+            if semantic_amount <= 0:
+                continue
+            score += float(semantic_amount) * _safe_float(tag_weight, 0.0) * _resource_weight(token, profile)
+        return score
+
+    for tag in fragment.get("tags") or []:
+        token = _normalize_token(tag)
+        if not token:
+            continue
+        semantic_amount = int(semantic_scores.get(token, 0))
+        if semantic_amount <= 0:
+            continue
+        score += float(semantic_amount) * _resource_weight(token, profile)
+
+    return score
+
+
+def _fragment_reason_tokens(
+    fragment: Dict[str, Any],
+    *,
+    fragment_id: str,
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+    profile: Dict[str, Any],
+) -> List[str]:
+    tokens: List[str] = []
+    seen: set[str] = set()
+
+    def _push(token: str) -> None:
+        normalized = _normalize_token(token)
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        tokens.append(normalized)
+
+    weighted_semantics = profile.get("fragment_semantic_weights") if isinstance(profile, dict) else {}
+    weighted_map = {}
+    if isinstance(weighted_semantics, dict):
+        weighted_map = weighted_semantics.get(fragment_id) or {}
+
+    if isinstance(weighted_map, dict) and weighted_map:
+        ranked = []
+        for tag, tag_weight in weighted_map.items():
+            token = _normalize_token(tag)
+            if not token:
+                continue
+            amount = int(semantic_scores.get(token, 0))
+            if amount <= 0:
+                continue
+            ranked.append((amount * _safe_float(tag_weight, 0.0), token))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        for _, token in ranked[:4]:
+            _push(token)
+
+    for required in fragment.get("requires") or []:
+        token = _normalize_token(required)
+        if token and int(semantic_scores.get(token, 0)) > 0:
+            _push(token)
+
+    for optional in fragment.get("optional_resources") or []:
+        token = _normalize_token(optional)
+        if token and int(semantic_scores.get(token, 0)) > 0:
+            _push(token)
+
+    for tag in fragment.get("tags") or []:
+        token = _normalize_token(tag)
+        if token and int(semantic_scores.get(token, 0)) > 0:
+            _push(token)
+
+    keywords = fragment.get("theme_keywords")
+    if isinstance(keywords, list) and keywords and combined_theme:
+        for keyword in keywords:
+            keyword_text = str(keyword).strip()
+            if keyword_text and keyword_text in combined_theme:
+                _push("theme")
+                break
+
+    return tokens
+
+
+def _fragment_reason_text(
+    fragment: Dict[str, Any],
+    *,
+    fragment_id: str,
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+    profile: Dict[str, Any],
+) -> str:
+    tokens = _fragment_reason_tokens(
+        fragment,
+        fragment_id=fragment_id,
+        semantic_scores=semantic_scores,
+        combined_theme=combined_theme,
+        profile=profile,
+    )
+    if not tokens:
+        return "priority"
+    return " + ".join(tokens)
+
+
+def _fragment_score_details(fragment: Dict[str, Any], semantic_scores: Dict[str, int], combined_theme: str) -> Dict[str, Any]:
+    profile = _load_semantic_scoring_profile()
+    weights = profile.get("weights") or {}
+
+    priority_weight = _safe_float(weights.get("priority_weight"), 2.0)
+    semantic_weight = _safe_float(weights.get("semantic_weight"), 5.0)
+    requirement_weight = _safe_float(weights.get("requirement_weight"), 3.0)
+    optional_weight = _safe_float(weights.get("optional_weight"), 1.25)
+    tag_weight = _safe_float(weights.get("tag_weight"), 0.75)
+    root_bonus = _safe_float(weights.get("root_bonus"), 1.5)
+    theme_keyword_bonus = _safe_float(weights.get("theme_keyword_bonus"), 4.0)
+
+    fragment_id = _normalize_token(fragment.get("id"))
+    score = float(_safe_int(fragment.get("priority"), 0)) * priority_weight
+    if bool(fragment.get("root")):
+        score += root_bonus
+
+    semantic_score = _fragment_semantic_score(
+        fragment,
+        fragment_id=fragment_id,
+        semantic_scores=semantic_scores,
+        profile=profile,
+    )
+    score += semantic_score * semantic_weight
+
+    for required in fragment.get("requires") or []:
+        token = _normalize_token(required)
+        if not token:
+            continue
+        semantic_amount = int(semantic_scores.get(token, 0))
+        if semantic_amount > 0:
+            score += float(semantic_amount) * requirement_weight * _resource_weight(token, profile)
+
+    for optional in fragment.get("optional_resources") or []:
+        token = _normalize_token(optional)
+        if not token:
+            continue
+        semantic_amount = int(semantic_scores.get(token, 0))
+        if semantic_amount > 0:
+            score += float(semantic_amount) * optional_weight * _resource_weight(token, profile)
+
+    for tag in fragment.get("tags") or []:
+        token = _normalize_token(tag)
+        if not token:
+            continue
+        semantic_amount = int(semantic_scores.get(token, 0))
+        if semantic_amount > 0:
+            score += float(semantic_amount) * tag_weight * _resource_weight(token, profile)
+
+    score += _fragment_theme_score(
+        fragment,
+        combined_theme,
+        theme_keyword_bonus=theme_keyword_bonus,
+    )
+
+    return {
+        "score": int(round(score * 1000)),
+        "reason": _fragment_reason_text(
+            fragment,
+            fragment_id=fragment_id,
+            semantic_scores=semantic_scores,
+            combined_theme=combined_theme,
+            profile=profile,
+        ),
+    }
+
+
+def _fragment_score(fragment: Dict[str, Any], semantic_scores: Dict[str, int], combined_theme: str) -> int:
+    return int(_fragment_score_details(fragment, semantic_scores, combined_theme).get("score", 0))
+
+
+def _blocked_reason(fragment: Dict[str, Any], semantic_scores: Dict[str, int], combined_theme: str) -> str:
+    missing = _fragment_missing_requirements(fragment, semantic_scores)
+    if missing:
+        return "missing_required: " + ", ".join(missing)
+    if not _fragment_theme_allowed(fragment, combined_theme):
+        return "theme_mismatch"
+    return "blocked"
+
+
+def _candidate_score_entry(
+    fragment: Dict[str, Any],
+    *,
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+) -> Dict[str, Any]:
+    fragment_id = _normalize_token(fragment.get("id"))
+    details = _fragment_score_details(fragment, semantic_scores, combined_theme)
+    score = int(details.get("score", 0))
+    reason = str(details.get("reason") or "priority")
+    return {
+        "fragment": fragment_id,
+        "score": round(float(score) / 1000.0, 3),
+        "_score_int": score,
+        "reason": reason,
+    }
+
+
+def _choose_root_fragment_with_debug(
+    fragments: Dict[str, Dict[str, Any]],
+    *,
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+) -> Dict[str, Any]:
+    root_pool = [fragment for fragment in fragments.values() if bool(fragment.get("root"))]
+
+    def _evaluate(pool: List[Dict[str, Any]], stage: str) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        candidates: List[Dict[str, Any]] = []
+        blocked: List[Dict[str, Any]] = []
+        for fragment in pool:
+            fragment_id = _normalize_token(fragment.get("id"))
+            if not fragment_id:
+                continue
+
+            reason = _blocked_reason(fragment, semantic_scores, combined_theme)
+            if reason != "blocked":
+                blocked.append(
+                    {
+                        "fragment": fragment_id,
+                        "stage": stage,
+                        "reason": reason,
+                    }
+                )
+                continue
+
+            candidates.append(
+                _candidate_score_entry(
+                    fragment,
+                    semantic_scores=semantic_scores,
+                    combined_theme=combined_theme,
+                )
+            )
+        return candidates, blocked
+
+    selection_stage = "root_candidates"
+    candidate_scores, blocked = _evaluate(root_pool, "root")
+
+    if not candidate_scores:
+        selection_stage = "fallback_all"
+        fallback_candidates, fallback_blocked = _evaluate(list(fragments.values()), "fallback")
+        candidate_scores = fallback_candidates
+        blocked.extend(fallback_blocked)
+
+    if not candidate_scores:
+        return {
+            "selected_root": None,
+            "candidate_scores": [],
+            "blocked": blocked,
+            "reasons": {
+                "selection_stage": selection_stage,
+                "selected_root": "no_candidate",
+            },
+        }
+
+    candidate_scores.sort(key=lambda item: (-int(item.get("_score_int", 0)), str(item.get("fragment") or "")))
+    selected = candidate_scores[0]
+
+    formatted_scores: List[Dict[str, Any]] = []
+    for item in candidate_scores:
+        formatted_scores.append(
+            {
+                "fragment": item.get("fragment"),
+                "score": item.get("score"),
+                "reason": item.get("reason"),
+            }
+        )
+
+    return {
+        "selected_root": str(selected.get("fragment") or ""),
+        "candidate_scores": formatted_scores,
+        "blocked": blocked,
+        "reasons": {
+            "selection_stage": selection_stage,
+            "selected_root": str(selected.get("reason") or "priority"),
+        },
+    }
+
+
+def _choose_root_fragment(
+    fragments: Dict[str, Dict[str, Any]],
+    *,
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+) -> str | None:
+    debug_result = _choose_root_fragment_with_debug(
+        fragments,
+        semantic_scores=semantic_scores,
+        combined_theme=combined_theme,
+    )
+    selected_root = _normalize_token(debug_result.get("selected_root"))
+    return selected_root or None
+
+
+def _graph_children_spec(
+    fragment_id: str,
+    fragment: Dict[str, Any],
+    graph: Dict[str, Dict[str, Any]],
+) -> tuple[List[str], int]:
+    graph_entry = graph.get(fragment_id)
+    if isinstance(graph_entry, dict):
+        children = list(graph_entry.get("children") or tuple())
+        max_children = _safe_int(graph_entry.get("max_children"), len(children))
+        return children, max(0, max_children)
+
+    fallback_children = [_normalize_token(item) for item in (fragment.get("connections") or [])]
+    normalized: List[str] = []
+    seen: set[str] = set()
+    for child in fallback_children:
+        if not child or child in seen:
+            continue
+        seen.add(child)
+        normalized.append(child)
+    return normalized, len(normalized)
+
+
+def _expand_scene_graph_with_debug(
+    root_fragment: str,
+    *,
+    fragments: Dict[str, Dict[str, Any]],
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+) -> tuple[SceneGraph, List[str], List[Dict[str, Any]]]:
+    graph_spec = _load_fragment_graph()
+    scene_graph = SceneGraph(root=root_fragment)
+    scene_graph.add_node(root_fragment)
+
+    blocked: List[Dict[str, Any]] = []
+    root = fragments.get(root_fragment)
+    if not isinstance(root, dict):
+        blocked.append(
+            {
+                "fragment": root_fragment,
+                "stage": "expand",
+                "reason": "missing_fragment",
+            }
+        )
+        return scene_graph, [], blocked
+
+    child_ids, max_children = _graph_children_spec(root_fragment, root, graph_spec)
+    candidate_children: List[Dict[str, Any]] = []
+
+    for child_id in child_ids:
+        child_fragment = fragments.get(child_id)
+        if not isinstance(child_fragment, dict):
+            blocked.append(
+                {
+                    "fragment": child_id,
+                    "stage": "expand",
+                    "reason": "missing_fragment",
+                }
+            )
+            continue
+
+        reason = _blocked_reason(child_fragment, semantic_scores, combined_theme)
+        if reason != "blocked":
+            blocked.append(
+                {
+                    "fragment": child_id,
+                    "stage": "expand",
+                    "reason": reason,
+                }
+            )
+            continue
+
+        candidate_children.append(
+            _candidate_score_entry(
+                child_fragment,
+                semantic_scores=semantic_scores,
+                combined_theme=combined_theme,
+            )
+        )
+
+    candidate_children.sort(key=lambda item: (-int(item.get("_score_int", 0)), str(item.get("fragment") or "")))
+
+    if max_children <= 0:
+        selected_rows: List[Dict[str, Any]] = []
+    else:
+        selected_rows = candidate_children[:max_children]
+
+    if max_children >= 0 and len(candidate_children) > len(selected_rows):
+        for row in candidate_children[len(selected_rows) :]:
+            blocked.append(
+                {
+                    "fragment": str(row.get("fragment") or ""),
+                    "stage": "expand",
+                    "reason": "pruned_by_max_children",
+                }
+            )
+
+    selected_children: List[str] = []
+    for row in selected_rows:
+        child = _normalize_token(row.get("fragment"))
+        if not child:
+            continue
+        scene_graph.add_edge(root_fragment, child)
+        selected_children.append(child)
+
+    return scene_graph, selected_children, blocked
+
+
+def _expand_fragment_graph_with_debug(
+    root_fragment: str,
+    *,
+    fragments: Dict[str, Dict[str, Any]],
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+) -> tuple[List[str], List[Dict[str, Any]]]:
+    scene_graph, _, blocked = _expand_scene_graph_with_debug(
+        root_fragment,
+        fragments=fragments,
+        semantic_scores=semantic_scores,
+        combined_theme=combined_theme,
+    )
+    return list(scene_graph.nodes), blocked
+
+
+def _expand_fragment_graph(
+    root_fragment: str,
+    *,
+    fragments: Dict[str, Dict[str, Any]],
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+) -> List[str]:
+    selected, _ = _expand_fragment_graph_with_debug(
+        root_fragment,
+        fragments=fragments,
+        semantic_scores=semantic_scores,
+        combined_theme=combined_theme,
+    )
+    return selected
+
+
+def select_fragments_with_debug(
+    resources: Dict[str, int],
+    story_theme: str,
+    scene_hint: str | None = None,
+) -> Dict[str, Any]:
+    fragments = _load_fragments()
+    if not fragments:
+        return {
+            "fragments": [],
+            "scene_graph": {
+                "root": "",
+                "nodes": [],
+                "edges": [],
+            },
+            "layout": {
+                "strategy": "radial_v1",
+                "root": "",
+                "positions": {},
+            },
+            "debug": {
+                "selected_root": None,
+                "candidate_scores": [],
+                "selected_children": [],
+                "blocked": [],
+                "reasons": {"selected_root": "no_fragments"},
+                "semantic_scores": {},
+            },
+        }
+
+    normalized_resources: Dict[str, int] = {}
+    for key, value in (resources or {}).items():
+        token = _normalize_token(key)
+        amount = _safe_int(value, 0)
+        if token and amount > 0:
+            normalized_resources[token] = amount
+
+    semantic_scores = _semantic_scores_from_resources(normalized_resources)
+    combined_theme = _compose_theme_with_hint(str(story_theme or ""), scene_hint)
+
+    root_debug = _choose_root_fragment_with_debug(
+        fragments,
+        semantic_scores=semantic_scores,
+        combined_theme=combined_theme,
+    )
+    root_fragment = _normalize_token(root_debug.get("selected_root"))
+    if not root_fragment:
+        debug_payload = {
+            "selected_root": None,
+            "candidate_scores": list(root_debug.get("candidate_scores") or []),
+            "selected_children": [],
+            "blocked": list(root_debug.get("blocked") or []),
+            "reasons": dict(root_debug.get("reasons") or {}),
+            "semantic_scores": dict(semantic_scores),
+        }
+        return {
+            "fragments": [],
+            "scene_graph": {
+                "root": "",
+                "nodes": [],
+                "edges": [],
+            },
+            "layout": {
+                "strategy": "radial_v1",
+                "root": "",
+                "positions": {},
+            },
+            "debug": debug_payload,
+        }
+
+    scene_graph, selected_children, expansion_blocked = _expand_scene_graph_with_debug(
+        root_fragment,
+        fragments=fragments,
+        semantic_scores=semantic_scores,
+        combined_theme=combined_theme,
+    )
+    selected = list(scene_graph.nodes)
+    layout = layout_scene_graph(scene_graph, fragments=fragments)
+
+    blocked_entries = list(root_debug.get("blocked") or []) + list(expansion_blocked or [])
+    deduped_blocked: List[Dict[str, Any]] = []
+    seen_blocked: set[str] = set()
+    for row in blocked_entries:
+        if not isinstance(row, dict):
+            continue
+        dedupe_key = json.dumps(row, ensure_ascii=False, sort_keys=True)
+        if dedupe_key in seen_blocked:
+            continue
+        seen_blocked.add(dedupe_key)
+        deduped_blocked.append(dict(row))
+
+    debug_payload = {
+        "selected_root": root_fragment,
+        "candidate_scores": list(root_debug.get("candidate_scores") or []),
+        "selected_children": list(selected_children),
+        "blocked": deduped_blocked,
+        "reasons": dict(root_debug.get("reasons") or {}),
+        "semantic_scores": dict(semantic_scores),
+    }
+
+    return {
+        "fragments": selected,
+        "scene_graph": scene_graph.to_dict(),
+        "layout": layout,
+        "debug": debug_payload,
+    }
+
+
+def select_fragments(resources: Dict[str, int], story_theme: str, scene_hint: str | None = None) -> List[str]:
+    selection = select_fragments_with_debug(resources, story_theme, scene_hint=scene_hint)
+    return list(selection.get("fragments") or [])
+
+
+def get_fragment_map() -> Dict[str, Dict[str, Any]]:
+    return deepcopy(_load_fragments())
+
+
+def _fallback_events_from_fragment(fragment: Dict[str, Any]) -> List[Dict[str, Any]]:
+    fragment_id = _normalize_token(fragment.get("id")) or "scene"
+    events: List[Dict[str, Any]] = []
+
+    for index, structure in enumerate(fragment.get("structures") or [], start=1):
+        if not isinstance(structure, dict):
+            continue
+
+        structure_type = _normalize_token(structure.get("type"))
+        template = str(structure.get("template") or "").strip()
+        event_id = str(structure.get("event_id") or f"spawn_{fragment_id}_{index}")
+        anchor_ref = str(structure.get("anchor_ref") or "player")
+
+        if structure_type in {"fire", "campfire"}:
+            events.append(
+                {
+                    "event_id": event_id,
+                    "type": "spawn_block",
+                    "anchor_ref": anchor_ref,
+                    "data": {
+                        "block": str(structure.get("block") or "campfire"),
+                    },
+                }
+            )
+            continue
+
+        events.append(
+            {
+                "event_id": event_id,
+                "type": "spawn_structure",
+                "anchor_ref": anchor_ref,
+                "data": {
+                    "template": template or structure_type or fragment_id,
+                },
+            }
+        )
+
+    for npc in fragment.get("npcs") or []:
+        if not isinstance(npc, dict):
+            continue
+        npc_id = _normalize_token(npc.get("id")) or "npc"
+        events.append(
+            {
+                "event_id": str(npc.get("event_id") or f"spawn_{npc_id}"),
+                "type": "spawn_npc",
+                "anchor_ref": str(npc.get("anchor_ref") or "camp_edge"),
+                "data": {
+                    "npc_template": str(npc.get("template") or npc_id),
+                },
+            }
+        )
+
+    return events
+
+
+def build_event_plan(
+    fragments: Iterable[str],
+    *,
+    anchor_position: Dict[str, Any] | None = None,
+    scene_hint: str | None = None,
+    layout: Dict[str, Any] | None = None,
+) -> List[Dict[str, Any]]:
+    fragment_map = _load_fragments()
+
+    events: List[Dict[str, Any]] = []
+    normalized_hint = str(scene_hint or "").strip() or None
+    hint_variant = _scene_hint_variant(normalized_hint)
+
+    for fragment_name in fragments:
+        fragment_id = _normalize_token(fragment_name)
+        if not fragment_id:
+            continue
+
+        fragment = fragment_map.get(fragment_id)
+        if not isinstance(fragment, dict):
+            continue
+
+        blueprints = fragment.get("events")
+        if not isinstance(blueprints, list) or not blueprints:
+            blueprints = _fallback_events_from_fragment(fragment)
+
+        for index, blueprint in enumerate(blueprints, start=1):
+            if not isinstance(blueprint, dict):
+                continue
+
+            event_id = str(blueprint.get("event_id") or f"spawn_{fragment_id}_{index}")
+            event_type = str(blueprint.get("type") or "spawn_structure")
+            anchor_ref = str(blueprint.get("anchor_ref") or "player")
+            data = deepcopy(blueprint.get("data") or {})
+
+            if normalized_hint is not None:
+                data["scene_hint"] = normalized_hint
+            if hint_variant is not None:
+                data["scene_variant"] = hint_variant
+
+            base_offset = event_offset_for_fragment(fragment_id, layout)
+            blueprint_offset = blueprint.get("offset")
+            if isinstance(blueprint_offset, dict):
+                event_offset = {
+                    "dx": _safe_float(blueprint_offset.get("dx"), base_offset["dx"]),
+                    "dy": _safe_float(blueprint_offset.get("dy"), base_offset["dy"]),
+                    "dz": _safe_float(blueprint_offset.get("dz"), base_offset["dz"]),
+                }
+            else:
+                event_offset = dict(base_offset)
+
+            events.append(
+                {
+                    "event_id": event_id,
+                    "type": event_type,
+                    "text": event_id,
+                    "anchor": _build_anchor_payload(anchor_position, anchor_ref=anchor_ref),
+                    "offset": event_offset,
+                    "data": data,
+                }
+            )
+
+    return events

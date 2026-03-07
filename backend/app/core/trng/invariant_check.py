@@ -17,6 +17,14 @@ def check_tx_invariants(
     draft_state: InternalState,
     tx_nodes: list[StoryNode],
     phase_change_count: int,
+    base_state_hash: str | None = None,
+    committed_state_hash_before: str | None = None,
+    root_from_node: str | None = None,
+    draft_state_hash: str | None = None,
+    computed_draft_state_hash: str | None = None,
+    world_patch_payload_hash: str | None = None,
+    expected_world_patch_payload_hash: str | None = None,
+    commit_publish_count: int = 0,
 ) -> List[str]:
     errors: List[str] = []
 
@@ -43,6 +51,27 @@ def check_tx_invariants(
 
     if draft_state.silence_count < committed_state.silence_count:
         errors.append("SILENCE_COUNT_DECREASE_NOT_ALLOWED")
+
+    if base_state_hash is not None and committed_state_hash_before is not None:
+        if str(base_state_hash) != str(committed_state_hash_before):
+            errors.append("ISOLATION_BASE_STATE_HASH_MISMATCH")
+
+    if root_from_node is not None and committed_graph.current_node_id != root_from_node:
+        errors.append("ISOLATION_COMMITTED_GRAPH_MOVED")
+
+    if draft_state_hash is not None and computed_draft_state_hash is not None:
+        if str(draft_state_hash) != str(computed_draft_state_hash):
+            errors.append("DRAFT_STATE_HASH_BINDING_MISMATCH")
+
+    if not world_patch_payload_hash:
+        errors.append("WORLD_PATCH_PAYLOAD_HASH_MISSING")
+
+    if expected_world_patch_payload_hash is not None and world_patch_payload_hash is not None:
+        if str(expected_world_patch_payload_hash) != str(world_patch_payload_hash):
+            errors.append("WORLD_PATCH_PAYLOAD_HASH_BINDING_MISMATCH")
+
+    if int(commit_publish_count) > 0:
+        errors.append("ATOMICITY_COMMIT_ALREADY_PUBLISHED")
 
     return errors
 

@@ -1,5 +1,6 @@
 package com.driftmc;
 
+import java.time.Duration;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
@@ -21,6 +22,7 @@ import com.driftmc.commands.QuestLogCommand;
 import com.driftmc.commands.RecommendCommand;
 import com.driftmc.commands.SayToAICommand;
 import com.driftmc.commands.StoryCreativeCommand;
+import com.driftmc.commands.StoryRuntimeToolCommand;
 import com.driftmc.commands.TalkCommand;
 import com.driftmc.commands.TaskDebugCommand;
 import com.driftmc.commands.custom.CmdSay;
@@ -91,16 +93,37 @@ public class DriftPlugin extends JavaPlugin {
 
         getLogger().log(Level.INFO, "[DriftPlugin] 后端地址: {0}", url);
 
+        int backendCallTimeoutSeconds = Math.max(20, getConfig().getInt("system.backend_call_timeout", 150));
+        int backendConnectTimeoutSeconds = Math.max(3, getConfig().getInt("system.backend_connect_timeout", 10));
+        int backendReadTimeoutSeconds = Math.max(20, getConfig().getInt("system.backend_read_timeout", 120));
+        int backendWriteTimeoutSeconds = Math.max(20, getConfig().getInt("system.backend_write_timeout", 120));
+
+        getLogger().log(
+            Level.INFO,
+            "[DriftPlugin] 后端超时(call/connect/read/write) = {0}/{1}/{2}/{3}s",
+            new Object[] {
+                backendCallTimeoutSeconds,
+                backendConnectTimeoutSeconds,
+                backendReadTimeoutSeconds,
+                backendWriteTimeoutSeconds,
+            });
+
         this.taskDebugToken = getConfig().getString("debug.task_token", "");
 
         // 初始化核心组件
-        this.backend = new BackendClient(url);
+        this.backend = new BackendClient(
+            url,
+            Duration.ofSeconds(backendCallTimeoutSeconds),
+            Duration.ofSeconds(backendConnectTimeoutSeconds),
+            Duration.ofSeconds(backendReadTimeoutSeconds),
+            Duration.ofSeconds(backendWriteTimeoutSeconds));
         this.sessionManager = new PlayerSessionManager();
         this.storyManager = new StoryManager(this, backend);
         this.storyCreativeManager = new StoryCreativeManager(this);
         this.tutorialManager = new TutorialManager(this, backend, sessionManager);
         this.npcManager = new NPCManager(this);
         this.worldPatcher = new SceneAwareWorldPatchExecutor(this, npcManager);
+        this.worldPatcher.setBackendClient(this.backend);
         this.payloadExecutor = new PayloadExecutorV1(this, backend);
         this.worldPatcher.attachTutorialStateMachine(tutorialManager.getStateMachine());
         this.worldPatcher.attachTutorialManager(tutorialManager);
@@ -178,7 +201,15 @@ public class DriftPlugin extends JavaPlugin {
         registerCommand("recommend", new RecommendCommand(recommendationHud));
         registerCommand("questlog", new QuestLogCommand(questLogHud));
         registerCommand("cinematic", new CinematicCommand(cinematicController));
-        registerCommand("taskdebug", new TaskDebugCommand(this, backend, taskDebugToken));
+        registerCommand("taskdebug", new TaskDebugCommand(this, backend, taskDebugToken, TaskDebugCommand.ViewMode.TASKS));
+        registerCommand("worldstate", new TaskDebugCommand(this, backend, taskDebugToken, TaskDebugCommand.ViewMode.WORLDSTATE));
+        registerCommand("leveldebug", new TaskDebugCommand(this, backend, taskDebugToken, TaskDebugCommand.ViewMode.LEVELDEBUG));
+        registerCommand("eventdebug", new TaskDebugCommand(this, backend, taskDebugToken, TaskDebugCommand.ViewMode.EVENTDEBUG));
+        registerCommand("spawnfragment", new StoryRuntimeToolCommand(this, backend, worldPatcher, StoryRuntimeToolCommand.Mode.SPAWN_FRAGMENT));
+        registerCommand("storyreset", new StoryRuntimeToolCommand(this, backend, worldPatcher, StoryRuntimeToolCommand.Mode.STORY_RESET));
+        registerCommand("debugscene", new TaskDebugCommand(this, backend, taskDebugToken, TaskDebugCommand.ViewMode.SCENE));
+        registerCommand("debuginventory", new TaskDebugCommand(this, backend, taskDebugToken, TaskDebugCommand.ViewMode.INVENTORY));
+        registerCommand("debugpatch", new TaskDebugCommand(this, backend, taskDebugToken, TaskDebugCommand.ViewMode.PATCH));
 
         getLogger().info("======================================");
         getLogger().info("   DriftSystem / 心悦宇宙");

@@ -80,6 +80,46 @@ commands:
     usage: "/taskdebug"
     permission: "drift.taskdebug"
 
+  worldstate:
+    description: "显示当前世界状态（阶段/资源）"
+    usage: "/worldstate"
+    permission: "drift.taskdebug"
+
+  leveldebug:
+    description: "显示关卡状态机调试信息（阶段/历史/迁移）"
+    usage: "/leveldebug"
+    permission: "drift.taskdebug"
+
+  eventdebug:
+    description: "显示最近规则事件调试信息（collect/npc_trigger/npc_talk等）"
+    usage: "/eventdebug"
+    permission: "drift.taskdebug"
+
+  spawnfragment:
+    description: "根据当前运行态生成并投放场景片段"
+    usage: "/spawnfragment"
+    permission: "drift.taskdebug"
+
+  storyreset:
+    description: "重置当前玩家剧情运行态（任务/事件/库存聚合）"
+    usage: "/storyreset"
+    permission: "drift.taskdebug"
+
+  debugscene:
+    description: "显示 SceneAssembler 生成的 scene/event_plan"
+    usage: "/debugscene"
+    permission: "drift.taskdebug"
+
+  debuginventory:
+    description: "显示 SceneAssembler 使用的库存聚合"
+    usage: "/debuginventory"
+    permission: "drift.taskdebug"
+
+  debugpatch:
+    description: "显示最近 world patch 执行回传"
+    usage: "/debugpatch"
+    permission: "drift.taskdebug"
+
 permissions:
   drift.taskdebug:
     description: "访问任务调试工具"

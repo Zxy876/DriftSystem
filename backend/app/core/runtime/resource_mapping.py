@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List
 
 from app.core.executor.canonical_v2 import stable_hash_v2
+from app.core.runtime.resource_canonical import normalize_inventory_resource_token
 
 
 RESOURCE_INVENTORY_VERSION = "resource_inventory_v1"
@@ -20,7 +21,7 @@ class ResourceInventory:
 
 
 def _normalize_resource_name(value: Any) -> str:
-    return str(value or "").strip().lower()
+    return normalize_inventory_resource_token(value)
 
 
 def _normalize_resources(resources: Iterable[Any] | None) -> List[str]:

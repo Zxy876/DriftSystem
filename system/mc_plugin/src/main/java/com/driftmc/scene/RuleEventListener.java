@@ -8,8 +8,10 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.ItemStack;
 
 /**
  * Captures common in-world interactions and forwards them to {@link RuleEventBridge}.
@@ -46,5 +48,19 @@ public final class RuleEventListener implements Listener {
         Player player = event.getPlayer();
         Entity target = event.getRightClicked();
         bridge.emitInteractEntity(player, target, "interact");
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityPickupItem(EntityPickupItemEvent event) {
+        if (bridge == null) {
+            return;
+        }
+        if (!(event.getEntity() instanceof Player)) {
+            return;
+        }
+
+        Player player = (Player) event.getEntity();
+        ItemStack stack = event.getItem().getItemStack();
+        bridge.emitCollect(player, stack.getType(), stack.getAmount(), event.getItem().getLocation());
     }
 }

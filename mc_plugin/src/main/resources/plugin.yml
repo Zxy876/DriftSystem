@@ -1,0 +1,9 @@
+name: DriftMC
+main: com.driftmc.DriftPlugin
+version: 1.0
+api-version: 1.20
+commands:
+  level:
+    description: 加载一个关卡
+  next:
+    description: 推进剧情

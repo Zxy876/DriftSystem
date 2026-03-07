@@ -7,6 +7,7 @@ from app.core.executor.canonical_v2 import stable_hash_v2
 
 from .interaction_event import InteractionEvent
 from .npc_state import apply_relationship_delta, create_npc_state, normalize_npc_state
+from .resource_canonical import normalize_inventory_resource_token
 from .resource_mapping import create_resource_inventory, normalize_resource_inventory
 from .world_patch import WORLD_PATCH_VERSION, generate_world_patch
 
@@ -175,7 +176,7 @@ def reduce_event_log(
             state["npc_available"][npc_id] = bool(next_npc_state["npc_available"])
 
         elif event.type == "collect":
-            resource = str(event.data.get("resource") or "unknown_resource").strip().lower() or "unknown_resource"
+            resource = normalize_inventory_resource_token(event.data.get("resource")) or "unknown_resource"
             amount = max(int(event.data.get("amount", 1)), 1)
             state["collected_resources"][resource] = int(state["collected_resources"].get(resource, 0)) + amount
             inventory_resources = []

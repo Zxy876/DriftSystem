@@ -463,6 +463,68 @@ class StoryEngine:
 
         return {"mc": mc_payload, "exit_summary": exit_summary}
 
+    def reset_player_runtime(
+        self,
+        player_id: str,
+        *,
+        clear_memory: bool = True,
+        clear_history: bool = True,
+        clear_persisted_state: bool = True,
+        clear_inventory: bool = True,
+    ) -> Dict[str, Any]:
+        normalized_player = str(player_id or "").strip()
+        if not normalized_player:
+            return {
+                "player_id": "",
+                "had_story_state": False,
+                "quest_runtime": {
+                    "player_id": "",
+                    "had_active_state": False,
+                    "cleared_runtime": False,
+                    "cleared_persisted": 0,
+                    "cleared_inventory": 0,
+                },
+                "cleared_memory": False,
+                "cleared_history": 0,
+                "level_id": None,
+            }
+
+        player_state = self.players.pop(normalized_player, None)
+        current_level_id = None
+        if isinstance(player_state, dict):
+            level = player_state.get("level")
+            if level is not None:
+                current_level_id = getattr(level, "level_id", None)
+
+        self.event_manager.unregister(normalized_player)
+        self.minimap.reset_player(normalized_player)
+        trigger_engine.reset_player(normalized_player)
+
+        runtime_reset = quest_runtime.reset_player_state(
+            normalized_player,
+            clear_persisted=clear_persisted_state,
+            clear_inventory=clear_inventory,
+        )
+
+        memory_cleared = False
+        if clear_memory and normalized_player in self.graph.memory_snapshots:
+            self.graph.memory_snapshots.pop(normalized_player, None)
+            memory_cleared = True
+
+        history_cleared = 0
+        if clear_history:
+            history_entries = self.graph.trajectory.pop(normalized_player, [])
+            history_cleared = len(history_entries) if isinstance(history_entries, list) else 0
+
+        return {
+            "player_id": normalized_player,
+            "had_story_state": isinstance(player_state, dict),
+            "quest_runtime": runtime_reset,
+            "cleared_memory": memory_cleared,
+            "cleared_history": int(history_cleared),
+            "level_id": current_level_id,
+        }
+
     # ============================================================
     # 状态查询
     # ============================================================

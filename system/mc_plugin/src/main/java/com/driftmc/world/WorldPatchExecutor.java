@@ -1,5 +1,8 @@
 package com.driftmc.world;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -28,8 +31,15 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
 
+import com.driftmc.backend.BackendClient;
 import com.driftmc.scene.QuestEventCanonicalizer;
 import com.driftmc.scene.RuleEventBridge;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.Response;
 
 /**
  * WorldPatchExecutor
@@ -44,11 +54,14 @@ import com.driftmc.scene.RuleEventBridge;
  */
 public class WorldPatchExecutor {
 
+    private static final Gson GSON = new Gson();
+
     private final JavaPlugin plugin;
     private AdvancedWorldBuilder advancedBuilder;
     private RuleEventBridge ruleEventBridge;
     private final Map<UUID, CopyOnWriteArrayList<LocationTrigger>> triggerRegistry = new ConcurrentHashMap<>();
     private BukkitTask triggerPoller;
+    private volatile BackendClient backend;
 
     public WorldPatchExecutor(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -65,6 +78,10 @@ public class WorldPatchExecutor {
 
     public RuleEventBridge getRuleEventBridge() {
         return this.ruleEventBridge;
+    }
+
+    public void setBackendClient(BackendClient backend) {
+        this.backend = backend;
     }
 
     /**
@@ -97,25 +114,229 @@ public class WorldPatchExecutor {
             return;
         }
 
-        plugin.getLogger().info("[WorldPatchExecutor] execute patch = " + patch);
+        long startedAtMs = System.currentTimeMillis();
+        String buildId = extractBuildId(patch);
+        String payloadHash = extractPayloadHash(patch, buildId);
+        if (payloadHash == null || payloadHash.isBlank() || "unknown".equalsIgnoreCase(payloadHash)) {
+            payloadHash = computePayloadDigest(patch);
+        }
+        String reportBuildId = resolveReportBuildId(buildId, payloadHash, player.getName(), startedAtMs);
+        String status = "EXECUTED";
+        String failureCode = "NONE";
+        int failed = 0;
 
-        Map<String, Object> primary = patch;
-        processOperationMap(player, primary);
+        try {
+            plugin.getLogger().info("[WorldPatchExecutor] execute patch = " + patch);
 
+            Map<String, Object> primary = patch;
+            processOperationMap(player, primary);
+
+            Object mcObj = patch.get("mc");
+
+            if (mcObj instanceof Map) {
+                Map<String, Object> mcMap = asStringObjectMap(mcObj);
+                processOperationMap(player, mcMap);
+            } else if (mcObj instanceof List) {
+                List<?> mcList = (List<?>) mcObj;
+                for (Object entry : mcList) {
+                    if (entry instanceof Map) {
+                        Map<String, Object> entryMap = asStringObjectMap(entry);
+                        processOperationMap(player, entryMap);
+                    }
+                }
+            }
+        } catch (RuntimeException ex) {
+            status = "REJECTED";
+            failureCode = "EXEC_EXCEPTION";
+            failed = 1;
+            plugin.getLogger().warning("[WorldPatchExecutor] execute failed build_id="
+                    + (reportBuildId == null ? "<none>" : reportBuildId)
+                    + " player=" + player.getName()
+                    + " error=" + ex.getMessage());
+            throw ex;
+        } finally {
+            int executed = "EXECUTED".equals(status) ? estimateOperationCount(patch) : 0;
+            long durationMs = Math.max(0L, System.currentTimeMillis() - startedAtMs);
+            reportApplyResult(reportBuildId, player.getName(), status, failureCode, executed, failed, durationMs, payloadHash);
+        }
+    }
+
+    private String resolveReportBuildId(String buildId, String payloadHash, String playerId, long startedAtMs) {
+        if (buildId != null && !buildId.isBlank()) {
+            return buildId;
+        }
+        if (payloadHash != null && !payloadHash.isBlank() && !"unknown".equalsIgnoreCase(payloadHash)) {
+            return "mc_auto_" + payloadHash;
+        }
+        String safePlayer = playerId == null || playerId.isBlank() ? "unknown" : playerId;
+        return "mc_auto_" + safePlayer + "_" + startedAtMs;
+    }
+
+    private String computePayloadDigest(Map<String, Object> patch) {
+        if (patch == null || patch.isEmpty()) {
+            return "unknown";
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = GSON.toJson(patch).getBytes(StandardCharsets.UTF_8);
+            byte[] hash = digest.digest(bytes);
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            return "unknown";
+        }
+    }
+
+    private int estimateOperationCount(Map<String, Object> patch) {
+        if (patch == null || patch.isEmpty()) {
+            return 0;
+        }
+
+        int total = countOperationMap(patch);
         Object mcObj = patch.get("mc");
-
-        if (mcObj instanceof Map) {
-            Map<String, Object> mcMap = asStringObjectMap(mcObj);
-            processOperationMap(player, mcMap);
-        } else if (mcObj instanceof List) {
-            List<?> mcList = (List<?>) mcObj;
+        if (mcObj instanceof Map<?, ?> mcMap) {
+            total += countOperationMap(asStringObjectMap(mcMap));
+        } else if (mcObj instanceof List<?> mcList) {
             for (Object entry : mcList) {
-                if (entry instanceof Map) {
-                    Map<String, Object> entryMap = asStringObjectMap(entry);
-                    processOperationMap(player, entryMap);
+                if (entry instanceof Map<?, ?> entryMap) {
+                    total += countOperationMap(asStringObjectMap(entryMap));
                 }
             }
         }
+        return Math.max(1, total);
+    }
+
+    private int countOperationMap(Map<String, Object> operations) {
+        if (operations == null || operations.isEmpty()) {
+            return 0;
+        }
+
+        int count = 0;
+        count += countKeyWeight(operations.get("tell"));
+        count += countKeyWeight(operations.get("weather"));
+        count += countKeyWeight(operations.get("weather_transition"));
+        count += countKeyWeight(operations.get("time"));
+        count += countKeyWeight(operations.get("lighting_shift"));
+        count += countKeyWeight(operations.get("music"));
+        count += countKeyWeight(operations.get("teleport"));
+        count += countKeyWeight(operations.get("trigger_zones"));
+        count += countKeyWeight(operations.get("build"));
+        count += countKeyWeight(operations.get("build_multi"));
+        count += countKeyWeight(operations.get("spawn"));
+        count += countKeyWeight(operations.get("spawn_multi"));
+        count += countKeyWeight(operations.get("structure"));
+        count += countKeyWeight(operations.get("blocks"));
+        count += countKeyWeight(operations.get("effect"));
+        count += countKeyWeight(operations.get("particle"));
+        count += countKeyWeight(operations.get("sound"));
+        count += countKeyWeight(operations.get("title"));
+        count += countKeyWeight(operations.get("actionbar"));
+        return count;
+    }
+
+    private int countKeyWeight(Object value) {
+        if (value == null) {
+            return 0;
+        }
+        if (value instanceof List<?> list) {
+            return Math.max(1, list.size());
+        }
+        return 1;
+    }
+
+    private String extractBuildId(Map<String, Object> patch) {
+        String rootBuildId = asNonBlankString(patch.get("build_id"));
+        if (rootBuildId != null) {
+            return rootBuildId;
+        }
+
+        Object mcObj = patch.get("mc");
+        if (mcObj instanceof Map<?, ?> mcMap) {
+            return asNonBlankString(mcMap.get("build_id"));
+        }
+        return null;
+    }
+
+    private String extractPayloadHash(Map<String, Object> patch, String fallbackBuildId) {
+        String direct = asNonBlankString(patch.get("final_commands_hash_v2"));
+        if (direct != null) {
+            return direct;
+        }
+
+        Object hashObj = patch.get("hash");
+        if (hashObj instanceof Map<?, ?> hashMap) {
+            String merged = asNonBlankString(hashMap.get("final_commands"));
+            if (merged != null) {
+                return merged;
+            }
+            merged = asNonBlankString(hashMap.get("merged_blocks"));
+            if (merged != null) {
+                return merged;
+            }
+        }
+
+        Object mcObj = patch.get("mc");
+        if (mcObj instanceof Map<?, ?> mcMap) {
+            String mcHash = asNonBlankString(mcMap.get("final_commands_hash_v2"));
+            if (mcHash != null) {
+                return mcHash;
+            }
+        }
+
+        return fallbackBuildId == null || fallbackBuildId.isBlank() ? "unknown" : fallbackBuildId;
+    }
+
+    private String asNonBlankString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    private void reportApplyResult(
+            String buildId,
+            String playerId,
+            String status,
+            String failureCode,
+            int executed,
+            int failed,
+            long durationMs,
+            String payloadHash) {
+        if (backend == null || buildId == null || buildId.isBlank()) {
+            return;
+        }
+
+        JsonObject report = new JsonObject();
+        report.addProperty("build_id", buildId);
+        report.addProperty("player_id", playerId == null || playerId.isBlank() ? "unknown" : playerId);
+        report.addProperty("status", status == null || status.isBlank() ? "EXECUTED" : status);
+        report.addProperty("failure_code", failureCode == null || failureCode.isBlank() ? "NONE" : failureCode);
+        report.addProperty("executed", Math.max(0, executed));
+        report.addProperty("failed", Math.max(0, failed));
+        report.addProperty("duration_ms", Math.max(0L, durationMs));
+        report.addProperty("payload_hash", payloadHash == null || payloadHash.isBlank() ? buildId : payloadHash);
+
+        backend.postJsonAsync("/world/apply/report", GSON.toJson(report), new Callback() {
+            @Override
+            public void onFailure(Call call, java.io.IOException e) {
+                plugin.getLogger().warning("[WorldPatchExecutor] apply report failed build_id="
+                        + buildId + " error=" + e.getMessage());
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) {
+                try (response) {
+                    if (!response.isSuccessful()) {
+                        plugin.getLogger().warning("[WorldPatchExecutor] apply report non-2xx build_id="
+                                + buildId + " code=" + response.code());
+                    }
+                }
+            }
+        });
     }
 
     @SuppressWarnings("unchecked")
@@ -180,22 +401,36 @@ public class WorldPatchExecutor {
         if (operations.containsKey("build")) {
             Object buildObj = operations.get("build");
             if (buildObj instanceof Map<?, ?> bRaw) {
-                handleBuild(player, (Map<String, Object>) bRaw, anchorLocation);
+                Map<String, Object> buildMap = asStringObjectMap(bRaw);
+                if (!buildMap.isEmpty()) {
+                    handleBuild(player, buildMap, anchorLocation);
+                }
             } else if (buildObj instanceof List<?> buildList) {
                 for (Object entry : (List<?>) buildList) {
-                    if (entry instanceof Map<?, ?> entryMap) {
-                        handleBuild(player, (Map<String, Object>) entryMap, anchorLocation);
+                    if (entry instanceof Map<?, ?> entryRaw) {
+                        Map<String, Object> entryMap = asStringObjectMap(entryRaw);
+                        if (!entryMap.isEmpty()) {
+                            handleBuild(player, entryMap, anchorLocation);
+                        }
                     }
                 }
             }
         }
 
         // build_multi（批量构建）
+        boolean buildMultiHandled = false;
         if (operations.containsKey("build_multi")) {
-            Object buildMultiObj = operations.get("build_multi");
-            if (buildMultiObj instanceof List<?> buildList) {
-                advancedBuilder.handleBuildMulti(player, buildList, anchorLocation);
-            }
+            buildMultiHandled = handleBuildMultiEntries(player, operations.get("build_multi"), anchorLocation);
+        }
+
+        // structure（模板构建，若 build_multi 已处理则跳过避免重复）
+        if (operations.containsKey("structure") && !buildMultiHandled) {
+            handleStructureEntries(player, operations.get("structure"), anchorLocation);
+        }
+
+        // blocks（离散方块放置）
+        if (operations.containsKey("blocks")) {
+            handleBlocks(player, operations.get("blocks"), anchorLocation);
         }
 
         // spawn
@@ -214,10 +449,12 @@ public class WorldPatchExecutor {
 
         // spawn_multi（批量生成实体）
         if (operations.containsKey("spawn_multi")) {
-            Object spawnMultiObj = operations.get("spawn_multi");
-            if (spawnMultiObj instanceof List<?> spawnList) {
-                advancedBuilder.handleSpawnMulti(player, spawnList, anchorLocation);
-            }
+            handleSpawnMultiEntries(player, operations.get("spawn_multi"), anchorLocation);
+        }
+
+        // spawns（旧别名，兼容 AI world fallback）
+        if (operations.containsKey("spawns")) {
+            handleSpawnMultiEntries(player, operations.get("spawns"), anchorLocation);
         }
 
         if (teleportConfig != null && teleportTarget != null) {
@@ -263,6 +500,289 @@ public class WorldPatchExecutor {
                 handleActionBar(player, abStr);
             }
         }
+    }
+
+    private boolean handleBuildMultiEntries(Player player, Object spec, Location anchor) {
+        List<Map<String, Object>> entries = asOperationEntryList(spec);
+        if (entries.isEmpty()) {
+            return false;
+        }
+
+        List<Map<String, Object>> advancedEntries = new ArrayList<>();
+        boolean executed = false;
+
+        for (Map<String, Object> entry : entries) {
+            if (isAdvancedBuildEntry(entry)) {
+                advancedEntries.add(entry);
+                continue;
+            }
+            handleBuild(player, entry, anchor);
+            executed = true;
+        }
+
+        if (!advancedEntries.isEmpty()) {
+            advancedBuilder.handleBuildMulti(player, advancedEntries, anchor);
+            executed = true;
+        }
+
+        return executed;
+    }
+
+    private boolean isAdvancedBuildEntry(Map<String, Object> buildMap) {
+        if (buildMap == null || buildMap.isEmpty()) {
+            return false;
+        }
+
+        String shape = string(buildMap.get("shape"), "").toLowerCase(Locale.ROOT);
+        switch (shape) {
+            case "race_track", "hollow_cube", "grid", "fence_ring", "tunnel", "light_line" -> {
+                return true;
+            }
+            default -> {
+            }
+        }
+
+        return buildMap.get("center") instanceof Map<?, ?>
+                || buildMap.get("start") instanceof Map<?, ?>
+                || buildMap.get("end") instanceof Map<?, ?>;
+    }
+
+    private void handleStructureEntries(Player player, Object spec, Location anchor) {
+        List<Map<String, Object>> entries = asOperationEntryList(spec);
+        for (Map<String, Object> entry : entries) {
+            handleStructure(player, entry, anchor);
+        }
+    }
+
+    private void handleStructure(Player player, Map<String, Object> structureMap, Location anchor) {
+        String template = string(
+                structureMap.get("template"),
+                string(structureMap.get("name"), string(structureMap.get("structure_type"), "camp_small")))
+                .toLowerCase(Locale.ROOT);
+
+        double[] baseOffset = resolveOffset(structureMap);
+        String worldName = string(structureMap.get("world"), "");
+
+        switch (template) {
+            case "camp_small" -> {
+                handleBuild(player, buildSpec("platform", 2, "OAK_PLANKS", worldName,
+                        baseOffset[0], baseOffset[1], baseOffset[2]), anchor);
+                handleBuild(player, buildSpec("line", 2, "OAK_FENCE", worldName,
+                        baseOffset[0] - 1.0, baseOffset[1], baseOffset[2] - 1.0), anchor);
+            }
+            case "cooking_area_basic" -> {
+                handleBuild(player, buildSpec("line", 2, "COBBLESTONE", worldName,
+                        baseOffset[0], baseOffset[1], baseOffset[2]), anchor);
+                handleBuild(player, buildSpec("line", 1, "FURNACE", worldName,
+                        baseOffset[0] + 1.0, baseOffset[1], baseOffset[2]), anchor);
+            }
+            default -> handleBuild(player, buildSpec("platform", 1, "OAK_PLANKS", worldName,
+                    baseOffset[0], baseOffset[1], baseOffset[2]), anchor);
+        }
+    }
+
+    private Map<String, Object> buildSpec(
+            String shape,
+            int size,
+            String material,
+            String worldName,
+            double dx,
+            double dy,
+            double dz) {
+        Map<String, Object> spec = new LinkedHashMap<>();
+        spec.put("shape", shape);
+        spec.put("size", size);
+        spec.put("material", material);
+        if (worldName != null && !worldName.isBlank()) {
+            spec.put("world", worldName);
+        }
+        Map<String, Object> offset = new LinkedHashMap<>();
+        offset.put("dx", dx);
+        offset.put("dy", dy);
+        offset.put("dz", dz);
+        spec.put("offset", offset);
+        return spec;
+    }
+
+    private void handleBlocks(Player player, Object spec, Location anchor) {
+        List<Map<String, Object>> entries = asOperationEntryList(spec);
+        for (Map<String, Object> entry : entries) {
+            handleSingleBlock(player, entry, anchor);
+        }
+    }
+
+    private void handleSingleBlock(Player player, Map<String, Object> blockMap, Location anchor) {
+        if (blockMap == null || blockMap.isEmpty()) {
+            return;
+        }
+
+        String token = string(blockMap.get("type"), "");
+        if (token.isBlank()) {
+            token = string(blockMap.get("block"), string(blockMap.get("material"), ""));
+        }
+        Material material = resolveMaterial(token, Material.OAK_PLANKS);
+
+        Location loc = anchor != null ? anchor.clone() : player.getLocation().clone();
+
+        String worldName = string(blockMap.get("world"), "");
+        if (!worldName.isBlank()) {
+            World world = Bukkit.getWorld(worldName);
+            if (world != null) {
+                loc.setWorld(world);
+            }
+        }
+
+        if (blockMap.get("location") instanceof Map<?, ?> locationRaw) {
+            Map<String, Object> locationMap = asStringObjectMap(locationRaw);
+            applyAbsoluteCoordinates(loc, locationMap);
+            applyWorldName(loc, string(locationMap.get("world"), ""));
+        }
+
+        applyAbsoluteCoordinates(loc, blockMap);
+        applyOffsetCoordinates(loc, blockMap);
+
+        World targetWorld = loc.getWorld() == null ? player.getWorld() : loc.getWorld();
+        targetWorld.getBlockAt(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()).setType(material);
+    }
+
+    private void handleSpawnMultiEntries(Player player, Object spec, Location anchor) {
+        List<Map<String, Object>> entries = asOperationEntryList(spec);
+        if (entries.isEmpty()) {
+            return;
+        }
+
+        List<Map<String, Object>> advancedEntries = new ArrayList<>();
+        for (Map<String, Object> entry : entries) {
+            if (isAdvancedSpawnEntry(entry)) {
+                advancedEntries.add(entry);
+                continue;
+            }
+            handleSpawn(player, entry, anchor);
+        }
+
+        if (!advancedEntries.isEmpty()) {
+            advancedBuilder.handleSpawnMulti(player, advancedEntries, anchor);
+        }
+    }
+
+    private boolean isAdvancedSpawnEntry(Map<String, Object> spawnMap) {
+        if (spawnMap == null || spawnMap.isEmpty()) {
+            return false;
+        }
+        boolean hasPosition = spawnMap.get("position") instanceof Map<?, ?>;
+        boolean hasDirectCoordinates = spawnMap.get("x") != null
+                || spawnMap.get("y") != null
+                || spawnMap.get("z") != null
+                || spawnMap.get("offset") instanceof Map<?, ?>
+                || spawnMap.get("dx") != null
+                || spawnMap.get("dy") != null
+                || spawnMap.get("dz") != null;
+        return hasPosition && !hasDirectCoordinates;
+    }
+
+    private List<Map<String, Object>> asOperationEntryList(Object spec) {
+        List<Map<String, Object>> entries = new ArrayList<>();
+        if (spec instanceof Map<?, ?> map) {
+            Map<String, Object> converted = asStringObjectMap(map);
+            if (!converted.isEmpty()) {
+                entries.add(converted);
+            }
+            return entries;
+        }
+
+        if (spec instanceof List<?> list) {
+            for (Object entry : list) {
+                if (entry instanceof Map<?, ?> entryMap) {
+                    Map<String, Object> converted = asStringObjectMap(entryMap);
+                    if (!converted.isEmpty()) {
+                        entries.add(converted);
+                    }
+                }
+            }
+        }
+        return entries;
+    }
+
+    private double[] resolveOffset(Map<String, Object> payload) {
+        double dx = 0.0D;
+        double dy = 0.0D;
+        double dz = 0.0D;
+
+        if (payload.get("offset") instanceof Map<?, ?> offsetRaw) {
+            Map<String, Object> offsetMap = asStringObjectMap(offsetRaw);
+            dx += number(offsetMap.get("dx"), 0.0D).doubleValue();
+            dy += number(offsetMap.get("dy"), 0.0D).doubleValue();
+            dz += number(offsetMap.get("dz"), 0.0D).doubleValue();
+        }
+
+        if (payload.get("dx") != null) {
+            dx += number(payload.get("dx"), 0.0D).doubleValue();
+        }
+        if (payload.get("dy") != null) {
+            dy += number(payload.get("dy"), 0.0D).doubleValue();
+        }
+        if (payload.get("dz") != null) {
+            dz += number(payload.get("dz"), 0.0D).doubleValue();
+        }
+
+        return new double[] { dx, dy, dz };
+    }
+
+    private void applyAbsoluteCoordinates(Location loc, Map<String, Object> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return;
+        }
+        if (payload.get("x") != null) {
+            loc.setX(number(payload.get("x"), loc.getX()).doubleValue());
+        }
+        if (payload.get("y") != null) {
+            loc.setY(number(payload.get("y"), loc.getY()).doubleValue());
+        }
+        if (payload.get("z") != null) {
+            loc.setZ(number(payload.get("z"), loc.getZ()).doubleValue());
+        }
+    }
+
+    private void applyOffsetCoordinates(Location loc, Map<String, Object> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return;
+        }
+
+        double[] offset = resolveOffset(payload);
+        loc.add(offset[0], offset[1], offset[2]);
+    }
+
+    private void applyWorldName(Location loc, String worldName) {
+        if (worldName == null || worldName.isBlank()) {
+            return;
+        }
+        World targetWorld = Bukkit.getWorld(worldName);
+        if (targetWorld != null) {
+            loc.setWorld(targetWorld);
+        }
+    }
+
+    private Material resolveMaterial(String token, Material fallback) {
+        String normalized = string(token, "").trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return fallback;
+        }
+
+        if (normalized.startsWith("minecraft:")) {
+            normalized = normalized.substring("minecraft:".length());
+        }
+
+        switch (normalized) {
+            case "fire", "bonfire" -> normalized = "campfire";
+            case "plank", "planks", "wood" -> normalized = "oak_planks";
+            case "log" -> normalized = "oak_log";
+            default -> {
+            }
+        }
+
+        String materialName = normalized.replace('-', '_').toUpperCase(Locale.ROOT);
+        Material material = Material.matchMaterial(materialName);
+        return material == null ? fallback : material;
     }
 
     // =============================== tell ===============================
@@ -504,6 +1024,15 @@ public class WorldPatchExecutor {
         World world = player.getWorld();
         Location base = anchor != null ? anchor.clone() : player.getLocation().clone();
 
+        String worldName = string(buildMap.get("world"), "");
+        if (!worldName.isBlank()) {
+            World targetWorld = Bukkit.getWorld(worldName);
+            if (targetWorld != null) {
+                world = targetWorld;
+                base.setWorld(targetWorld);
+            }
+        }
+
         String shape = string(buildMap.get("shape"), "platform");
         String materialName = string(buildMap.get("material"), "OAK_PLANKS");
         Material material = Material.matchMaterial(materialName.toUpperCase());
@@ -686,6 +1215,11 @@ public class WorldPatchExecutor {
             offsetMap = (Map<String, Object>) off;
         }
 
+        Map<String, Object> positionMap = null;
+        if (spawnMap.get("position") instanceof Map<?, ?> positionRaw) {
+            positionMap = asStringObjectMap(positionRaw);
+        }
+
         Location loc = base.clone();
 
         String worldName = string(spawnMap.get("world"), "");
@@ -704,6 +1238,28 @@ public class WorldPatchExecutor {
         }
         if (spawnMap.get("z") != null) {
             loc.setZ(number(spawnMap.get("z"), loc.getZ()).doubleValue());
+        }
+
+        if (positionMap != null && !positionMap.isEmpty()) {
+            if (spawnMap.get("x") == null && positionMap.get("x") != null) {
+                loc.setX(number(positionMap.get("x"), loc.getX()).doubleValue());
+            }
+            if (spawnMap.get("y") == null && positionMap.get("y") != null) {
+                loc.setY(number(positionMap.get("y"), loc.getY()).doubleValue());
+            }
+            if (spawnMap.get("z") == null && positionMap.get("z") != null) {
+                loc.setZ(number(positionMap.get("z"), loc.getZ()).doubleValue());
+            }
+
+            if (worldName.isBlank()) {
+                String positionWorld = string(positionMap.get("world"), "");
+                if (!positionWorld.isBlank()) {
+                    World targetWorld = Bukkit.getWorld(positionWorld);
+                    if (targetWorld != null) {
+                        loc.setWorld(targetWorld);
+                    }
+                }
+            }
         }
 
         if (offsetMap != null) {

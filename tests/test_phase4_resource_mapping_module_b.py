@@ -121,6 +121,28 @@ class Phase4ResourceMappingModuleBTest(unittest.TestCase):
         inventory_resources = replay["world_patch"]["payload"]["inventory_resources"]
         self.assertEqual(inventory_resources, ["lantern", "paper", "paper"])
 
+    def test_reducer_canonicalizes_collect_alias_resources(self):
+        events = [
+            create_interaction_event(
+                event_type="collect",
+                event_id="evt_collect_alias_1",
+                player_id="player_b",
+                timestamp_ms=100,
+                data={"resource": "oak_log", "amount": 2},
+            ),
+            create_interaction_event(
+                event_type="collect",
+                event_id="evt_collect_alias_2",
+                player_id="player_b",
+                timestamp_ms=101,
+                data={"resource": "cooked_porkchop", "amount": 1},
+            ),
+        ]
+
+        state = reduce_event_log(events)
+        self.assertEqual(state["collected_resources"], {"wood": 2, "pork": 1})
+        self.assertEqual(state["inventory"]["resources"], ["pork", "wood", "wood"])
+
 
 if __name__ == "__main__":
     unittest.main()

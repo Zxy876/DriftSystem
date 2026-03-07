@@ -20,6 +20,20 @@ public class BackendClient {
     private final OkHttpClient client;
 
     public BackendClient(String baseUrl) {
+        this(
+            baseUrl,
+            Duration.ofSeconds(150),
+            Duration.ofSeconds(10),
+            Duration.ofSeconds(120),
+            Duration.ofSeconds(120));
+        }
+
+        public BackendClient(
+            String baseUrl,
+            Duration callTimeout,
+            Duration connectTimeout,
+            Duration readTimeout,
+            Duration writeTimeout) {
 
         // ---- Base URL 修正 ----
         if (baseUrl.endsWith("/")) {
@@ -29,10 +43,10 @@ public class BackendClient {
 
         // ---- 最终稳定配置（适配 DriftSystem） ----
         this.client = new OkHttpClient.Builder()
-                .callTimeout(Duration.ofSeconds(40)) // 整体最大时间
-                .connectTimeout(Duration.ofSeconds(10)) // 连接服务器超时
-                .readTimeout(Duration.ofSeconds(40)) // 读取 JSON 超时
-                .writeTimeout(Duration.ofSeconds(40)) // 发送 JSON 超时
+            .callTimeout(callTimeout) // 整体最大时间
+            .connectTimeout(connectTimeout) // 连接服务器超时
+            .readTimeout(readTimeout) // 读取 JSON 超时
+            .writeTimeout(writeTimeout) // 发送 JSON 超时
                 .retryOnConnectionFailure(true) // 避免偶发超时
                 .followRedirects(true)
                 .build();
