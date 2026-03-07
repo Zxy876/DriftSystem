@@ -411,6 +411,33 @@ def _asset_registry_observability_payload(scene_generation: Optional[Dict[str, A
     }
 
 
+def _enabled_packs_payload() -> Dict[str, Any]:
+    try:
+        from app.core.packs.pack_registry import get_pack_registry
+
+        registry = get_pack_registry()
+        enabled_ids = registry.enabled_ids() if hasattr(registry, "enabled_ids") else []
+        if not isinstance(enabled_ids, list):
+            enabled_ids = []
+
+        normalized: List[str] = []
+        seen = set()
+        for row in enabled_ids:
+            token = _normalize_token(row)
+            if not token or token in seen:
+                continue
+            seen.add(token)
+            normalized.append(token)
+
+        return {
+            "enabled_packs": normalized,
+        }
+    except Exception:
+        return {
+            "enabled_packs": [],
+        }
+
+
 def _record_fallback_state(
     *,
     player_id: str,
@@ -770,6 +797,7 @@ def world_state(player_id: str):
     }
     response.update(_narrative_fields_payload(narrative_state))
     response.update(_asset_registry_observability_payload(scene_generation))
+    response.update(_enabled_packs_payload())
     return response
 
 
@@ -973,6 +1001,7 @@ def story_debug_tasks(player_id: str, request: Request, token: Optional[str] = N
         scene_generation=scene_generation,
     )
     asset_observability = _asset_registry_observability_payload(scene_generation)
+    pack_observability = _enabled_packs_payload()
     if not snapshot:
         result = {
             "status": "error",
@@ -988,6 +1017,7 @@ def story_debug_tasks(player_id: str, request: Request, token: Optional[str] = N
         }
         result.update(_narrative_fields_payload(narrative_state))
         result.update(asset_observability)
+        result.update(pack_observability)
         return result
 
     payload: Dict[str, Any] = {"status": "ok"}
@@ -1002,6 +1032,7 @@ def story_debug_tasks(player_id: str, request: Request, token: Optional[str] = N
     payload["last_fallback_at"] = fallback_state.get("last_fallback_at")
     payload.update(_narrative_fields_payload(narrative_state))
     payload.update(asset_observability)
+    payload.update(pack_observability)
     return payload
 
 
