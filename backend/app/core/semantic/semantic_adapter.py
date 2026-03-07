@@ -35,6 +35,11 @@ def _cache_set(item_id: str, result: SemanticResult) -> None:
         _semantic_cache[item_id] = stored
 
 
+def reset_semantic_cache() -> None:
+    with _semantic_cache_lock:
+        _semantic_cache.clear()
+
+
 def resolve_semantics(item_id: str) -> SemanticResult:
     normalized_item = normalize_semantic_item_id(item_id)
     if not normalized_item:
@@ -50,6 +55,20 @@ def resolve_semantics(item_id: str) -> SemanticResult:
         return cached
 
     registry = get_semantic_registry()
+
+    resolved = registry.resolve(normalized_item) if hasattr(registry, "resolve") else None
+    if isinstance(resolved, dict):
+        source = str(resolved.get("source") or "fallback")
+        tags = resolved.get("semantic_tags") if isinstance(resolved.get("semantic_tags"), list) else []
+        if tags:
+            result: SemanticResult = {
+                "item_id": normalized_item,
+                "semantic_tags": list(tags),
+                "source": source,
+                "adapter_hit": source != "fallback",
+            }
+            _cache_set(normalized_item, result)
+            return _copy_result(result)
 
     vanilla_tags = registry.get_vanilla(normalized_item)
     if vanilla_tags:

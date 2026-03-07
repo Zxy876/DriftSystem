@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List
 
 from app.core.assets.asset_loader import get_asset_registry
 from app.core.semantic.semantic_adapter import resolve_semantics
+from app.core.semantic.semantic_registry import semantic_registry_info
 
 from .layout_engine import event_offset_for_fragment, layout_scene_graph
 from .scene_graph import SceneGraph
@@ -364,6 +365,25 @@ def _semantic_resolution_from_resources(resources: Dict[str, int]) -> Dict[str, 
         "mod_map": 0,
         "fallback": 0,
     }
+    semantic_registry_version = None
+    semantic_registry_item_count = 0
+    semantic_registry_enabled_packs: List[str] = []
+
+    try:
+        registry_info = semantic_registry_info()
+        if isinstance(registry_info, dict):
+            semantic_registry_version = registry_info.get("version")
+            semantic_registry_item_count = _safe_int(registry_info.get("semantic_item_count"), 0)
+            raw_enabled = registry_info.get("enabled_packs") if isinstance(registry_info.get("enabled_packs"), list) else []
+            semantic_registry_enabled_packs = [
+                _normalize_token(row)
+                for row in raw_enabled
+                if _normalize_token(row)
+            ]
+    except Exception:
+        semantic_registry_version = None
+        semantic_registry_item_count = 0
+        semantic_registry_enabled_packs = []
 
     for raw_key, raw_value in resources.items():
         token = _normalize_token(raw_key)
@@ -415,6 +435,9 @@ def _semantic_resolution_from_resources(resources: Dict[str, int]) -> Dict[str, 
         "semantic_resolution": resolution,
         "semantic_source": source_hits,
         "semantic_adapter_hits": adapter_hit_count,
+        "semantic_registry_version": semantic_registry_version,
+        "semantic_registry_item_count": semantic_registry_item_count,
+        "semantic_registry_enabled_packs": semantic_registry_enabled_packs,
     }
 
 
@@ -950,6 +973,9 @@ def select_fragments_with_debug(
     semantic_resolution = list(semantic_payload.get("semantic_resolution") or [])
     semantic_source = dict(semantic_payload.get("semantic_source") or {})
     semantic_adapter_hits = _safe_int(semantic_payload.get("semantic_adapter_hits"), 0)
+    semantic_registry_version = semantic_payload.get("semantic_registry_version")
+    semantic_registry_item_count = _safe_int(semantic_payload.get("semantic_registry_item_count"), 0)
+    semantic_registry_enabled_packs = list(semantic_payload.get("semantic_registry_enabled_packs") or [])
 
     fragments = _load_fragments()
     if not fragments:
@@ -963,6 +989,9 @@ def select_fragments_with_debug(
             "semantic_resolution": list(semantic_resolution),
             "semantic_source": dict(semantic_source),
             "semantic_adapter_hits": semantic_adapter_hits,
+            "semantic_registry_version": semantic_registry_version,
+            "semantic_registry_item_count": semantic_registry_item_count,
+            "semantic_registry_enabled_packs": list(semantic_registry_enabled_packs),
         }
         debug_payload.update(
             _asset_registry_observability_payload(
@@ -1003,6 +1032,9 @@ def select_fragments_with_debug(
             "semantic_resolution": list(semantic_resolution),
             "semantic_source": dict(semantic_source),
             "semantic_adapter_hits": semantic_adapter_hits,
+            "semantic_registry_version": semantic_registry_version,
+            "semantic_registry_item_count": semantic_registry_item_count,
+            "semantic_registry_enabled_packs": list(semantic_registry_enabled_packs),
         }
         debug_payload.update(
             _asset_registry_observability_payload(
@@ -1057,6 +1089,9 @@ def select_fragments_with_debug(
         "semantic_resolution": list(semantic_resolution),
         "semantic_source": dict(semantic_source),
         "semantic_adapter_hits": semantic_adapter_hits,
+        "semantic_registry_version": semantic_registry_version,
+        "semantic_registry_item_count": semantic_registry_item_count,
+        "semantic_registry_enabled_packs": list(semantic_registry_enabled_packs),
     }
     debug_payload.update(
         _asset_registry_observability_payload(

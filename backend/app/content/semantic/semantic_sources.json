@@ -11,6 +11,11 @@
       "priority": 2,
       "description": "Deterministic semantic mapping for mod/custom resources"
     },
+    "pack_map": {
+      "path": "content/packs/*/semantic_map.json",
+      "priority": 0,
+      "description": "Pack-level semantic mappings merged by pack priority"
+    },
     "fallback": {
       "path": null,
       "priority": 3,

@@ -281,6 +281,14 @@ P8-A Narrative Graph Skeleton（2026-03-07）：
 
 将 P6-A Scene Library 与 P9-C 外部 pack 统一为单一 fragment registry。
 
+P9-C 实施进度（2026-03-07）：
+
+- P9-C.1 `pack_loader + pack_registry`（metadata scan）✅
+- P9-C.2 `asset_registry` 合并 `pack assets`（namespace/priority/conflict）✅
+- P9-C.3 `fragment_registry` 合并 `pack fragments` 并接入 `scene_library` ✅
+- P9-C.4 `semantic_registry` 合并 `pack semantic_map` 并接入 `semantic_adapter` ✅
+- P9-C.5 `theme merge`（待实施）⏳
+
 统一目录：
 
 - `content/fragments/`
