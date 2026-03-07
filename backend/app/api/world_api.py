@@ -47,6 +47,13 @@ def _safe_int(value: Any, default: int) -> int:
         return int(default)
 
 
+def _normalize_token(value: Any) -> str:
+    token = str(value or "").strip().lower()
+    if not token:
+        return ""
+    return token.replace("-", "_").replace(" ", "_").strip("_")
+
+
 def _interaction_type_from_rule_event(event_type: str) -> str:
     normalized = str(event_type or "").strip().lower()
     if normalized in {"chat", "talk", "npc_talk"}:
@@ -225,7 +232,7 @@ def _recent_reports_for_player(player_id: str) -> list[Dict[str, Any]]:
     return reports[:APPLY_REPORTS_LIMIT]
 
 
-def _scene_generation_for_player(player_id: str) -> Optional[Dict[str, Any]]:
+def _scene_level_for_player(player_id: str):
     players_state = getattr(quest_runtime, "_players", None)
     if not isinstance(players_state, dict):
         return None
@@ -234,7 +241,11 @@ def _scene_generation_for_player(player_id: str) -> Optional[Dict[str, Any]]:
     if not isinstance(state, dict):
         return None
 
-    level = state.get("level")
+    return state.get("level")
+
+
+def _scene_generation_for_player(player_id: str) -> Optional[Dict[str, Any]]:
+    level = _scene_level_for_player(player_id)
     if level is None:
         return None
 
@@ -255,6 +266,31 @@ def _scene_generation_for_player(player_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _update_scene_generation_for_player(player_id: str, scene_generation: Dict[str, Any]) -> bool:
+    if not isinstance(scene_generation, dict):
+        return False
+
+    level = _scene_level_for_player(player_id)
+    if level is None:
+        return False
+
+    level_meta = getattr(level, "meta", None)
+    if not isinstance(level_meta, dict):
+        level_meta = {}
+        setattr(level, "meta", level_meta)
+    level_meta["scene_generation"] = dict(scene_generation)
+
+    raw_payload = getattr(level, "_raw_payload", None)
+    if isinstance(raw_payload, dict):
+        raw_meta = raw_payload.get("meta")
+        if not isinstance(raw_meta, dict):
+            raw_meta = {}
+            raw_payload["meta"] = raw_meta
+        raw_meta["scene_generation"] = dict(scene_generation)
+
+    return True
+
+
 def _narrative_state_for_player(
     player_id: str,
     *,
@@ -262,6 +298,14 @@ def _narrative_state_for_player(
     scene_generation: Optional[Dict[str, Any]] = None,
     story_snapshot: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    scene_payload = scene_generation if isinstance(scene_generation, dict) else {}
+    stored_narrative_state = scene_payload.get("narrative_state") if isinstance(scene_payload.get("narrative_state"), dict) else {}
+    stored_last_decision = None
+    if isinstance(stored_narrative_state.get("last_decision"), dict):
+        stored_last_decision = dict(stored_narrative_state.get("last_decision") or {})
+    elif isinstance(scene_payload.get("last_decision"), dict):
+        stored_last_decision = dict(scene_payload.get("last_decision") or {})
+
     try:
         from app.core.story.narrative_graph_evaluator import evaluate_narrative_state
 
@@ -275,18 +319,21 @@ def _narrative_state_for_player(
                 else None
             )
 
-        return evaluate_narrative_state(
+        evaluated_state = evaluate_narrative_state(
             level_state=level_state if isinstance(level_state, dict) else None,
             scene_generation=scene_generation if isinstance(scene_generation, dict) else None,
             recent_rule_events=recent_rule_events if isinstance(recent_rule_events, list) else None,
             current_node_hint=current_node_hint,
         )
+        if isinstance(stored_last_decision, dict):
+            evaluated_state["last_decision"] = dict(stored_last_decision)
+        return evaluated_state
     except Exception:
         fallback_current_level = None
         if isinstance(story_snapshot, dict):
             fallback_current_level = story_snapshot.get("player_current_level")
 
-        return {
+        fallback_state = {
             "version": "narrative_state_v1",
             "graph_version": "p8a_v1",
             "current_arc": "main",
@@ -299,17 +346,23 @@ def _narrative_state_for_player(
             "level_id": fallback_current_level,
             "player_id": player_id,
         }
+        if isinstance(stored_last_decision, dict):
+            fallback_state["last_decision"] = dict(stored_last_decision)
+        return fallback_state
 
 
 def _narrative_fields_payload(narrative_state: Dict[str, Any]) -> Dict[str, Any]:
     state = dict(narrative_state) if isinstance(narrative_state, dict) else {}
     candidates = state.get("transition_candidates") if isinstance(state.get("transition_candidates"), list) else []
     blocked_by = state.get("blocked_by") if isinstance(state.get("blocked_by"), list) else []
+    last_decision = state.get("last_decision") if isinstance(state.get("last_decision"), dict) else {}
     return {
         "narrative_state": state,
         "current_node": state.get("current_node"),
         "transition_candidates": list(candidates),
         "blocked_by": list(blocked_by),
+        "last_decision": dict(last_decision),
+        "narrative_decision": dict(last_decision),
     }
 
 
@@ -434,6 +487,11 @@ class StoryResetRequest(BaseModel):
     clear_history: bool = True
     clear_inventory: bool = True
     clear_persisted_state: bool = True
+
+
+class NarrativeChooseRequest(BaseModel):
+    mode: Optional[str] = "auto_best"
+    transition_id: Optional[str] = None
 
 
 class ApplyReportInput(BaseModel):
@@ -945,6 +1003,82 @@ def story_debug_tasks(player_id: str, request: Request, token: Optional[str] = N
     payload.update(_narrative_fields_payload(narrative_state))
     payload.update(asset_observability)
     return payload
+
+
+@router.post("/story/{player_id}/narrative/choose")
+def story_narrative_choose(player_id: str, payload: Optional[NarrativeChooseRequest] = None):
+    normalized_player = str(player_id or "").strip()
+    if not normalized_player:
+        raise HTTPException(status_code=400, detail="player_id is required")
+
+    level = _scene_level_for_player(normalized_player)
+    if level is None:
+        raise HTTPException(status_code=404, detail="No active story level for player.")
+
+    request_payload = payload or NarrativeChooseRequest()
+    mode = str(request_payload.mode or "auto_best").strip().lower() or "auto_best"
+    transition_id = _normalize_token(request_payload.transition_id)
+
+    snapshot = quest_runtime.get_debug_snapshot(normalized_player)
+    scene_generation = _scene_generation_for_player(normalized_player) or {}
+    story_snapshot = story_engine.get_public_state(normalized_player)
+    narrative_state = _narrative_state_for_player(
+        normalized_player,
+        snapshot=snapshot,
+        scene_generation=scene_generation,
+        story_snapshot=story_snapshot if isinstance(story_snapshot, dict) else None,
+    )
+
+    level_state = snapshot.get("level_state") if isinstance(snapshot, dict) and isinstance(snapshot.get("level_state"), dict) else None
+    recent_rule_events = snapshot.get("recent_rule_events") if isinstance(snapshot, dict) and isinstance(snapshot.get("recent_rule_events"), list) else None
+
+    from app.core.story.narrative_decision import choose_transition
+
+    decision_result = choose_transition(
+        normalized_player,
+        mode=mode,
+        transition_id=transition_id or None,
+        narrative_state=narrative_state,
+        scene_generation=scene_generation,
+        level_state=level_state,
+        recent_rule_events=recent_rule_events,
+    )
+
+    decision_payload = decision_result.get("decision") if isinstance(decision_result.get("decision"), dict) else {}
+    updated_narrative_state = decision_result.get("narrative_state") if isinstance(decision_result.get("narrative_state"), dict) else dict(narrative_state)
+    transition_log_entry = decision_result.get("transition_log_entry") if isinstance(decision_result.get("transition_log_entry"), dict) else None
+    candidate_scores = decision_result.get("candidate_scores") if isinstance(decision_result.get("candidate_scores"), list) else []
+
+    updated_scene_generation = dict(scene_generation)
+    updated_scene_generation["narrative_state"] = dict(updated_narrative_state)
+    updated_scene_generation["last_decision"] = dict(decision_payload)
+    _update_scene_generation_for_player(normalized_player, updated_scene_generation)
+
+    logger.info(
+        "story_narrative_choose",
+        extra={
+            "player_id": normalized_player,
+            "mode": mode,
+            "transition_id": transition_id or None,
+            "chosen_transition": decision_payload.get("chosen_transition") if isinstance(decision_payload, dict) else None,
+            "target_node": decision_payload.get("target_node") if isinstance(decision_payload, dict) else None,
+        },
+    )
+
+    return {
+        "status": "ok",
+        "player_id": normalized_player,
+        "mode": mode,
+        "narrative_state": dict(updated_narrative_state),
+        "current_node": updated_narrative_state.get("current_node"),
+        "transition_candidates": list(updated_narrative_state.get("transition_candidates") or []),
+        "blocked_by": list(updated_narrative_state.get("blocked_by") or []),
+        "narrative_decision": dict(decision_payload),
+        "last_decision": dict(decision_payload),
+        "transition_log_entry": transition_log_entry,
+        "candidate_scores": list(candidate_scores),
+        "world_patch": None,
+    }
 
 
 @router.post("/story/{player_id}/spawnfragment")
