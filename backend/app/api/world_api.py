@@ -6,7 +6,7 @@ import json
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, Literal
+from typing import Optional, Dict, Any, Literal, List
 import logging
 
 from app.core.world.engine import WorldEngine
@@ -369,6 +369,9 @@ def _narrative_fields_payload(narrative_state: Dict[str, Any]) -> Dict[str, Any]
 def _asset_registry_observability_payload(scene_generation: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     registry_version = None
     asset_count = 0
+    builtin_asset_count = 0
+    pack_asset_count = 0
+    registry_enabled_packs: List[str] = []
     try:
         from app.core.assets.asset_loader import asset_registry_info
 
@@ -376,9 +379,16 @@ def _asset_registry_observability_payload(scene_generation: Optional[Dict[str, A
         if isinstance(info, dict):
             registry_version = info.get("version")
             asset_count = _safe_int(info.get("asset_count"), 0)
+            builtin_asset_count = _safe_int(info.get("builtin_asset_count"), 0)
+            pack_asset_count = _safe_int(info.get("pack_asset_count"), 0)
+            raw_registry_packs = info.get("enabled_packs") if isinstance(info.get("enabled_packs"), list) else []
+            registry_enabled_packs = [_normalize_token(row) for row in raw_registry_packs if _normalize_token(row)]
     except Exception:
         registry_version = None
         asset_count = 0
+        builtin_asset_count = 0
+        pack_asset_count = 0
+        registry_enabled_packs = []
 
     scene_payload = scene_generation if isinstance(scene_generation, dict) else {}
     selected_assets = scene_payload.get("selected_assets") if isinstance(scene_payload.get("selected_assets"), list) else []
@@ -403,6 +413,9 @@ def _asset_registry_observability_payload(scene_generation: Optional[Dict[str, A
     return {
         "asset_registry_version": registry_version,
         "asset_count": int(asset_count),
+        "builtin_asset_count": int(builtin_asset_count),
+        "pack_asset_count": int(pack_asset_count),
+        "asset_registry_enabled_packs": list(registry_enabled_packs),
         "selected_assets": list(selected_assets),
         "asset_sources": list(asset_sources),
         "asset_selection": dict(asset_selection),

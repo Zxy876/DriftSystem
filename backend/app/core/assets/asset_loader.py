@@ -27,9 +27,15 @@ def asset_registry_info() -> Dict[str, Any]:
         return {
             "version": registry.version,
             "asset_count": len(registry.list_assets()),
+            "builtin_asset_count": int(getattr(registry, "builtin_asset_count", 0)),
+            "pack_asset_count": int(getattr(registry, "pack_asset_count", 0)),
+            "enabled_packs": list(getattr(registry, "enabled_packs", [])),
         }
     except Exception:
         return {
             "version": None,
             "asset_count": 0,
+            "builtin_asset_count": 0,
+            "pack_asset_count": 0,
+            "enabled_packs": [],
         }
