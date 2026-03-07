@@ -33,6 +33,19 @@ flowchart TD
     O2 -.observe.-> F
 ```
 
+  ## 1.1 Data Flow Diagram
+
+  ```mermaid
+  flowchart TD
+    A[player action] --> B[rule_event]
+    B --> C[semantic engine]
+    C --> D[asset registry]
+    D --> E[scene assembler]
+    E --> F[narrative decision]
+    F --> G[world_patch]
+    G --> H[minecraft]
+  ```
+
 ## 2. 分层职责
 
 ### Semantic Layer（语义层）

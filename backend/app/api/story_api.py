@@ -894,6 +894,9 @@ def _scene_meta_payload(scene_output: dict) -> dict:
     blocked = scoring_debug.get("blocked") if isinstance(scoring_debug.get("blocked"), list) else []
     reasons = scoring_debug.get("reasons") if isinstance(scoring_debug.get("reasons"), dict) else {}
     semantic_scores = scoring_debug.get("semantic_scores") if isinstance(scoring_debug.get("semantic_scores"), dict) else {}
+    semantic_resolution = scoring_debug.get("semantic_resolution") if isinstance(scoring_debug.get("semantic_resolution"), list) else []
+    semantic_source = scoring_debug.get("semantic_source") if isinstance(scoring_debug.get("semantic_source"), dict) else {}
+    semantic_adapter_hits = _safe_int(scoring_debug.get("semantic_adapter_hits"), 0)
     asset_registry_version = scene_output.get("asset_registry_version")
     if asset_registry_version is None:
         asset_registry_version = scoring_debug.get("asset_registry_version")
@@ -951,6 +954,9 @@ def _scene_meta_payload(scene_output: dict) -> dict:
         "blocked": list(blocked),
         "reasons": dict(reasons),
         "semantic_scores": dict(semantic_scores),
+        "semantic_resolution": list(semantic_resolution),
+        "semantic_source": dict(semantic_source),
+        "semantic_adapter_hits": semantic_adapter_hits,
         "asset_registry_version": asset_registry_version,
         "selected_assets": list(selected_assets),
         "asset_sources": list(asset_sources),

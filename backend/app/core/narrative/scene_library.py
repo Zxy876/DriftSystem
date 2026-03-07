@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 from app.core.assets.asset_loader import get_asset_registry
+from app.core.semantic.semantic_adapter import resolve_semantics
 
 from .layout_engine import event_offset_for_fragment, layout_scene_graph
 from .scene_graph import SceneGraph
@@ -371,9 +372,14 @@ def _load_fragments() -> Dict[str, Dict[str, Any]]:
     return fragments
 
 
-def _semantic_scores_from_resources(resources: Dict[str, int]) -> Dict[str, int]:
-    semantic_map = _load_semantic_tags()
+def _semantic_resolution_from_resources(resources: Dict[str, int]) -> Dict[str, Any]:
     scores: Dict[str, int] = {}
+    resolution: List[Dict[str, Any]] = []
+    source_hits: Dict[str, int] = {
+        "vanilla_registry": 0,
+        "mod_map": 0,
+        "fallback": 0,
+    }
 
     for raw_key, raw_value in resources.items():
         token = _normalize_token(raw_key)
@@ -381,16 +387,56 @@ def _semantic_scores_from_resources(resources: Dict[str, int]) -> Dict[str, int]
         if not token or amount <= 0:
             continue
 
-        tags = semantic_map.get(token)
+        try:
+            resolved = resolve_semantics(token)
+        except Exception:
+            resolved = {
+                "item_id": token,
+                "semantic_tags": [token],
+                "source": "fallback",
+                "adapter_hit": False,
+            }
+
+        tags = _normalize_token_list(resolved.get("semantic_tags"))
         if not tags:
-            tags = (token,)
+            tags = [token]
+
+        source = str(resolved.get("source") or "fallback").strip().lower() or "fallback"
+        if source not in source_hits:
+            source_hits[source] = 0
+        source_hits[source] = int(source_hits.get(source, 0)) + 1
+
+        adapter_hit = bool(resolved.get("adapter_hit")) and source != "fallback"
+        resolution.append(
+            {
+                "item": token,
+                "semantic_tags": list(tags),
+                "source": source,
+                "adapter_hit": adapter_hit,
+            }
+        )
 
         for tag in tags:
             if not tag:
                 continue
             scores[tag] = int(scores.get(tag, 0)) + amount
 
-    return scores
+    adapter_hit_count = 0
+    for row in resolution:
+        if bool(row.get("adapter_hit")):
+            adapter_hit_count += 1
+
+    return {
+        "semantic_scores": scores,
+        "semantic_resolution": resolution,
+        "semantic_source": source_hits,
+        "semantic_adapter_hits": adapter_hit_count,
+    }
+
+
+def _semantic_scores_from_resources(resources: Dict[str, int]) -> Dict[str, int]:
+    payload = _semantic_resolution_from_resources(resources)
+    return dict(payload.get("semantic_scores") or {})
 
 
 def _fragment_theme_allowed(fragment: Dict[str, Any], combined_theme: str) -> bool:
@@ -907,6 +953,20 @@ def select_fragments_with_debug(
     scene_hint: str | None = None,
 ) -> Dict[str, Any]:
     combined_theme = _compose_theme_with_hint(str(story_theme or ""), scene_hint)
+
+    normalized_resources: Dict[str, int] = {}
+    for key, value in (resources or {}).items():
+        token = _normalize_token(key)
+        amount = _safe_int(value, 0)
+        if token and amount > 0:
+            normalized_resources[token] = amount
+
+    semantic_payload = _semantic_resolution_from_resources(normalized_resources)
+    semantic_scores = dict(semantic_payload.get("semantic_scores") or {})
+    semantic_resolution = list(semantic_payload.get("semantic_resolution") or [])
+    semantic_source = dict(semantic_payload.get("semantic_source") or {})
+    semantic_adapter_hits = _safe_int(semantic_payload.get("semantic_adapter_hits"), 0)
+
     fragments = _load_fragments()
     if not fragments:
         debug_payload = {
@@ -915,12 +975,15 @@ def select_fragments_with_debug(
             "selected_children": [],
             "blocked": [],
             "reasons": {"selected_root": "no_fragments"},
-            "semantic_scores": {},
+            "semantic_scores": dict(semantic_scores),
+            "semantic_resolution": list(semantic_resolution),
+            "semantic_source": dict(semantic_source),
+            "semantic_adapter_hits": semantic_adapter_hits,
         }
         debug_payload.update(
             _asset_registry_observability_payload(
                 selected_fragments=[],
-                semantic_scores={},
+                semantic_scores=semantic_scores,
                 combined_theme=combined_theme,
             )
         )
@@ -939,15 +1002,6 @@ def select_fragments_with_debug(
             "debug": debug_payload,
         }
 
-    normalized_resources: Dict[str, int] = {}
-    for key, value in (resources or {}).items():
-        token = _normalize_token(key)
-        amount = _safe_int(value, 0)
-        if token and amount > 0:
-            normalized_resources[token] = amount
-
-    semantic_scores = _semantic_scores_from_resources(normalized_resources)
-
     root_debug = _choose_root_fragment_with_debug(
         fragments,
         semantic_scores=semantic_scores,
@@ -962,6 +1016,9 @@ def select_fragments_with_debug(
             "blocked": list(root_debug.get("blocked") or []),
             "reasons": dict(root_debug.get("reasons") or {}),
             "semantic_scores": dict(semantic_scores),
+            "semantic_resolution": list(semantic_resolution),
+            "semantic_source": dict(semantic_source),
+            "semantic_adapter_hits": semantic_adapter_hits,
         }
         debug_payload.update(
             _asset_registry_observability_payload(
@@ -1013,6 +1070,9 @@ def select_fragments_with_debug(
         "blocked": deduped_blocked,
         "reasons": dict(root_debug.get("reasons") or {}),
         "semantic_scores": dict(semantic_scores),
+        "semantic_resolution": list(semantic_resolution),
+        "semantic_source": dict(semantic_source),
+        "semantic_adapter_hits": semantic_adapter_hits,
     }
     debug_payload.update(
         _asset_registry_observability_payload(
