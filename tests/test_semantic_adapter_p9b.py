@@ -37,6 +37,15 @@ class SemanticAdapterP9BTest(unittest.TestCase):
         self.assertEqual(result.get("semantic_tags"), ["unknown:item"])
         self.assertFalse(bool(result.get("adapter_hit")))
 
+    def test_cache_result_is_defensive_copy(self):
+        first = resolve_semantics("mod:rusted_gear")
+        tags = first.get("semantic_tags") if isinstance(first.get("semantic_tags"), list) else []
+        tags.append("mutated")
+
+        second = resolve_semantics("mod:rusted_gear")
+        second_tags = second.get("semantic_tags") if isinstance(second.get("semantic_tags"), list) else []
+        self.assertNotIn("mutated", second_tags)
+
     def test_scene_debug_exposes_semantic_resolution(self):
         selection = select_fragments_with_debug(
             {
