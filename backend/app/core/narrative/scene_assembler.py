@@ -51,6 +51,9 @@ def _emit_scene_debug_log(
         "event_count": len(event_plan),
         "event_ids": [str(evt.get("event_id") or "") for evt in event_plan if isinstance(evt, dict)],
         "event_types": [str(evt.get("type") or "") for evt in event_plan if isinstance(evt, dict)],
+        "asset_registry_version": scoring_debug.get("asset_registry_version"),
+        "selected_assets": list(scoring_debug.get("selected_assets") or []),
+        "asset_sources": list(scoring_debug.get("asset_sources") or []),
         "scoring_debug": dict(scoring_debug or {}),
     }
 
@@ -127,6 +130,11 @@ def assemble_scene(
     scene_graph = dict(selection.get("scene_graph") or {})
     layout = dict(selection.get("layout") or {})
     scoring_debug = dict(selection.get("debug") or {})
+    selected_assets = scoring_debug.get("selected_assets") if isinstance(scoring_debug.get("selected_assets"), list) else []
+    asset_sources = scoring_debug.get("asset_sources") if isinstance(scoring_debug.get("asset_sources"), list) else []
+    asset_selection = scoring_debug.get("asset_selection") if isinstance(scoring_debug.get("asset_selection"), dict) else {}
+    fragment_source = scoring_debug.get("fragment_source") if isinstance(scoring_debug.get("fragment_source"), list) else []
+    theme_filter = scoring_debug.get("theme_filter") if isinstance(scoring_debug.get("theme_filter"), dict) else {}
     event_plan = build_event_plan(
         fragments,
         anchor_position=anchor_position,
@@ -159,5 +167,11 @@ def assemble_scene(
         "scene_graph": scene_graph,
         "layout": layout,
         "scoring_debug": scoring_debug,
+        "asset_registry_version": scoring_debug.get("asset_registry_version"),
+        "selected_assets": list(selected_assets),
+        "asset_sources": list(asset_sources),
+        "asset_selection": dict(asset_selection),
+        "fragment_source": list(fragment_source),
+        "theme_filter": dict(theme_filter),
         "event_plan": event_plan,
     }

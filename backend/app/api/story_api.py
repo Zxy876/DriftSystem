@@ -787,6 +787,11 @@ def build_scene_events(
         "added_positions": {},
         "trigger_event_keys": [],
     }
+    selected_assets = assembled_scene.get("selected_assets") if isinstance(assembled_scene.get("selected_assets"), list) else []
+    asset_sources = assembled_scene.get("asset_sources") if isinstance(assembled_scene.get("asset_sources"), list) else []
+    asset_selection = assembled_scene.get("asset_selection") if isinstance(assembled_scene.get("asset_selection"), dict) else {}
+    fragment_source = assembled_scene.get("fragment_source") if isinstance(assembled_scene.get("fragment_source"), list) else []
+    theme_filter = assembled_scene.get("theme_filter") if isinstance(assembled_scene.get("theme_filter"), dict) else {}
 
     normalized_patch_mode = str(patch_mode or "full").strip().lower()
     if normalized_patch_mode not in {"full", "incremental"}:
@@ -814,6 +819,12 @@ def build_scene_events(
         "scene_graph": dict(evolved_scene_graph),
         "layout": dict(evolved_layout),
         "scoring_debug": dict(assembled_scene.get("scoring_debug") or {}),
+        "asset_registry_version": assembled_scene.get("asset_registry_version"),
+        "selected_assets": list(selected_assets),
+        "asset_sources": list(asset_sources),
+        "asset_selection": dict(asset_selection),
+        "fragment_source": list(fragment_source),
+        "theme_filter": dict(theme_filter),
         "scene_state": scene_state_payload,
         "scene_diff": scene_diff_payload,
         "patch_mode": normalized_patch_mode,
@@ -883,6 +894,35 @@ def _scene_meta_payload(scene_output: dict) -> dict:
     blocked = scoring_debug.get("blocked") if isinstance(scoring_debug.get("blocked"), list) else []
     reasons = scoring_debug.get("reasons") if isinstance(scoring_debug.get("reasons"), dict) else {}
     semantic_scores = scoring_debug.get("semantic_scores") if isinstance(scoring_debug.get("semantic_scores"), dict) else {}
+    asset_registry_version = scene_output.get("asset_registry_version")
+    if asset_registry_version is None:
+        asset_registry_version = scoring_debug.get("asset_registry_version")
+    selected_assets = scene_output.get("selected_assets") if isinstance(scene_output.get("selected_assets"), list) else []
+    if not selected_assets and isinstance(scoring_debug.get("selected_assets"), list):
+        selected_assets = list(scoring_debug.get("selected_assets") or [])
+    asset_sources = scene_output.get("asset_sources") if isinstance(scene_output.get("asset_sources"), list) else []
+    if not asset_sources and isinstance(scoring_debug.get("asset_sources"), list):
+        asset_sources = list(scoring_debug.get("asset_sources") or [])
+    asset_selection = scene_output.get("asset_selection") if isinstance(scene_output.get("asset_selection"), dict) else {}
+    if not asset_selection and isinstance(scoring_debug.get("asset_selection"), dict):
+        asset_selection = dict(scoring_debug.get("asset_selection") or {})
+    if not asset_selection:
+        asset_selection = {
+            "selected_assets": list(selected_assets),
+            "candidate_assets": [],
+        }
+    fragment_source = scene_output.get("fragment_source") if isinstance(scene_output.get("fragment_source"), list) else []
+    if not fragment_source and isinstance(scoring_debug.get("fragment_source"), list):
+        fragment_source = list(scoring_debug.get("fragment_source") or [])
+    theme_filter = scene_output.get("theme_filter") if isinstance(scene_output.get("theme_filter"), dict) else {}
+    if not theme_filter and isinstance(scoring_debug.get("theme_filter"), dict):
+        theme_filter = dict(scoring_debug.get("theme_filter") or {})
+    if not theme_filter:
+        theme_filter = {
+            "theme": scene_output.get("scene_theme"),
+            "applied": False,
+            "allowed_fragments": [],
+        }
 
     return {
         "scene_theme": scene_output.get("scene_theme"),
@@ -911,6 +951,12 @@ def _scene_meta_payload(scene_output: dict) -> dict:
         "blocked": list(blocked),
         "reasons": dict(reasons),
         "semantic_scores": dict(semantic_scores),
+        "asset_registry_version": asset_registry_version,
+        "selected_assets": list(selected_assets),
+        "asset_sources": list(asset_sources),
+        "asset_selection": dict(asset_selection),
+        "fragment_source": list(fragment_source),
+        "theme_filter": dict(theme_filter),
     }
 
 

@@ -313,6 +313,51 @@ def _narrative_fields_payload(narrative_state: Dict[str, Any]) -> Dict[str, Any]
     }
 
 
+def _asset_registry_observability_payload(scene_generation: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    registry_version = None
+    asset_count = 0
+    try:
+        from app.core.assets.asset_loader import asset_registry_info
+
+        info = asset_registry_info()
+        if isinstance(info, dict):
+            registry_version = info.get("version")
+            asset_count = _safe_int(info.get("asset_count"), 0)
+    except Exception:
+        registry_version = None
+        asset_count = 0
+
+    scene_payload = scene_generation if isinstance(scene_generation, dict) else {}
+    selected_assets = scene_payload.get("selected_assets") if isinstance(scene_payload.get("selected_assets"), list) else []
+    asset_sources = scene_payload.get("asset_sources") if isinstance(scene_payload.get("asset_sources"), list) else []
+    asset_selection = scene_payload.get("asset_selection") if isinstance(scene_payload.get("asset_selection"), dict) else {}
+    fragment_source = scene_payload.get("fragment_source") if isinstance(scene_payload.get("fragment_source"), list) else []
+    theme_filter = scene_payload.get("theme_filter") if isinstance(scene_payload.get("theme_filter"), dict) else {}
+
+    if not asset_selection:
+        asset_selection = {
+            "selected_assets": list(selected_assets),
+            "candidate_assets": [],
+        }
+
+    if not theme_filter:
+        theme_filter = {
+            "theme": scene_payload.get("scene_theme"),
+            "applied": False,
+            "allowed_fragments": [],
+        }
+
+    return {
+        "asset_registry_version": registry_version,
+        "asset_count": int(asset_count),
+        "selected_assets": list(selected_assets),
+        "asset_sources": list(asset_sources),
+        "asset_selection": dict(asset_selection),
+        "fragment_source": list(fragment_source),
+        "theme_filter": dict(theme_filter),
+    }
+
+
 def _record_fallback_state(
     *,
     player_id: str,
@@ -666,6 +711,7 @@ def world_state(player_id: str):
         "story": story_snapshot,
     }
     response.update(_narrative_fields_payload(narrative_state))
+    response.update(_asset_registry_observability_payload(scene_generation))
     return response
 
 
@@ -868,6 +914,7 @@ def story_debug_tasks(player_id: str, request: Request, token: Optional[str] = N
         snapshot=snapshot,
         scene_generation=scene_generation,
     )
+    asset_observability = _asset_registry_observability_payload(scene_generation)
     if not snapshot:
         result = {
             "status": "error",
@@ -882,6 +929,7 @@ def story_debug_tasks(player_id: str, request: Request, token: Optional[str] = N
             "last_fallback_at": fallback_state.get("last_fallback_at"),
         }
         result.update(_narrative_fields_payload(narrative_state))
+        result.update(asset_observability)
         return result
 
     payload: Dict[str, Any] = {"status": "ok"}
@@ -895,6 +943,7 @@ def story_debug_tasks(player_id: str, request: Request, token: Optional[str] = N
     payload["last_fallback_inject_version"] = fallback_state.get("last_fallback_inject_version")
     payload["last_fallback_at"] = fallback_state.get("last_fallback_at")
     payload.update(_narrative_fields_payload(narrative_state))
+    payload.update(asset_observability)
     return payload
 
 

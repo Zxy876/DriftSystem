@@ -68,7 +68,21 @@ class NarrativeGraphSkeletonP8ATest(unittest.TestCase):
             },
         ), patch(
             "app.api.world_api._scene_generation_for_player",
-            return_value={"scene_state": {"root": "camp", "nodes": ["camp"]}},
+            return_value={
+                "scene_state": {"root": "camp", "nodes": ["camp"]},
+                "selected_assets": ["camp"],
+                "asset_sources": ["vanilla"],
+                "asset_selection": {
+                    "selected_assets": ["camp"],
+                    "candidate_assets": ["camp", "bridge"],
+                },
+                "fragment_source": [{"asset_id": "camp", "source": "vanilla"}],
+                "theme_filter": {
+                    "theme": "camp",
+                    "applied": False,
+                    "allowed_fragments": ["camp", "bridge"],
+                },
+            },
         ):
             response = world_api.world_state("vivn")
 
@@ -78,13 +92,31 @@ class NarrativeGraphSkeletonP8ATest(unittest.TestCase):
         self.assertIn("transition_candidates", response)
         self.assertIn("blocked_by", response)
         self.assertEqual((response.get("narrative_state") or {}).get("current_node"), response.get("current_node"))
+        self.assertIn("asset_registry_version", response)
+        self.assertIn("asset_count", response)
+        self.assertEqual(response.get("selected_assets"), ["camp"])
+        self.assertEqual(response.get("asset_sources"), ["vanilla"])
 
     def test_eventdebug_exposes_narrative_fields_without_active_task_state(self):
         fake_request = SimpleNamespace(headers={})
 
         with patch("app.api.world_api.quest_runtime.get_debug_snapshot", return_value=None), patch(
             "app.api.world_api._scene_generation_for_player",
-            return_value={"scene_state": {"root": "camp", "nodes": ["camp"]}},
+            return_value={
+                "scene_state": {"root": "camp", "nodes": ["camp"]},
+                "selected_assets": ["camp"],
+                "asset_sources": ["vanilla"],
+                "asset_selection": {
+                    "selected_assets": ["camp"],
+                    "candidate_assets": ["camp"],
+                },
+                "fragment_source": [{"asset_id": "camp", "source": "vanilla"}],
+                "theme_filter": {
+                    "theme": "camp",
+                    "applied": False,
+                    "allowed_fragments": ["camp"],
+                },
+            },
         ):
             response = world_api.story_debug_tasks("vivn", request=fake_request, token=None)
 
@@ -93,6 +125,10 @@ class NarrativeGraphSkeletonP8ATest(unittest.TestCase):
         self.assertIn("current_node", response)
         self.assertIn("transition_candidates", response)
         self.assertIn("blocked_by", response)
+        self.assertIn("asset_registry_version", response)
+        self.assertIn("asset_count", response)
+        self.assertEqual(response.get("selected_assets"), ["camp"])
+        self.assertEqual(response.get("asset_sources"), ["vanilla"])
 
 
 if __name__ == "__main__":

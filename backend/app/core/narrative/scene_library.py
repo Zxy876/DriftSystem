@@ -6,6 +6,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from app.core.assets.asset_loader import get_asset_registry
+
 from .layout_engine import event_offset_for_fragment, layout_scene_graph
 from .scene_graph import SceneGraph
 
@@ -100,6 +102,100 @@ def _read_json_file(path: Path) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def _asset_registry_observability_payload(
+    *,
+    selected_fragments: List[str],
+    semantic_scores: Dict[str, int],
+    combined_theme: str,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "asset_registry_version": None,
+        "selected_assets": [],
+        "asset_sources": [],
+        "asset_selection": {
+            "selected_assets": [],
+            "candidate_assets": [],
+        },
+        "fragment_source": [],
+        "theme_filter": {
+            "theme": str(combined_theme or "").strip() or None,
+            "applied": False,
+            "allowed_fragments": [],
+        },
+    }
+
+    try:
+        registry = get_asset_registry()
+    except Exception:
+        return payload
+
+    payload["asset_registry_version"] = registry.version
+
+    ranked_semantics: List[tuple[str, int]] = []
+    for raw_key, raw_value in (semantic_scores or {}).items():
+        token = _normalize_token(raw_key)
+        amount = _safe_int(raw_value, 0)
+        if token and amount > 0:
+            ranked_semantics.append((token, amount))
+
+    ranked_semantics.sort(key=lambda item: (-item[1], item[0]))
+    semantic_query = [token for token, _ in ranked_semantics[:2]]
+
+    if semantic_query:
+        candidate_assets = registry.filter_by_semantics(semantic_query)
+        if not candidate_assets:
+            candidate_assets = registry.filter_by_any_semantics(semantic_query)
+    else:
+        candidate_assets = registry.list_assets()
+
+    candidate_assets = list(candidate_assets)[:20]
+
+    selected_assets: List[str] = []
+    seen_selected: set[str] = set()
+    fragment_source: List[Dict[str, Any]] = []
+
+    for fragment_id in selected_fragments:
+        normalized_fragment = _normalize_token(fragment_id)
+        if not normalized_fragment or normalized_fragment in seen_selected:
+            continue
+        asset = registry.get(normalized_fragment)
+        if not isinstance(asset, dict):
+            continue
+        seen_selected.add(normalized_fragment)
+        selected_assets.append(normalized_fragment)
+        fragment_source.append(
+            {
+                "asset_id": normalized_fragment,
+                "source": str(asset.get("source") or "unknown"),
+            }
+        )
+
+    if not selected_assets and candidate_assets:
+        selected_assets = list(candidate_assets[:5])
+        fragment_source = [
+            {
+                "asset_id": asset_id,
+                "source": str((registry.get(asset_id) or {}).get("source") or "unknown"),
+            }
+            for asset_id in selected_assets
+        ]
+
+    asset_sources = registry.sources_for_assets(selected_assets)
+    payload["selected_assets"] = selected_assets
+    payload["asset_sources"] = list(asset_sources)
+    payload["asset_selection"] = {
+        "selected_assets": list(selected_assets),
+        "candidate_assets": list(candidate_assets),
+    }
+    payload["fragment_source"] = fragment_source
+
+    theme_filter = payload.get("theme_filter") if isinstance(payload.get("theme_filter"), dict) else {}
+    theme_filter["allowed_fragments"] = list(candidate_assets)
+    payload["theme_filter"] = theme_filter
+
+    return payload
 
 
 def _normalize_float_map(raw_values: Any) -> Dict[str, float]:
@@ -810,8 +906,24 @@ def select_fragments_with_debug(
     story_theme: str,
     scene_hint: str | None = None,
 ) -> Dict[str, Any]:
+    combined_theme = _compose_theme_with_hint(str(story_theme or ""), scene_hint)
     fragments = _load_fragments()
     if not fragments:
+        debug_payload = {
+            "selected_root": None,
+            "candidate_scores": [],
+            "selected_children": [],
+            "blocked": [],
+            "reasons": {"selected_root": "no_fragments"},
+            "semantic_scores": {},
+        }
+        debug_payload.update(
+            _asset_registry_observability_payload(
+                selected_fragments=[],
+                semantic_scores={},
+                combined_theme=combined_theme,
+            )
+        )
         return {
             "fragments": [],
             "scene_graph": {
@@ -824,14 +936,7 @@ def select_fragments_with_debug(
                 "root": "",
                 "positions": {},
             },
-            "debug": {
-                "selected_root": None,
-                "candidate_scores": [],
-                "selected_children": [],
-                "blocked": [],
-                "reasons": {"selected_root": "no_fragments"},
-                "semantic_scores": {},
-            },
+            "debug": debug_payload,
         }
 
     normalized_resources: Dict[str, int] = {}
@@ -842,7 +947,6 @@ def select_fragments_with_debug(
             normalized_resources[token] = amount
 
     semantic_scores = _semantic_scores_from_resources(normalized_resources)
-    combined_theme = _compose_theme_with_hint(str(story_theme or ""), scene_hint)
 
     root_debug = _choose_root_fragment_with_debug(
         fragments,
@@ -859,6 +963,13 @@ def select_fragments_with_debug(
             "reasons": dict(root_debug.get("reasons") or {}),
             "semantic_scores": dict(semantic_scores),
         }
+        debug_payload.update(
+            _asset_registry_observability_payload(
+                selected_fragments=[],
+                semantic_scores=semantic_scores,
+                combined_theme=combined_theme,
+            )
+        )
         return {
             "fragments": [],
             "scene_graph": {
@@ -903,6 +1014,13 @@ def select_fragments_with_debug(
         "reasons": dict(root_debug.get("reasons") or {}),
         "semantic_scores": dict(semantic_scores),
     }
+    debug_payload.update(
+        _asset_registry_observability_payload(
+            selected_fragments=selected,
+            semantic_scores=semantic_scores,
+            combined_theme=combined_theme,
+        )
+    )
 
     return {
         "fragments": selected,
