@@ -1,0 +1,524 @@
+{
+  "timestamp": 1772844463,
+  "base_url": "http://127.0.0.1:8000",
+  "required_fields": [
+    "selected_root",
+    "candidate_scores",
+    "selected_children",
+    "blocked",
+    "reasons"
+  ],
+  "runs_per_scenario": 3,
+  "cross_scenario_root_diversity_ok": false,
+  "cross_scenario_roots": {
+    "camp": "",
+    "forge": "",
+    "village": ""
+  },
+  "overall_pass": false,
+  "failed_scenarios": [
+    "camp",
+    "forge",
+    "village"
+  ],
+  "results": {
+    "camp": {
+      "expected_root": "camp",
+      "roots": [
+        "",
+        "",
+        ""
+      ],
+      "deterministic": true,
+      "visibility_ok": false,
+      "root_ok": false,
+      "flow_ok": true,
+      "pass": false,
+      "sample_top_candidates": [],
+      "sample_selected_children": [],
+      "sample_reasons": {},
+      "sample_blocked_count": 0,
+      "runs": [
+        {
+          "player_id": "p6b_camp_1772844315_0_b1c2a7",
+          "level_id": "p6b_probe_camp_7990f128",
+          "start_status": 200,
+          "start_resp_status": "ok",
+          "collect_ok": true,
+          "collect_events": [
+            {
+              "item": "oak_log",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "torch",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "raw_porkchop",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            }
+          ],
+          "inject_status": 200,
+          "inject_resp_status": "ok",
+          "load_status": 200,
+          "load_resp_status": "ok",
+          "debug_status": 200,
+          "debug_resp_status": "ok",
+          "fields_visible": false,
+          "present_fields": {
+            "selected_root": false,
+            "candidate_scores": false,
+            "selected_children": false,
+            "blocked": false,
+            "reasons": false
+          },
+          "selected_root": "",
+          "top_candidates": [],
+          "selected_children": [],
+          "blocked_count": 0,
+          "reasons": {},
+          "signature": "{\"blocked\": [], \"candidate_scores\": [], \"reasons\": {}, \"selected_children\": [], \"selected_root\": null}"
+        },
+        {
+          "player_id": "p6b_camp_1772844329_1_618171",
+          "level_id": "p6b_probe_camp_4a16d55d",
+          "start_status": 200,
+          "start_resp_status": "ok",
+          "collect_ok": true,
+          "collect_events": [
+            {
+              "item": "oak_log",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "torch",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "raw_porkchop",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            }
+          ],
+          "inject_status": 200,
+          "inject_resp_status": "ok",
+          "load_status": 200,
+          "load_resp_status": "ok",
+          "debug_status": 200,
+          "debug_resp_status": "ok",
+          "fields_visible": false,
+          "present_fields": {
+            "selected_root": false,
+            "candidate_scores": false,
+            "selected_children": false,
+            "blocked": false,
+            "reasons": false
+          },
+          "selected_root": "",
+          "top_candidates": [],
+          "selected_children": [],
+          "blocked_count": 0,
+          "reasons": {},
+          "signature": "{\"blocked\": [], \"candidate_scores\": [], \"reasons\": {}, \"selected_children\": [], \"selected_root\": null}"
+        },
+        {
+          "player_id": "p6b_camp_1772844346_2_668ae6",
+          "level_id": "p6b_probe_camp_53327951",
+          "start_status": 200,
+          "start_resp_status": "ok",
+          "collect_ok": true,
+          "collect_events": [
+            {
+              "item": "oak_log",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "torch",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "raw_porkchop",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            }
+          ],
+          "inject_status": 200,
+          "inject_resp_status": "ok",
+          "load_status": 200,
+          "load_resp_status": "ok",
+          "debug_status": 200,
+          "debug_resp_status": "ok",
+          "fields_visible": false,
+          "present_fields": {
+            "selected_root": false,
+            "candidate_scores": false,
+            "selected_children": false,
+            "blocked": false,
+            "reasons": false
+          },
+          "selected_root": "",
+          "top_candidates": [],
+          "selected_children": [],
+          "blocked_count": 0,
+          "reasons": {},
+          "signature": "{\"blocked\": [], \"candidate_scores\": [], \"reasons\": {}, \"selected_children\": [], \"selected_root\": null}"
+        }
+      ]
+    },
+    "forge": {
+      "expected_root": "forge",
+      "roots": [
+        "",
+        "",
+        ""
+      ],
+      "deterministic": true,
+      "visibility_ok": false,
+      "root_ok": false,
+      "flow_ok": true,
+      "pass": false,
+      "sample_top_candidates": [],
+      "sample_selected_children": [],
+      "sample_reasons": {},
+      "sample_blocked_count": 0,
+      "runs": [
+        {
+          "player_id": "p6b_forge_1772844361_0_c1f762",
+          "level_id": "p6b_probe_forge_5ec3277f",
+          "start_status": 200,
+          "start_resp_status": "ok",
+          "collect_ok": true,
+          "collect_events": [
+            {
+              "item": "iron_ingot",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "stone",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "campfire",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            }
+          ],
+          "inject_status": 200,
+          "inject_resp_status": "ok",
+          "load_status": 200,
+          "load_resp_status": "ok",
+          "debug_status": 200,
+          "debug_resp_status": "ok",
+          "fields_visible": false,
+          "present_fields": {
+            "selected_root": false,
+            "candidate_scores": false,
+            "selected_children": false,
+            "blocked": false,
+            "reasons": false
+          },
+          "selected_root": "",
+          "top_candidates": [],
+          "selected_children": [],
+          "blocked_count": 0,
+          "reasons": {},
+          "signature": "{\"blocked\": [], \"candidate_scores\": [], \"reasons\": {}, \"selected_children\": [], \"selected_root\": null}"
+        },
+        {
+          "player_id": "p6b_forge_1772844374_1_3c6b09",
+          "level_id": "p6b_probe_forge_ea3a74f8",
+          "start_status": 200,
+          "start_resp_status": "ok",
+          "collect_ok": true,
+          "collect_events": [
+            {
+              "item": "iron_ingot",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "stone",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "campfire",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            }
+          ],
+          "inject_status": 200,
+          "inject_resp_status": "ok",
+          "load_status": 200,
+          "load_resp_status": "ok",
+          "debug_status": 200,
+          "debug_resp_status": "ok",
+          "fields_visible": false,
+          "present_fields": {
+            "selected_root": false,
+            "candidate_scores": false,
+            "selected_children": false,
+            "blocked": false,
+            "reasons": false
+          },
+          "selected_root": "",
+          "top_candidates": [],
+          "selected_children": [],
+          "blocked_count": 0,
+          "reasons": {},
+          "signature": "{\"blocked\": [], \"candidate_scores\": [], \"reasons\": {}, \"selected_children\": [], \"selected_root\": null}"
+        },
+        {
+          "player_id": "p6b_forge_1772844391_2_719fbb",
+          "level_id": "p6b_probe_forge_7db6531e",
+          "start_status": 200,
+          "start_resp_status": "ok",
+          "collect_ok": true,
+          "collect_events": [
+            {
+              "item": "iron_ingot",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "stone",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "campfire",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            }
+          ],
+          "inject_status": 200,
+          "inject_resp_status": "ok",
+          "load_status": 200,
+          "load_resp_status": "ok",
+          "debug_status": 200,
+          "debug_resp_status": "ok",
+          "fields_visible": false,
+          "present_fields": {
+            "selected_root": false,
+            "candidate_scores": false,
+            "selected_children": false,
+            "blocked": false,
+            "reasons": false
+          },
+          "selected_root": "",
+          "top_candidates": [],
+          "selected_children": [],
+          "blocked_count": 0,
+          "reasons": {},
+          "signature": "{\"blocked\": [], \"candidate_scores\": [], \"reasons\": {}, \"selected_children\": [], \"selected_root\": null}"
+        }
+      ]
+    },
+    "village": {
+      "expected_root": "village",
+      "roots": [
+        "",
+        "",
+        ""
+      ],
+      "deterministic": true,
+      "visibility_ok": false,
+      "root_ok": false,
+      "flow_ok": true,
+      "pass": false,
+      "sample_top_candidates": [],
+      "sample_selected_children": [],
+      "sample_reasons": {},
+      "sample_blocked_count": 0,
+      "runs": [
+        {
+          "player_id": "p6b_village_1772844412_0_7f99ca",
+          "level_id": "p6b_probe_village_7149cee8",
+          "start_status": 200,
+          "start_resp_status": "ok",
+          "collect_ok": true,
+          "collect_events": [
+            {
+              "item": "bread",
+              "amount": 3,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "emerald",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "water_bucket",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "oak_log",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            }
+          ],
+          "inject_status": 200,
+          "inject_resp_status": "ok",
+          "load_status": 200,
+          "load_resp_status": "ok",
+          "debug_status": 200,
+          "debug_resp_status": "ok",
+          "fields_visible": false,
+          "present_fields": {
+            "selected_root": false,
+            "candidate_scores": false,
+            "selected_children": false,
+            "blocked": false,
+            "reasons": false
+          },
+          "selected_root": "",
+          "top_candidates": [],
+          "selected_children": [],
+          "blocked_count": 0,
+          "reasons": {},
+          "signature": "{\"blocked\": [], \"candidate_scores\": [], \"reasons\": {}, \"selected_children\": [], \"selected_root\": null}"
+        },
+        {
+          "player_id": "p6b_village_1772844426_1_411086",
+          "level_id": "p6b_probe_village_bddce0c0",
+          "start_status": 200,
+          "start_resp_status": "ok",
+          "collect_ok": true,
+          "collect_events": [
+            {
+              "item": "bread",
+              "amount": 3,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "emerald",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "water_bucket",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "oak_log",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            }
+          ],
+          "inject_status": 200,
+          "inject_resp_status": "ok",
+          "load_status": 200,
+          "load_resp_status": "ok",
+          "debug_status": 200,
+          "debug_resp_status": "ok",
+          "fields_visible": false,
+          "present_fields": {
+            "selected_root": false,
+            "candidate_scores": false,
+            "selected_children": false,
+            "blocked": false,
+            "reasons": false
+          },
+          "selected_root": "",
+          "top_candidates": [],
+          "selected_children": [],
+          "blocked_count": 0,
+          "reasons": {},
+          "signature": "{\"blocked\": [], \"candidate_scores\": [], \"reasons\": {}, \"selected_children\": [], \"selected_root\": null}"
+        },
+        {
+          "player_id": "p6b_village_1772844451_2_1c8986",
+          "level_id": "p6b_probe_village_2a851d63",
+          "start_status": 200,
+          "start_resp_status": "ok",
+          "collect_ok": true,
+          "collect_events": [
+            {
+              "item": "bread",
+              "amount": 3,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "emerald",
+              "amount": 2,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "water_bucket",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            },
+            {
+              "item": "oak_log",
+              "amount": 1,
+              "status": 200,
+              "resp_status": "ok"
+            }
+          ],
+          "inject_status": 200,
+          "inject_resp_status": "ok",
+          "load_status": 200,
+          "load_resp_status": "ok",
+          "debug_status": 200,
+          "debug_resp_status": "ok",
+          "fields_visible": false,
+          "present_fields": {
+            "selected_root": false,
+            "candidate_scores": false,
+            "selected_children": false,
+            "blocked": false,
+            "reasons": false
+          },
+          "selected_root": "",
+          "top_candidates": [],
+          "selected_children": [],
+          "blocked_count": 0,
+          "reasons": {},
+          "signature": "{\"blocked\": [], \"candidate_scores\": [], \"reasons\": {}, \"selected_children\": [], \"selected_root\": null}"
+        }
+      ]
+    }
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-03-04T16:31:33.262899+00:00",
+  "generated_at_utc": "2026-03-04T14:34:11.046444+00:00",
   "gate": "Gate 3 — Hash Consistency",
   "scope": "v1 merged_blocks hash stability + v2 final_commands hash stability + cross-version non-confusion",
   "rounds_per_scenario": 100,

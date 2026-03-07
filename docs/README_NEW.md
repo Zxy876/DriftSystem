@@ -1,5 +1,12 @@
 # DriftSystem 文档索引
 
+## 架构冻结基线
+
+- `DriftSystem Architecture v0.5（Frozen）`：`docs/DRIFTSYSTEM_ARCHITECTURE_V0.5.md`
+- `DriftSystem 开发路线图 v0.5→v0.7`：`docs/DRIFTSYSTEM_ROADMAP.md`
+- 该文档定义当前稳定阶段三层边界：`TRNG Layer / Scene Layer / World Layer`
+- 进入 v0.6 之前，跨层改动需先更新该基线
+
 ## 关卡统一规范
 
 所有 Heart Levels 必须遵循同一个 JSON 结构，核心字段如下：
