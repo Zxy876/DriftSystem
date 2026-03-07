@@ -113,6 +113,11 @@ def _asset_registry_observability_payload(
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "asset_registry_version": None,
+        "fragment_registry_version": None,
+        "fragment_count": 0,
+        "builtin_fragment_count": 0,
+        "pack_fragment_count": 0,
+        "fragment_registry_enabled_packs": [],
         "selected_assets": [],
         "asset_sources": [],
         "asset_selection": {
@@ -126,6 +131,28 @@ def _asset_registry_observability_payload(
             "allowed_fragments": [],
         },
     }
+
+    try:
+        from app.core.fragments.fragment_loader import fragment_registry_info
+
+        fragment_info = fragment_registry_info()
+        if isinstance(fragment_info, dict):
+            payload["fragment_registry_version"] = fragment_info.get("version")
+            payload["fragment_count"] = _safe_int(fragment_info.get("fragment_count"), 0)
+            payload["builtin_fragment_count"] = _safe_int(fragment_info.get("builtin_fragment_count"), 0)
+            payload["pack_fragment_count"] = _safe_int(fragment_info.get("pack_fragment_count"), 0)
+            raw_enabled_packs = fragment_info.get("enabled_packs") if isinstance(fragment_info.get("enabled_packs"), list) else []
+            payload["fragment_registry_enabled_packs"] = [
+                _normalize_token(row)
+                for row in raw_enabled_packs
+                if _normalize_token(row)
+            ]
+    except Exception:
+        payload["fragment_registry_version"] = None
+        payload["fragment_count"] = 0
+        payload["builtin_fragment_count"] = 0
+        payload["pack_fragment_count"] = 0
+        payload["fragment_registry_enabled_packs"] = []
 
     try:
         registry = get_asset_registry()
@@ -315,61 +342,18 @@ def _load_fragment_graph() -> Dict[str, Dict[str, Any]]:
 
 @lru_cache(maxsize=1)
 def _load_fragments() -> Dict[str, Dict[str, Any]]:
-    if not FRAGMENTS_DIR.exists() or not FRAGMENTS_DIR.is_dir():
+    try:
+        from app.core.fragments.fragment_loader import get_fragment_registry
+
+        registry = get_fragment_registry()
+        if hasattr(registry, "fragment_map"):
+            fragment_map = registry.fragment_map()
+            if isinstance(fragment_map, dict):
+                return fragment_map
+    except Exception:
         return {}
 
-    fragments: Dict[str, Dict[str, Any]] = {}
-    for file_path in sorted(FRAGMENTS_DIR.glob("*.json"), key=lambda path: path.name):
-        raw = _read_json_file(file_path)
-        if not isinstance(raw, dict):
-            continue
-
-        fragment_id = _normalize_token(raw.get("id") or file_path.stem)
-        if not fragment_id:
-            continue
-
-        connections = _normalize_token_list(raw.get("connections"))
-        theme_keywords = [str(item) for item in (raw.get("theme_keywords") or []) if str(item).strip()]
-
-        events: List[Dict[str, Any]] = []
-        if isinstance(raw.get("events"), list):
-            for event in raw.get("events"):
-                if not isinstance(event, dict):
-                    continue
-                events.append(dict(event))
-
-        structures: List[Dict[str, Any]] = []
-        if isinstance(raw.get("structures"), list):
-            for structure in raw.get("structures"):
-                if isinstance(structure, dict):
-                    structures.append(dict(structure))
-
-        npcs: List[Dict[str, Any]] = []
-        if isinstance(raw.get("npcs"), list):
-            for npc in raw.get("npcs"):
-                if isinstance(npc, dict):
-                    npcs.append(dict(npc))
-
-        fragments[fragment_id] = {
-            "id": fragment_id,
-            "root": bool(raw.get("root", False)),
-            "priority": _safe_int(raw.get("priority"), 0),
-            "tags": _normalize_token_list(raw.get("tags")),
-            "requires": _normalize_token_list(raw.get("requires")),
-            "optional_resources": _normalize_token_list(raw.get("optional_resources")),
-            "size": [
-                max(1, _safe_int((raw.get("size") or [3, 3])[0] if isinstance(raw.get("size"), list) and len(raw.get("size")) > 0 else 3, 3)),
-                max(1, _safe_int((raw.get("size") or [3, 3])[1] if isinstance(raw.get("size"), list) and len(raw.get("size")) > 1 else 3, 3)),
-            ],
-            "layout_anchor": str(raw.get("layout_anchor") or "center").strip().lower() or "center",
-            "structures": structures,
-            "npcs": npcs,
-            "connections": connections,
-            "theme_keywords": theme_keywords,
-            "events": events,
-        }
-
-    return fragments
+    return {}
 
 
 def _semantic_resolution_from_resources(resources: Dict[str, int]) -> Dict[str, Any]:
